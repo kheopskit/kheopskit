@@ -1,0 +1,54 @@
+{
+  "name": "@kheopskit/core",
+  "version": "0.0.1-alpha.1",
+  "description": "",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "tsup --watch",
+    "build": "tsup",
+    "clean": "rm -rf ./dist && rm -rf ./node_modules"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "peerDependencies": {
+    "polkadot-api": ">=1.10.0",
+    "rxjs": ">=7.8.0"
+  },
+  "dependencies": {
+    "@reown/appkit": "^1.7.6",
+    "@walletconnect/types": "^2.20.3",
+    "@walletconnect/universal-provider": "^2.20.3",
+    "@walletconnect/utils": "^2.20.3",
+    "lodash": "^4.17.21",
+    "mipd": "^0.0.7",
+    "viem": "^2.30.1"
+  },
+  "devDependencies": {
+    "@types/lodash": "^4.17.17",
+    "polkadot-api": "^1.12.0",
+    "rxjs": "^7.8.2"
+  },
+  "tsup": {
+    "entry": ["src/index.ts"],
+    "splitting": false,
+    "sourcemap": true,
+    "clean": true,
+    "dts": true,
+    "format": ["esm", "cjs"],
+    "target": "es2020"
+  }
+}

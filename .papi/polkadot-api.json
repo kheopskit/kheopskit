@@ -1,0 +1,22 @@
+{
+  "version": 0,
+  "descriptorPath": ".papi/descriptors",
+  "entries": {
+    "westendAssetHub": {
+      "chain": "westend2_asset_hub",
+      "metadata": ".papi/metadata/westendAssetHub.scale",
+      "genesis": "0x67f9723393ef76214df0118c34bbbd3dbebc8ed46a10973a8c969d48fe7598c9"
+    },
+    "polkadotAssetHub": {
+      "chain": "polkadot_asset_hub",
+      "metadata": ".papi/metadata/polkadotAssetHub.scale",
+      "genesis": "0x68d56f15f85d3136970ec16946040bc1752654e906147f7e43e9d539d7c3de2f"
+    },
+    "polkadot": {
+      "chain": "polkadot",
+      "metadata": ".papi/metadata/polkadot.scale",
+      "genesis": "0x91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3",
+      "codeHash": "0x716bb701ec19452fa522cdaa83ef101d368ba2bcfd89fde9acb6f793a420a616"
+    }
+  }
+}

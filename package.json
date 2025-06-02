@@ -1,0 +1,42 @@
+{
+  "name": "kheopskit",
+  "version": "0.0.0",
+  "private": true,
+  "description": "",
+  "main": "index.js",
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "concurrently -k -n CORE,REACT,APP -c yellow,cyan,green \"pnpm --filter @kheopskit/core dev\" \"pnpm --filter @kheopskit/react dev\" \"pnpm --filter vite-react dev\"",
+    "build": "pnpm -r build",
+    "publish:packages": "pnpm -r publish --tag alpha",
+    "format": "pnpm biome format --write .",
+    "postinstall": "pnpm papi --whitelist papi-whitelist.ts",
+    "clean": "pnpm --filter @kheopskit/core clean && pnpm --filter @kheopskit/react clean && pnpm --filter vite-react clean && rm -rf ./.papi/descriptors/dist && rm -rf node_modules"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39",
+  "devDependencies": {
+    "@changesets/changelog-github": "^0.5.1",
+    "@changesets/cli": "^2.29.4",
+    "concurrently": "^9.1.2",
+    "simple-git-hooks": "^2.13.0",
+    "tsup": "^8.5.0",
+    "typescript": "~5.8.3"
+  },
+  "dependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@polkadot-api/descriptors": "file:.papi/descriptors",
+    "polkadot-api": "^1.12.0"
+  },
+  "lint-staged": {
+    "*": "pnpm biome check . --fix"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "npx lint-staged"
+  }
+}

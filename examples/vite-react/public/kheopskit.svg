@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200">
+  <rect width="400" height="200" fill="none"/>
+
+  <!-- Wallet Icon with Text Inside -->
+  <g transform="translate(160,85)">
+    <rect x="-80" y="-35" width="160" height="70" rx="10" ry="10" fill="#e6007a" stroke="#fff" stroke-width="3"/>
+    <rect x="-80" y="-25" width="160" height="10" fill="#fff"/>
+    <circle cx="60" cy="0" r="4" fill="#fff"/>
+    <text x="0" y="10" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="20" fill="#fff" font-weight="bold">kheopskit</text>
+  </g>
+</svg>

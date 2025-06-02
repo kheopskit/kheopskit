@@ -1,0 +1,9 @@
+packages:
+  - examples/*
+  - packages/*
+onlyBuiltDependencies:
+  - '@tailwindcss/oxide'
+  - esbuild
+overrides:
+  '@kheopskit/core': link:packages/core
+  '@kheopskit/react': link:packages/react

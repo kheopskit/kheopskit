@@ -1,0 +1,11 @@
+{
+  "mode": "pre",
+  "tag": "alpha",
+  "initialVersions": {
+    "kheopskit": "0.0.0",
+    "@kheopskit/core": "0.0.0",
+    "@kheopskit/react": "0.0.0",
+    "vite-react": "0.0.0"
+  },
+  "changesets": ["evil-hands-smell", "fuzzy-ghosts-slide"]
+}
