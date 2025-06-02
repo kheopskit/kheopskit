@@ -50,7 +50,7 @@ const AppContent = () => (
 const Footer = () => (
   <div>
     <Button asChild variant="ghost">
-      <a href="https://github.com/0xKheops/kheopskit-alpha">
+      <a href="https://github.com/kheopskit/kheopskit">
         <GithubIcon className="fill-white" />
         Github
       </a>

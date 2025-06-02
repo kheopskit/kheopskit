@@ -23,7 +23,7 @@ export const Accounts = () => {
     <AppBlock
       title="Accounts"
       description="Lists all connected accounts"
-      codeUrl="https://github.com/0xKheops/kheopskit-alpha/blob/main/examples/vite-react/src/app/blocks/Accounts.tsx"
+      codeUrl="https://github.com/kheopskit/kheopskit/blob/main/examples/vite-react/src/app/blocks/Accounts.tsx"
     >
       <Table>
         <TableHeader>

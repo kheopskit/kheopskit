@@ -34,7 +34,7 @@ export const SubmitTx = () => (
     description={
       "Demo transfer: selected account will send 0 tokens on selected network"
     }
-    codeUrl="https://github.com/0xKheops/kheopskit-alpha/blob/main/examples/vite-react/src/app/blocks/SubmitTx.tsx"
+    codeUrl="https://github.com/kheopskit/kheopskit/blob/main/examples/vite-react/src/app/blocks/SubmitTx.tsx"
   >
     <div className="flex flex-col gap-8">
       <Content />

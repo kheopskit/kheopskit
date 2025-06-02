@@ -7,7 +7,7 @@ Kheopskit is a library designed to simplify the development of Polkadot DApps. I
 - Support both Polkadot and Ethereum wallets.
 - Handle identical accounts injected by multiple wallets.
 
-Try it on the [interactive playground](https://Kheopskit-alpha.pages.dev/)
+Try it on the [interactive playground](https://Kheopskit.pages.dev/)
 
 ## Features
 

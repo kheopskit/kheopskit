@@ -17,7 +17,7 @@ export const Wallets = () => {
     <AppBlock
       title="Wallets"
       description="Lists all wallets installed on your browser"
-      codeUrl="https://github.com/0xKheops/kheopskit-alpha/blob/main/examples/vite-react/src/app/blocks/Wallets.tsx"
+      codeUrl="https://github.com/kheopskit/kheopskit/blob/main/examples/vite-react/src/app/blocks/Wallets.tsx"
     >
       <Table>
         <TableHeader>

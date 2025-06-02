@@ -33,7 +33,7 @@ export const Wagmi = () => {
           <br />
         </>
       }
-      codeUrl="https://github.com/0xKheops/kheopskit-alpha/blob/main/examples/vite-react/src/app/blocks/Wagmi.tsx"
+      codeUrl="https://github.com/kheopskit/kheopskit/blob/main/examples/vite-react/src/app/blocks/Wagmi.tsx"
     >
       <div className="flex flex-col gap-8">
         <Connectors />
