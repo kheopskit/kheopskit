@@ -30,7 +30,8 @@
   "license": "ISC",
   "peerDependencies": {
     "react": ">=18.0.0",
-    "react-dom": ">=18.0.0"
+    "react-dom": ">=18.0.0",
+    "rxjs": ">=7.0.0"
   },
   "dependencies": {
     "@kheopskit/core": "workspace:*"
@@ -39,7 +40,8 @@
     "@types/react": "^19.1.5",
     "@types/react-dom": "^19.1.5",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "rxjs": "^7.8.2"
   },
   "tsup": {
     "entry": [
