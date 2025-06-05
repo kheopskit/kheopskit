@@ -22,8 +22,9 @@ TAG="v$VERSION"
 
 # Check if tag already exists
 if git rev-parse "$TAG" >/dev/null 2>&1; then
-  echo "Git tag $TAG already exists. Aborting."
-  exit 1
+  echo "Git tag $TAG already exists. Deleting it."
+  git tag -d "$TAG"
+  git push --delete origin "$TAG"
 fi
 
 # Create the git tag
