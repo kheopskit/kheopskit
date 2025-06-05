@@ -19,6 +19,6 @@ git commit -m "Release: version packages"
 git push
 
 # Create a tag, which will trigger the github action
-git tag v0.1.0
+git tag -a v0.1.0
 git push origin v0.1.0
 ```
