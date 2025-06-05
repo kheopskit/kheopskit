@@ -1,5 +1,14 @@
 # @kheopskit/react
 
+## 0.0.7
+
+### Patch Changes
+
+- [`07f8406`](https://github.com/kheopskit/kheopskit/commit/07f8406d3f176e6a8b3b06fe16396bf2b6b1db88) Thanks [@0xKheops](https://github.com/0xKheops)! - test changeset
+
+- Updated dependencies [[`07f8406`](https://github.com/kheopskit/kheopskit/commit/07f8406d3f176e6a8b3b06fe16396bf2b6b1db88)]:
+  - @kheopskit/core@0.0.7
+
 ## 0.0.6
 
 ### Patch Changes
