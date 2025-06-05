@@ -1,5 +1,11 @@
 # @kheopskit/core
 
+## 0.0.10
+
+### Patch Changes
+
+- [`c7dea32`](https://github.com/kheopskit/kheopskit/commit/c7dea32e2921716cef82b53e1960c3cdb4c8e5ae) Thanks [@0xKheops](https://github.com/0xKheops)! - test changeset
+
 ## 0.0.9
 
 ### Patch Changes
