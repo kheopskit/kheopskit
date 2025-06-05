@@ -11,6 +11,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "concurrently -k -n CORE,REACT,APP -c yellow,cyan,green \"pnpm --filter @kheopskit/core dev\" \"pnpm --filter @kheopskit/react dev\" \"pnpm --filter vite-react dev\"",
     "build": "pnpm -r build",
+    "build:packages": "pnpm --filter @kheopskit/core build && pnpm --filter @kheopskit/react",
     "publish:packages": "pnpm -r publish --tag alpha",
     "format": "pnpm biome format --write .",
     "postinstall": "pnpm papi --whitelist papi-whitelist.ts",
