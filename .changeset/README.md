@@ -6,19 +6,3 @@ find the full documentation for it [in our repository](https://github.com/change
 
 We have a quick list of common questions to get you started engaging with this project in
 [our documentation](https://github.com/changesets/changesets/blob/main/docs/common-questions.md)
-
-## Publishing a new release
-
-```
-# Bump versions
-pnpm changeset version
-
-# Update repo
-git add .
-git commit -m "Release: version packages"
-git push
-
-# Create a tag, which will trigger the github action
-git tag -a v0.1.0
-git push origin v0.1.0
-```

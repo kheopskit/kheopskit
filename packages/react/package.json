@@ -29,10 +29,8 @@
   },
   "license": "ISC",
   "peerDependencies": {
-    "polkadot-api": ">=1.10.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "rxjs": ">=7.8.0"
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
   },
   "dependencies": {
     "@kheopskit/core": "workspace:*"
@@ -40,10 +38,8 @@
   "devDependencies": {
     "@types/react": "^19.1.5",
     "@types/react-dom": "^19.1.5",
-    "polkadot-api": "^1.12.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "rxjs": "^7.8.2"
+    "react-dom": "^19.1.0"
   },
   "tsup": {
     "entry": [

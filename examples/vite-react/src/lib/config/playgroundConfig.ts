@@ -17,7 +17,7 @@ export type PlaygroundConfig = Prettify<
 const demoConfigStore = createStore<PlaygroundConfig>("playground.config", {
   autoReconnect: true,
   platforms: ["polkadot"],
-  walletConnect: true,
+  walletConnect: !!import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID,
   debug: true,
 });
 
