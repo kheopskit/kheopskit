@@ -29,6 +29,9 @@ jobs:
       - name: Build packages
         run: pnpm build:packages
 
+      - name: Set up .npmrc for authentication
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+
       - name: Create release and publish
         uses: changesets/action@v1
         with:
