@@ -1,5 +1,11 @@
 # @kheopskit/core
 
+## 0.0.2
+
+### Patch Changes
+
+- [`806b8d3`](https://github.com/kheopskit/kheopskit/commit/806b8d394ba7c2576c76d9de72a15d7927bcff9e) Thanks [@0xKheops](https://github.com/0xKheops)! - update peer deps
+
 ## 0.0.1
 
 ### Patch Changes
