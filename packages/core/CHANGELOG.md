@@ -1,5 +1,13 @@
 # @kheopskit/core
 
+## 0.0.1
+
+### Patch Changes
+
+- [`e1cebed`](https://github.com/kheopskit/kheopskit/commit/e1cebed92d303f041070e0ae146ee34d9eb717bd) Thanks [@0xKheops](https://github.com/0xKheops)! - refactor property names
+
+- [`e1cebed`](https://github.com/kheopskit/kheopskit/commit/e1cebed92d303f041070e0ae146ee34d9eb717bd) Thanks [@0xKheops](https://github.com/0xKheops)! - initial alpha release
+
 ## 0.0.1-alpha.1
 
 ### Patch Changes
