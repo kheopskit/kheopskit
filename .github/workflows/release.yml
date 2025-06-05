@@ -2,8 +2,8 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+      branches:
+        - main
 
 jobs:
   release:
@@ -35,6 +35,7 @@ jobs:
       - name: Create release and publish
         uses: changesets/action@v1
         with:
+          createGithubReleases: true
           publish: pnpm release
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
