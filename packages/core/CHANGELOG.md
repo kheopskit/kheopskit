@@ -1,5 +1,11 @@
 # @kheopskit/core
 
+## 0.0.6
+
+### Patch Changes
+
+- [`5319326`](https://github.com/kheopskit/kheopskit/commit/53193262e80fec9e242986f818d7f7b53f92357a) Thanks [@0xKheops](https://github.com/0xKheops)! - test changeset
+
 ## 0.0.5
 
 ### Patch Changes
