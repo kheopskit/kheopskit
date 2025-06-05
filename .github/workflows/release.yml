@@ -36,10 +36,10 @@ jobs:
         uses: changesets/action@v1
         with:
           createGithubReleases: true
-          publish: pnpm release
+          publish: pnpm publish -r --no-git-checks --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
 
       - name: Clean up .npmrc
         if: always()
