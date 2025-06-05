@@ -1,5 +1,11 @@
 # @kheopskit/core
 
+## 0.0.5
+
+### Patch Changes
+
+- [#3](https://github.com/kheopskit/kheopskit/pull/3) [`93197a5`](https://github.com/kheopskit/kheopskit/commit/93197a58841446c82af26649dea3b0d14ffbaeae) Thanks [@0xKheops](https://github.com/0xKheops)! - test changeset
+
 ## 0.0.4
 
 ### Patch Changes
