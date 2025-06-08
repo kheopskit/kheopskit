@@ -1,6 +1,7 @@
 packages:
   - examples/*
   - packages/*
+  - . # for changesets to sync root version
 onlyBuiltDependencies:
   - '@tailwindcss/oxide'
   - esbuild
