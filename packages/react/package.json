@@ -1,6 +1,6 @@
 {
   "name": "@kheopskit/react",
-  "version": "0.0.21",
+  "version": "0.0.22",
   "description": "",
   "publishConfig": {
     "access": "public"
@@ -45,12 +45,17 @@
     "rxjs": "^7.8.2"
   },
   "tsup": {
-    "entry": ["src/index.ts"],
+    "entry": [
+      "src/index.ts"
+    ],
     "splitting": false,
     "sourcemap": true,
     "clean": true,
     "dts": true,
-    "format": ["esm", "cjs"],
+    "format": [
+      "esm",
+      "cjs"
+    ],
     "target": "es2020"
   }
 }
