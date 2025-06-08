@@ -12,7 +12,6 @@
     "dev": "concurrently -k -n CORE,REACT,APP -c yellow,cyan,green \"pnpm --filter @kheopskit/core dev\" \"pnpm --filter @kheopskit/react dev\" \"pnpm --filter vite-react dev\"",
     "build": "pnpm -r build",
     "build:packages": "pnpm -F @kheopskit/core -F @kheopskit/react build",
-    "release": "changeset version && pnpm install && changeset changelog",
     "format": "pnpm biome format --write .",
     "postinstall": "pnpm papi --whitelist papi-whitelist.ts",
     "clean": "pnpm -F @kheopskit/core -F @kheopskit/react -F vite-react clean && rm -rf ./.papi/descriptors/dist && rm -rf node_modules",
