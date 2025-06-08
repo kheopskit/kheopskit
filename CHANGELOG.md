@@ -1,5 +1,17 @@
 # kheopskit
 
+## 0.0.24
+
+### Patch Changes
+
+- [`87bbfb0`](https://github.com/kheopskit/kheopskit/commit/87bbfb016b15bd0378a62943ccbe1403a6e5d07e) Thanks [@0xKheops](https://github.com/0xKheops)! - test: changeset2
+
+- [`87bbfb0`](https://github.com/kheopskit/kheopskit/commit/87bbfb016b15bd0378a62943ccbe1403a6e5d07e) Thanks [@0xKheops](https://github.com/0xKheops)! - test: changeset
+
+- Updated dependencies [[`87bbfb0`](https://github.com/kheopskit/kheopskit/commit/87bbfb016b15bd0378a62943ccbe1403a6e5d07e)]:
+  - @kheopskit/core@0.0.20
+  - @kheopskit/react@0.0.23
+
 ## 0.0.23
 
 ### Patch Changes
