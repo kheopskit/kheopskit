@@ -15,6 +15,12 @@ importers:
       '@biomejs/biome':
         specifier: ^1.9.4
         version: 1.9.4
+      '@kheopskit/core':
+        specifier: link:packages/core
+        version: link:packages/core
+      '@kheopskit/react':
+        specifier: link:packages/react
+        version: link:packages/react
       '@polkadot-api/descriptors':
         specifier: file:.papi/descriptors
         version: file:.papi/descriptors(polkadot-api@1.12.0(bufferutil@4.0.9)(jiti@2.4.2)(postcss@8.5.3)(rxjs@7.8.2)(utf-8-validate@5.0.10)(yaml@2.7.1))

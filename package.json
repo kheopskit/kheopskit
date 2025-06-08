@@ -34,7 +34,9 @@
   "dependencies": {
     "@biomejs/biome": "^1.9.4",
     "@polkadot-api/descriptors": "file:.papi/descriptors",
-    "polkadot-api": "^1.12.0"
+    "polkadot-api": "^1.12.0",
+    "@kheopskit/core": "workspace:*",
+    "@kheopskit/react": "workspace:*"
   },
   "lint-staged": {
     "*": "pnpm biome check . --fix"
