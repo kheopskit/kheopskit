@@ -5,6 +5,7 @@ on:
       - main
 jobs:
   version:
+    name: Create Release Pull Request
     runs-on: ubuntu-latest
     if: |
       github.repository == 'kheopskit/kheopskit'

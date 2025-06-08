@@ -5,6 +5,7 @@ on:
       - main
 jobs:
   publish:
+    name: Publish and create release
     if: |
       github.repository == 'kheopskit/kheopskit'
     runs-on: ubuntu-latest
