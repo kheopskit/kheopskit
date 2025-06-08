@@ -1,5 +1,11 @@
 # @kheopskit/react
 
+## 0.0.17
+
+### Patch Changes
+
+- [`91fe482`](https://github.com/kheopskit/kheopskit/commit/91fe4821c159f7b970b1a8aa52544b9eb63776bc) Thanks [@0xKheops](https://github.com/0xKheops)! - test: changeset
+
 ## 0.0.16
 
 ### Patch Changes
