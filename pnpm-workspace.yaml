@@ -1,8 +1,14 @@
 packages:
   - examples/*
   - packages/*
-  - . # for changesets to sync root version
+  - .
+ignoredBuiltDependencies:
+  - bufferutil
+  - keccak
+  - simple-git-hooks
+  - utf-8-validate
 onlyBuiltDependencies:
+  - '@biomejs/biome'
   - '@tailwindcss/oxide'
   - esbuild
 overrides:
