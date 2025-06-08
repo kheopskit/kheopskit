@@ -1,5 +1,11 @@
 # @kheopskit/react
 
+## 0.0.24
+
+### Patch Changes
+
+- [`920ed5b`](https://github.com/kheopskit/kheopskit/commit/920ed5babefc6d38ddc18bde3d68ff945cd1a0af) Thanks [@0xKheops](https://github.com/0xKheops)! - fix: peer dep to core
+
 ## 0.0.23
 
 ### Patch Changes
