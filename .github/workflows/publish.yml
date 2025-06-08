@@ -40,7 +40,11 @@ jobs:
       - name: Get PR Number from Commit Message
         id: pr_number
         run: |
-          PR_NUMBER=$(echo "${{ github.event.head_commit.message }}" | sed -n 's/^Version Packages #\([0-9]*\).*/\1/p')
+          PR_NUMBER=$(echo "${{ github.event.head_commit.message }}" | sed -n 's/^Version Packages (#\([0-9]*\)).*/\1/p')
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No PR number found in commit message: ${{ github.event.head_commit.message }}"
+            exit 1
+          fi
           echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
       - name: Get Version Packages PR Body by Number
         id: pr_body
