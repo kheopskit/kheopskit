@@ -7,7 +7,7 @@ jobs:
   publish:
     name: Publish and create release
     if: |
-      github.repository == 'kheopskit/kheopskit' && startsWith(github.event.head_commit.message, 'Version Packages')
+      github.repository == 'kheopskit/kheopskit'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -36,7 +36,9 @@ jobs:
       - name: Get Version
         id: get_version
         run: |
-          echo "version=$(jq -r .version ./packages/core/package.json)" >> $GITHUB_OUTPUT
+          # Find all package.json files, extract their version, and print the highest
+          HIGHEST=$(find . -name package.json -not -path "*/node_modules/*" -exec jq -r .version {} + | sort -V | tail -n1)
+          echo "version=$HIGHEST" >> $GITHUB_OUTPUT
       - name: Get PR Number from Commit Message
         id: pr_number
         run: |
