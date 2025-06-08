@@ -1,5 +1,11 @@
 # @kheopskit/react
 
+## 0.0.19
+
+### Patch Changes
+
+- [`c660e23`](https://github.com/kheopskit/kheopskit/commit/c660e231aaed809d885b9ec29fd81b550a30c159) Thanks [@0xKheops](https://github.com/0xKheops)! - test: changeset
+
 ## 0.0.18
 
 ### Patch Changes
