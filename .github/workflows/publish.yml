@@ -36,9 +36,8 @@ jobs:
       - name: Get Version
         id: get_version
         run: |
-          # Find all package.json files, extract their version, and print the highest
-          HIGHEST=$(find . -name package.json -not -path "*/node_modules/*" -exec jq -r .version {} + | sort -V | tail -n1)
-          echo "version=$HIGHEST" >> $GITHUB_OUTPUT
+          VERSION=$(jq -r .version ./package.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
       - name: Get PR Number from Commit Message
         id: pr_number
         run: |
