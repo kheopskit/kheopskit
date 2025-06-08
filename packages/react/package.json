@@ -32,9 +32,7 @@
   "peerDependencies": {
     "react": ">=18.0.0",
     "react-dom": ">=18.0.0",
-    "rxjs": ">=7.0.0"
-  },
-  "dependencies": {
+    "rxjs": ">=7.0.0",
     "@kheopskit/core": "workspace:*"
   },
   "devDependencies": {
@@ -42,20 +40,16 @@
     "@types/react-dom": "^19.1.5",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "@kheopskit/core": "workspace:*"
   },
   "tsup": {
-    "entry": [
-      "src/index.ts"
-    ],
+    "entry": ["src/index.ts"],
     "splitting": false,
     "sourcemap": true,
     "clean": true,
     "dts": true,
-    "format": [
-      "esm",
-      "cjs"
-    ],
+    "format": ["esm", "cjs"],
     "target": "es2020"
   }
 }
