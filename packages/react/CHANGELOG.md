@@ -1,5 +1,12 @@
 # @kheopskit/react
 
+## 0.0.12
+
+### Patch Changes
+
+- Updated dependencies [[`2f34f0c`](https://github.com/kheopskit/kheopskit/commit/2f34f0c16c7866a4187b4474a45f93e2ad07f5c7)]:
+  - @kheopskit/core@0.0.12
+
 ## 0.0.11
 
 ### Patch Changes
