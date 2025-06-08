@@ -50,8 +50,10 @@ jobs:
         id: pr_body
         run: |
           BODY=$(gh pr view ${{ steps.pr_number.outputs.number }} --json body -q .body)
+          # Remove everything up to and including '#Releases' (case-insensitive, handles possible whitespace)
+          CLEAN_BODY=$(echo "$BODY" | sed -E '1,/^# [Rr]eleases[[:space:]]*$/d')
           echo "body<<EOF" >> $GITHUB_OUTPUT
-          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "$CLEAN_BODY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
