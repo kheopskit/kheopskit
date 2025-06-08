@@ -1,0 +1,50 @@
+name: Publish and Release
+on:
+  push:
+    branches:
+      - main
+jobs:
+  publish:
+    if: |
+      github.repository == 'kheopskit/kheopskit'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org/'
+      - run: pnpm install --frozen-lockfile
+      - name: Publish Packages
+        id: publish
+        run: pnpm exec changeset publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Get Version
+        id: get_version
+        run: |
+          echo "version=$(jq -r .version ./packages/core/package.json)" >> $GITHUB_OUTPUT
+      - name: Aggregate Changelog
+        id: changelog
+        run: |
+          changelog=$(cat ./packages/core/CHANGELOG.md)
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$changelog" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: v${{ steps.get_version.outputs.version }}
+          body: ${{ steps.changelog.outputs.changelog }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
