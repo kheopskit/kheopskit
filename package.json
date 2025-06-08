@@ -17,7 +17,7 @@
     "clean": "pnpm -F @kheopskit/core -F @kheopskit/react -F vite-react clean && rm -rf ./.papi/descriptors/dist && rm -rf node_modules",
     "bump": "pnpm changeset version",
     "publish": "pnpm publish -r --no-git-checks --access public --tag latest",
-    "changeset-release-pr": "changeset version && pnpm install"
+    "changeset-release-pr": "changeset version && pnpm install && pnpm build:packages"
   },
   "keywords": [],
   "author": "",

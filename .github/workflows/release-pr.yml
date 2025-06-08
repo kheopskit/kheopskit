@@ -24,6 +24,6 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
-          version: changeset-release-pr
+          version: pnpm changeset-release-pr
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
