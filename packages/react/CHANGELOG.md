@@ -1,5 +1,14 @@
 # @kheopskit/react
 
+## 0.0.18
+
+### Patch Changes
+
+- [`2e04a98`](https://github.com/kheopskit/kheopskit/commit/2e04a9893795e6aa43c942dee61443b4700c3294) Thanks [@0xKheops](https://github.com/0xKheops)! - fix: sync changesets
+
+- Updated dependencies [[`2e04a98`](https://github.com/kheopskit/kheopskit/commit/2e04a9893795e6aa43c942dee61443b4700c3294)]:
+  - @kheopskit/core@0.0.18
+
 ## 0.0.17
 
 ### Patch Changes
