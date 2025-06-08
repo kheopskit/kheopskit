@@ -7,7 +7,7 @@ jobs:
   publish:
     name: Publish and create release
     if: |
-      github.repository == 'kheopskit/kheopskit'
+      github.repository == 'kheopskit/kheopskit' && startsWith(github.event.head_commit.message, 'Version Packages')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -37,18 +37,25 @@ jobs:
         id: get_version
         run: |
           echo "version=$(jq -r .version ./packages/core/package.json)" >> $GITHUB_OUTPUT
-      - name: Aggregate Changelog
-        id: changelog
+      - name: Get PR Number from Commit Message
+        id: pr_number
         run: |
-          changelog=$(cat ./packages/core/CHANGELOG.md)
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          echo "$changelog" >> $GITHUB_OUTPUT
+          PR_NUMBER=$(echo "${{ github.event.head_commit.message }}" | sed -n 's/^Version Packages #\([0-9]*\).*/\1/p')
+          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+      - name: Get Version Packages PR Body by Number
+        id: pr_body
+        run: |
+          BODY=$(gh pr view ${{ steps.pr_number.outputs.number }} --json body -q .body)
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
           name: v${{ steps.get_version.outputs.version }}
-          body: ${{ steps.changelog.outputs.changelog }}
+          body: ${{ steps.pr_body.outputs.body }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
