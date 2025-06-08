@@ -1,5 +1,15 @@
 # kheopskit
 
+## 0.0.23
+
+### Patch Changes
+
+- [`e68aaa5`](https://github.com/kheopskit/kheopskit/commit/e68aaa5019630b03660d1cb5e95a9188cf972ebf) Thanks [@0xKheops](https://github.com/0xKheops)! - test: changeset
+
+- Updated dependencies [[`e68aaa5`](https://github.com/kheopskit/kheopskit/commit/e68aaa5019630b03660d1cb5e95a9188cf972ebf)]:
+  - @kheopskit/core@0.0.19
+  - @kheopskit/react@0.0.22
+
 ## 0.0.22
 
 ### Patch Changes
