@@ -7,7 +7,7 @@ jobs:
   publish:
     name: Publish and create release
     if: |
-      github.repository == 'kheopskit/kheopskit'
+      github.repository == 'kheopskit/kheopskit' && startsWith(github.event.head_commit.message, 'Version Packages')
     runs-on: ubuntu-latest
     permissions:
       contents: write
