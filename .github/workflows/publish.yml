@@ -53,6 +53,8 @@ jobs:
           BODY=$(gh pr view ${{ steps.pr_number.outputs.number }} --json body -q .body)
           # Remove everything up to and including '#Releases' (case-insensitive, handles possible whitespace)
           CLEAN_BODY=$(echo "$BODY" | sed -E '1,/^# [Rr]eleases[[:space:]]*$/d')
+          # Remove the section about the root package (## kheopskit ... until next ## or end of file)
+          CLEAN_BODY=$(echo "$CLEAN_BODY" | awk '/^## kheopskit(@[0-9A-Za-z.-]+)?/ {skip=1} /^## / && !/^## kheopskit(@[0-9A-Za-z.-]+)?/ {skip=0} !skip')
           echo "body<<EOF" >> $GITHUB_OUTPUT
           echo "$CLEAN_BODY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
