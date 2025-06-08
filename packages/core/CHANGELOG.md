@@ -1,5 +1,11 @@
 # @kheopskit/core
 
+## 0.0.14
+
+### Patch Changes
+
+- [`b8242ab`](https://github.com/kheopskit/kheopskit/commit/b8242abd31a6512b16399dd44ca5e5d82f6c70bf) Thanks [@0xKheops](https://github.com/0xKheops)! - test: changeset
+
 ## 0.0.13
 
 ### Patch Changes
