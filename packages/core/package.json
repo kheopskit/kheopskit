@@ -1,6 +1,6 @@
 {
   "name": "@kheopskit/core",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "description": "",
   "publishConfig": {
     "access": "public"
