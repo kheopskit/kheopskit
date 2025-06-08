@@ -12,5 +12,8 @@
   "ignore": ["vite-react"],
   "tools": {
     "pnpm": true
-  }
+  },
+  "linked": [
+    ["@kheopskit/core", "@kheopskit/react"]
+  ]
 }
