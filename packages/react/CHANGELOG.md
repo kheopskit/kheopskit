@@ -1,5 +1,14 @@
 # @kheopskit/react
 
+## 0.0.15
+
+### Patch Changes
+
+- [`a540c06`](https://github.com/kheopskit/kheopskit/commit/a540c06e90816656a1a21df3d95d0328bff78455) Thanks [@0xKheops](https://github.com/0xKheops)! - test: one more changeset
+
+- Updated dependencies [[`a540c06`](https://github.com/kheopskit/kheopskit/commit/a540c06e90816656a1a21df3d95d0328bff78455)]:
+  - @kheopskit/core@0.0.15
+
 ## 0.0.14
 
 ### Patch Changes
