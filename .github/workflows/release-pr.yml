@@ -8,7 +8,7 @@ jobs:
     name: Create Release Pull Request
     runs-on: ubuntu-latest
     if: |
-      github.repository == 'kheopskit/kheopskit'
+      github.repository == 'kheopskit/kheopskit' && !startsWith(github.event.head_commit.message, 'Version Packages')
     steps:
       - uses: actions/checkout@v4
         with:
