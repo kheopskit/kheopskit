@@ -24,7 +24,7 @@ export const baseOptions: BaseLayoutProps = {
             ry="10"
             fill="#e6007a"
             stroke="#fff"
-            stroke-width="3"
+            strokeWidth="3"
           />
           <rect x="5" y="15" width="90" height="10" fill="#fff" />
           <circle cx="80" cy="50" r="5" fill="#fff" />
@@ -34,5 +34,11 @@ export const baseOptions: BaseLayoutProps = {
     ),
   },
   // see https://fumadocs.dev/docs/ui/navigation/links
-  links: [],
+  links: [
+    {
+      text: "Documentation",
+      url: "/docs",
+      //   active: "nested-url",
+    },
+  ],
 };
