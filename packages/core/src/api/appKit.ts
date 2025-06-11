@@ -39,12 +39,16 @@ export const getAppKitWallets$ = (
         projectId: walletConnect.projectId,
         metadata: walletConnect.metadata,
         networks: walletConnect.networks,
+        themeMode: walletConnect.themeMode,
+        themeVariables: walletConnect.themeVariables,
         universalProviderConfigOverride: {
           methods: {
             polkadot: ["polkadot_signTransaction", "polkadot_signMessage"],
           },
         },
         allWallets: "HIDE",
+        debug: config.debug,
+        allowUnsupportedChain: true,
       });
 
       const status$ = new BehaviorSubject({

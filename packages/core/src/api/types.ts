@@ -1,6 +1,6 @@
 import type { WalletAccountId } from "@/utils";
 import type { WalletId } from "@/utils/WalletId";
-import type { AppKit } from "@reown/appkit/core";
+import type { AppKit, ThemeMode, ThemeVariables } from "@reown/appkit/core";
 import type { AppKitNetwork } from "@reown/appkit/networks";
 import type { Metadata } from "@walletconnect/universal-provider";
 import type {
@@ -27,6 +27,8 @@ export type KheopskitConfig = {
      * see https://docs.reown.com/advanced/multichain/polkadot/dapp-integration-guide#walletconnect-code%2Fcomponent-setup
      */
     networks: [AppKitNetwork, ...AppKitNetwork[]];
+    themeMode?: ThemeMode;
+    themeVariables?: ThemeVariables;
   };
   debug: boolean;
 };
