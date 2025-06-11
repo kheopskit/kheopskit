@@ -29,7 +29,7 @@ let cachedAppKit: Observable<AppKitWallets> | null = null;
 export const getAppKitWallets$ = (
   config: KheopskitConfig,
 ): Observable<AppKitWallets> => {
-  if (!config.walletConnect) return of({}); // of(null).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
+  if (!config.walletConnect) return of({});
 
   const walletConnect = config.walletConnect;
 
