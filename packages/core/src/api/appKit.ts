@@ -44,6 +44,7 @@ export const getAppKitWallets$ = (
             polkadot: ["polkadot_signTransaction", "polkadot_signMessage"],
           },
         },
+        allWallets: "HIDE",
       });
 
       const status$ = new BehaviorSubject({
