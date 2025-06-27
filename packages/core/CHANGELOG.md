@@ -1,5 +1,13 @@
 # @kheopskit/core
 
+## 0.0.21
+
+### Patch Changes
+
+- [`b3d5f98`](https://github.com/kheopskit/kheopskit/commit/b3d5f989a33f9c13f56833f71494df5091c4930c) Thanks [@0xKheops](https://github.com/0xKheops)! - feat: theme variables
+
+- [`cd73eb1`](https://github.com/kheopskit/kheopskit/commit/cd73eb18840a69b49238629051450eca26b9e275) Thanks [@0xKheops](https://github.com/0xKheops)! - fix: hide all wallets
+
 ## 0.0.20
 
 ### Patch Changes
