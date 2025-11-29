@@ -22,7 +22,7 @@ Try it on the [interactive playground](https://Kheopskit.pages.dev/)
 Install the required packages using `pnpm`:
 
 ```bash
-pnpm install @Kheopskit/core @Kheopskit/react
+pnpm add @kheopskit/core @kheopskit/react
 ```
 
 ---
@@ -37,7 +37,7 @@ pnpm install @Kheopskit/core @Kheopskit/react
 
 ```tsx
 import React from "react";
-import { KheopskitProvider, useWallets } from "@Kheopskit/react";
+import { KheopskitProvider, useWallets } from "@kheopskit/react";
 
 const App = () => {
   const { wallets, accounts } = useWallets();
@@ -90,7 +90,7 @@ export default Root;
 2. Subscribe to the observable to access wallets and accounts.
 
 ```javascript
-import { getKheopskit$ } from "@Kheopskit/core";
+import { getKheopskit$ } from "@kheopskit/core";
 
 const config = {
   platforms: ["polkadot", "ethereum"],
