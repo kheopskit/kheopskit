@@ -8,9 +8,11 @@ ignoredBuiltDependencies:
   - simple-git-hooks
   - utf-8-validate
 onlyBuiltDependencies:
-  - '@biomejs/biome'
-  - '@tailwindcss/oxide'
+  - "@biomejs/biome"
+  - "@tailwindcss/oxide"
   - esbuild
 overrides:
-  '@kheopskit/core': link:packages/core
-  '@kheopskit/react': link:packages/react
+  "@kheopskit/core": link:packages/core
+  "@kheopskit/react": link:packages/react
+
+minimumReleaseAge: 4320
