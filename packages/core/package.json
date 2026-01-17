@@ -6,6 +6,9 @@
 		"access": "public"
 	},
 	"private": false,
+	"files": [
+		"dist"
+	],
 	"main": "dist/index.cjs",
 	"module": "dist/index.mjs",
 	"types": "dist/index.d.ts",

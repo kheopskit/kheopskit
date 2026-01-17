@@ -6,6 +6,9 @@
 		"access": "public"
 	},
 	"private": false,
+	"files": [
+		"dist"
+	],
 	"main": "dist/index.cjs",
 	"module": "dist/index.mjs",
 	"types": "dist/index.d.ts",
@@ -37,7 +40,7 @@
 		"rxjs": ">=7.0.0"
 	},
 	"devDependencies": {
-		"@kheopskit/core": "link:packages/core",
+		"@kheopskit/core": "workspace:*",
 		"@types/react": "^19.1.5",
 		"@types/react-dom": "^19.1.5",
 		"react": "^19.1.0",
