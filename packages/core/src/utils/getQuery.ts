@@ -1,9 +1,9 @@
 import { isEqual } from "lodash";
 import {
-  BehaviorSubject,
-  Observable,
-  distinctUntilChanged,
-  shareReplay,
+	BehaviorSubject,
+	distinctUntilChanged,
+	Observable,
+	shareReplay,
 } from "rxjs";
 
 import { getCachedObservable$ } from "./getCachedObservable";
@@ -11,62 +11,62 @@ import { getCachedObservable$ } from "./getCachedObservable";
 export type QueryStatus = "loading" | "loaded" | "error";
 
 export type QueryResult<
-  T,
-  S extends QueryStatus = "loading" | "loaded" | "error",
+	T,
+	S extends QueryStatus = "loading" | "loaded" | "error",
 > = S extends "loading"
-  ? { status: "loading"; data: T | undefined; error: undefined }
-  : S extends "loaded"
-    ? { status: "loaded"; data: T; error: undefined }
-    : { status: "error"; data: undefined; error: unknown };
+	? { status: "loading"; data: T | undefined; error: undefined }
+	: S extends "loaded"
+		? { status: "loaded"; data: T; error: undefined }
+		: { status: "error"; data: undefined; error: unknown };
 
 type QueryOptions<T> = {
-  queryKey: string;
-  queryFn: () => Promise<T>;
-  defaultValue?: T;
-  refreshInterval?: number;
+	queryKey: string;
+	queryFn: () => Promise<T>;
+	defaultValue?: T;
+	refreshInterval?: number;
 };
 
 export const getQuery$ = <T>({
-  queryKey,
-  queryFn,
-  defaultValue,
-  refreshInterval,
+	queryKey,
+	queryFn,
+	defaultValue,
+	refreshInterval,
 }: QueryOptions<T>): Observable<QueryResult<T>> => {
-  return getCachedObservable$(queryKey, () =>
-    new Observable<QueryResult<T>>((subscriber) => {
-      const result = new BehaviorSubject<QueryResult<T>>({
-        status: "loading",
-        data: defaultValue,
-        error: undefined,
-      });
+	return getCachedObservable$(queryKey, () =>
+		new Observable<QueryResult<T>>((subscriber) => {
+			const result = new BehaviorSubject<QueryResult<T>>({
+				status: "loading",
+				data: defaultValue,
+				error: undefined,
+			});
 
-      // result subscription
-      const sub = result
-        .pipe(distinctUntilChanged<QueryResult<T>>(isEqual))
-        .subscribe(subscriber);
+			// result subscription
+			const sub = result
+				.pipe(distinctUntilChanged<QueryResult<T>>(isEqual))
+				.subscribe(subscriber);
 
-      let timeout: ReturnType<typeof setTimeout> | undefined = undefined;
+			let timeout: ReturnType<typeof setTimeout> | undefined;
 
-      // fetch result subscription
-      const run = () => {
-        queryFn()
-          .then((data) => {
-            result.next({ status: "loaded", data, error: undefined });
-          })
-          .catch((error) => {
-            result.next({ status: "error", data: undefined, error });
-          })
-          .finally(() => {
-            if (refreshInterval) timeout = setTimeout(run, refreshInterval);
-          });
-      };
+			// fetch result subscription
+			const run = () => {
+				queryFn()
+					.then((data) => {
+						result.next({ status: "loaded", data, error: undefined });
+					})
+					.catch((error) => {
+						result.next({ status: "error", data: undefined, error });
+					})
+					.finally(() => {
+						if (refreshInterval) timeout = setTimeout(run, refreshInterval);
+					});
+			};
 
-      run();
+			run();
 
-      return () => {
-        sub.unsubscribe();
-        if (timeout) clearTimeout(timeout);
-      };
-    }).pipe(shareReplay({ refCount: true, bufferSize: 1 })),
-  );
+			return () => {
+				sub.unsubscribe();
+				if (timeout) clearTimeout(timeout);
+			};
+		}).pipe(shareReplay({ refCount: true, bufferSize: 1 })),
+	);
 };

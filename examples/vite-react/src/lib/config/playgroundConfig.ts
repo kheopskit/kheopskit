@@ -5,112 +5,112 @@ import { APPKIT_CHAINS, isEthereumNetwork, isPolkadotNetwork } from "./chains";
 import { createStore } from "./createStore";
 
 type Prettify<T> = {
-  [K in keyof T]: T[K];
+	[K in keyof T]: T[K];
 } & {};
 
 export type PlaygroundConfig = Prettify<
-  Omit<KheopskitConfig, "walletConnect"> & {
-    walletConnect: boolean;
-  }
+	Omit<KheopskitConfig, "walletConnect"> & {
+		walletConnect: boolean;
+	}
 >;
 
 const demoConfigStore = createStore<PlaygroundConfig>("playground.config", {
-  autoReconnect: true,
-  platforms: ["polkadot"],
-  walletConnect: !!import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID,
-  debug: true,
+	autoReconnect: true,
+	platforms: ["polkadot"],
+	walletConnect: !!import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID,
+	debug: true,
 });
 
 export const usePlaygroundConfig = () => {
-  const demoConfig = useSyncExternalStore(
-    demoConfigStore.subscribe,
-    demoConfigStore.getSnapshot,
-  );
+	const demoConfig = useSyncExternalStore(
+		demoConfigStore.subscribe,
+		demoConfigStore.getSnapshot,
+	);
 
-  const setAutoReconnect = useCallback((enabled: boolean) => {
-    demoConfigStore.mutate((prev) => ({
-      ...prev,
-      autoReconnect: enabled,
-    }));
-  }, []);
+	const setAutoReconnect = useCallback((enabled: boolean) => {
+		demoConfigStore.mutate((prev) => ({
+			...prev,
+			autoReconnect: enabled,
+		}));
+	}, []);
 
-  const setPlatformEnabled = useCallback(
-    (platform: KheopskitConfig["platforms"][number], enabled: boolean) => {
-      demoConfigStore.mutate((prev) => {
-        const prevPlatforms = prev?.platforms ?? [];
-        const platforms = enabled
-          ? prevPlatforms.includes(platform)
-            ? prevPlatforms
-            : prevPlatforms.concat(platform)
-          : prevPlatforms.filter((p) => p !== platform);
+	const setPlatformEnabled = useCallback(
+		(platform: KheopskitConfig["platforms"][number], enabled: boolean) => {
+			demoConfigStore.mutate((prev) => {
+				const prevPlatforms = prev?.platforms ?? [];
+				const platforms = enabled
+					? prevPlatforms.includes(platform)
+						? prevPlatforms
+						: prevPlatforms.concat(platform)
+					: prevPlatforms.filter((p) => p !== platform);
 
-        return {
-          ...prev,
-          platforms,
-        };
-      });
-    },
-    [],
-  );
+				return {
+					...prev,
+					platforms,
+				};
+			});
+		},
+		[],
+	);
 
-  const setWalletConnect = useCallback((enabled: boolean) => {
-    demoConfigStore.mutate((prev) => {
-      return {
-        ...prev,
-        walletConnect: enabled,
-      };
-    });
-  }, []);
+	const setWalletConnect = useCallback((enabled: boolean) => {
+		demoConfigStore.mutate((prev) => {
+			return {
+				...prev,
+				walletConnect: enabled,
+			};
+		});
+	}, []);
 
-  const kheopskitConfig = useMemo(
-    () => getKheopskitConfig(demoConfig),
-    [demoConfig],
-  );
+	const kheopskitConfig = useMemo(
+		() => getKheopskitConfig(demoConfig),
+		[demoConfig],
+	);
 
-  return {
-    demoConfig,
-    kheopskitConfig,
-    setAutoReconnect,
-    setPlatformEnabled,
-    setWalletConnect,
-  };
+	return {
+		demoConfig,
+		kheopskitConfig,
+		setAutoReconnect,
+		setPlatformEnabled,
+		setWalletConnect,
+	};
 };
 
 const getKheopskitConfig = (
-  config: PlaygroundConfig,
+	config: PlaygroundConfig,
 ): Partial<KheopskitConfig> => {
-  const platforms = config.platforms ?? [];
-  const networks = getNetworks(platforms);
+	const platforms = config.platforms ?? [];
+	const networks = getNetworks(platforms);
 
-  return {
-    ...config,
-    walletConnect:
-      config.walletConnect && networks
-        ? {
-            projectId: import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID,
-            metadata: {
-              name: "Kheopskit Demo",
-              description: "Kheopskit Demo",
-              url: window.location.origin,
-              icons: [],
-            },
-            networks,
-          }
-        : undefined,
-  };
+	return {
+		...config,
+		walletConnect:
+			config.walletConnect && networks
+				? {
+						projectId: import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID,
+						metadata: {
+							name: "Kheopskit Demo",
+							description: "Kheopskit Demo",
+							url: window.location.origin,
+							icons: [],
+						},
+						networks,
+					}
+				: undefined,
+	};
 };
 
 const getNetworks = (platforms: KheopskitConfig["platforms"]) => {
-  const networks: AppKitNetwork[] = [
-    ...(platforms.includes("polkadot")
-      ? APPKIT_CHAINS.filter(isPolkadotNetwork)
-      : []),
-    ...(platforms.includes("ethereum")
-      ? APPKIT_CHAINS.filter(isEthereumNetwork)
-      : []),
-  ];
+	const networks: AppKitNetwork[] = [
+		...(platforms.includes("polkadot")
+			? APPKIT_CHAINS.filter(isPolkadotNetwork)
+			: []),
+		...(platforms.includes("ethereum")
+			? APPKIT_CHAINS.filter(isEthereumNetwork)
+			: []),
+	];
 
-  return networks.length
-    ? (networks as [AppKitNetwork, ...AppKitNetwork[]])
-    : null;
+	return networks.length
+		? (networks as [AppKitNetwork, ...AppKitNetwork[]])
+		: null;
 };

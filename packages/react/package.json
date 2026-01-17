@@ -1,60 +1,64 @@
 {
-  "name": "@kheopskit/react",
-  "version": "0.0.25",
-  "description": "",
-  "publishConfig": {
-    "access": "public"
-  },
-  "private": false,
-  "main": "dist/index.cjs",
-  "module": "dist/index.mjs",
-  "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
-    }
-  },
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "tsup --watch",
-    "build": "tsup",
-    "clean": "rm -rf ./dist && rm -rf ./node_modules"
-  },
-  "keywords": [],
-  "author": "Kheops (https://github.com/0xKheops)",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/kheopskit/kheopskit.git"
-  },
-  "license": "ISC",
-  "peerDependencies": {
-    "react": ">=18.0.0",
-    "react-dom": ">=18.0.0",
-    "rxjs": ">=7.0.0",
-    "@kheopskit/core": "workspace:*"
-  },
-  "devDependencies": {
-    "@types/react": "^19.1.5",
-    "@types/react-dom": "^19.1.5",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "rxjs": "^7.8.2",
-    "@kheopskit/core": "workspace:*"
-  },
-  "tsup": {
-    "entry": [
-      "src/index.ts"
-    ],
-    "splitting": false,
-    "sourcemap": true,
-    "clean": true,
-    "dts": true,
-    "format": [
-      "esm",
-      "cjs"
-    ],
-    "target": "es2020"
-  }
+	"name": "@kheopskit/react",
+	"version": "0.0.25",
+	"description": "",
+	"publishConfig": {
+		"access": "public"
+	},
+	"private": false,
+	"files": [
+		"dist"
+	],
+	"main": "dist/index.cjs",
+	"module": "dist/index.mjs",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.mjs",
+			"require": "./dist/index.cjs"
+		}
+	},
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1",
+		"dev": "tsup --watch",
+		"build": "tsup",
+		"clean": "rm -rf ./dist && rm -rf ./node_modules",
+		"typecheck": "tsc --noEmit"
+	},
+	"keywords": [],
+	"author": "Kheops (https://github.com/0xKheops)",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/kheopskit/kheopskit.git"
+	},
+	"license": "ISC",
+	"peerDependencies": {
+		"@kheopskit/core": "workspace:*",
+		"react": ">=18.0.0",
+		"react-dom": ">=18.0.0",
+		"rxjs": ">=7.0.0"
+	},
+	"devDependencies": {
+		"@kheopskit/core": "workspace:*",
+		"@types/react": "^19.1.5",
+		"@types/react-dom": "^19.1.5",
+		"react": "^19.1.0",
+		"react-dom": "^19.1.0",
+		"rxjs": "^7.8.2"
+	},
+	"tsup": {
+		"entry": [
+			"src/index.ts"
+		],
+		"splitting": false,
+		"sourcemap": true,
+		"clean": true,
+		"dts": true,
+		"format": [
+			"esm",
+			"cjs"
+		],
+		"target": "es2020"
+	}
 }
