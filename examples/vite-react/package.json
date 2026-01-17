@@ -17,16 +17,17 @@
 		"build": "tsc -b && vite build",
 		"preview": "vite preview",
 		"twinit": "tailwindcss init",
-		"clean": "rm -rf ./dist && rm -rf ./node_modules"
+		"clean": "rm -rf ./dist && rm -rf ./node_modules",
+		"typecheck": "tsc -b"
 	},
 	"dependencies": {
-		"@kheopskit/core": "workspace:*",
-		"@kheopskit/react": "workspace:*",
+		"@kheopskit/core": "link:packages/core",
+		"@kheopskit/react": "link:packages/react",
 		"@radix-ui/react-checkbox": "^1.3.2",
 		"@radix-ui/react-select": "^2.2.5",
 		"@radix-ui/react-slot": "^1.2.3",
 		"@reown/appkit": "^1.7.6",
-		"@scure/base": "^1.2.5",
+		"@scure/base": "^2.0.0",
 		"@tailwindcss/vite": "^4.1.7",
 		"@tanstack/react-query": "5.89.0",
 		"@types/node": "22.19.0",
@@ -51,7 +52,7 @@
 		"@vitejs/plugin-react": "^4.5.0",
 		"globals": "^16.1.0",
 		"tw-animate-css": "^1.3.0",
-		"typescript": "~5.8.3",
+		"typescript": "~5.9.3",
 		"vite": "^6.3.5"
 	}
 }

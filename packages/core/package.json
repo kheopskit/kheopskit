@@ -20,7 +20,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsup --watch",
     "build": "tsup",
-    "clean": "rm -rf ./dist && rm -rf ./node_modules"
+    "clean": "rm -rf ./dist && rm -rf ./node_modules",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "Kheops (https://github.com/0xKheops)",

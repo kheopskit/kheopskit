@@ -3,6 +3,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "lib": ["DOM", "DOM.Iterable", "ES2023"],
+    "skipLibCheck": true,
     "importHelpers": true,
     "declaration": false,
     "sourceMap": false,

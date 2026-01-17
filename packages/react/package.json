@@ -20,7 +20,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsup --watch",
     "build": "tsup",
-    "clean": "rm -rf ./dist && rm -rf ./node_modules"
+    "clean": "rm -rf ./dist && rm -rf ./node_modules",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "Kheops (https://github.com/0xKheops)",
@@ -30,18 +31,18 @@
   },
   "license": "ISC",
   "peerDependencies": {
+    "@kheopskit/core": "workspace:*",
     "react": ">=18.0.0",
     "react-dom": ">=18.0.0",
-    "rxjs": ">=7.0.0",
-    "@kheopskit/core": "workspace:*"
+    "rxjs": ">=7.0.0"
   },
   "devDependencies": {
+    "@kheopskit/core": "link:packages/core",
     "@types/react": "^19.1.5",
     "@types/react-dom": "^19.1.5",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "rxjs": "^7.8.2",
-    "@kheopskit/core": "workspace:*"
+    "rxjs": "^7.8.2"
   },
   "tsup": {
     "entry": [
@@ -56,5 +57,8 @@
       "cjs"
     ],
     "target": "es2020"
+  },
+  "dependencies": {
+    "@kheopskit/core": "link:packages/core"
   }
 }

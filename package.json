@@ -18,7 +18,8 @@
 		"bump": "pnpm changeset version",
 		"publish": "pnpm publish -r --no-git-checks --access public --tag latest",
 		"changeset-release-pr": "changeset version && pnpm install && pnpm build:packages",
-		"check": "pnpm biome check ."
+		"check": "pnpm biome check .",
+		"typecheck": "pnpm -r --parallel typecheck"
 	},
 	"keywords": [],
 	"author": "",
@@ -30,7 +31,7 @@
 		"concurrently": "^9.2.1",
 		"simple-git-hooks": "^2.13.1",
 		"tsup": "^8.5.1",
-		"typescript": "~5.8.3"
+		"typescript": "~5.9.3"
 	},
 	"dependencies": {
 		"@biomejs/biome": "^2.3.11",
