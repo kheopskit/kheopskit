@@ -1,5 +1,11 @@
 # kheopskit
 
+## 0.0.27
+
+### Patch Changes
+
+- [#27](https://github.com/kheopskit/kheopskit/pull/27) [`db07cec`](https://github.com/kheopskit/kheopskit/commit/db07cec441b9c7ddb8fdc1e0efdedfcb83246b2f) Thanks [@0xKheops](https://github.com/0xKheops)! - bump dependencies and improve performance
+
 ## 0.0.26
 
 ### Patch Changes
