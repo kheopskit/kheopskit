@@ -1,16 +1,16 @@
 {
-  "$schema": "https://unpkg.com/@changesets/config@2.3.0/schema.json",
-  "changelog": [
-    "@changesets/changelog-github",
-    { "repo": "kheopskit/kheopskit" }
-  ],
-  "commit": false,
-  "access": "public",
-  "baseBranch": "main",
-  "updateInternalDependencies": "patch",
-  "version": "synchronized",
-  "ignore": ["vite-react"],
-  "tools": {
-    "pnpm": true
-  }
+	"$schema": "https://unpkg.com/@changesets/config@2.3.0/schema.json",
+	"changelog": [
+		"@changesets/changelog-github",
+		{ "repo": "kheopskit/kheopskit" }
+	],
+	"commit": false,
+	"access": "public",
+	"baseBranch": "main",
+	"updateInternalDependencies": "patch",
+	"version": "synchronized",
+	"ignore": ["vite-react"],
+	"tools": {
+		"pnpm": true
+	}
 }

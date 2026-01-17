@@ -1,2 +1,2 @@
-export * from "./useWallets";
 export * from "./KheopskitProvider";
+export * from "./useWallets";
