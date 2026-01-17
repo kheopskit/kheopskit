@@ -64,14 +64,17 @@ export const westendAssetHub = defineChain({
 });
 
 const viemChainToWalletConnectChain = (chain: viemChains.Chain) => {
-	return defineChain(
-		structuredClone({
-			...chain,
-			id: chain.id.toString(),
-			chainNamespace: "eip155",
-			caipNetworkId: `eip155:${chain.id}`,
-		}),
-	);
+	// Don't use structuredClone - viem chains may contain functions that can't be cloned
+	return defineChain({
+		id: chain.id.toString(),
+		name: chain.name,
+		nativeCurrency: chain.nativeCurrency,
+		rpcUrls: chain.rpcUrls,
+		blockExplorers: chain.blockExplorers,
+		contracts: chain.contracts,
+		chainNamespace: "eip155",
+		caipNetworkId: `eip155:${chain.id}`,
+	});
 };
 
 export const APPKIT_CHAINS: [AppKitNetwork, ...AppKitNetwork[]] = [
