@@ -38,7 +38,7 @@ export const getKheopskit$ = (config?: Partial<KheopskitConfig>) => {
 			subscription.unsubscribe();
 		};
 	}).pipe(
-		throttleTime(50, undefined, { leading: true, trailing: true }),
+		throttleTime(16, undefined, { leading: true, trailing: true }), // ~1 frame at 60fps
 		logObservable("kheopskit$", { enabled: kc.debug, printValue: true }),
 		shareReplay({ bufferSize: 1, refCount: true }),
 	);

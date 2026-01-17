@@ -9,11 +9,8 @@ import {
 	combineLatest,
 	distinctUntilChanged,
 	map,
-	mergeMap,
 	Observable,
-	of,
 	shareReplay,
-	timer,
 } from "rxjs";
 import { store } from "@/api/store";
 import type {
@@ -27,6 +24,38 @@ import { getAppKitWallets$ } from "../appKit";
 
 const getInjectedWalletsIds = () =>
 	getInjectedExtensions().map((name) => getWalletId("polkadot", name));
+
+// Create a polling observable that starts immediately and polls at intervals
+const createWalletIdsPoller$ = () => {
+	return new Observable<WalletId[]>((subscriber) => {
+		// Emit immediately on subscribe
+		subscriber.next(getInjectedWalletsIds());
+
+		// Poll at shorter intervals initially, then slow down
+		const intervals = [100, 200, 300, 500];
+		let index = 0;
+
+		const poll = () => {
+			subscriber.next(getInjectedWalletsIds());
+			if (index < intervals.length) {
+				const delay = intervals[index++];
+				setTimeout(poll, delay);
+			}
+		};
+
+		// Start polling after first immediate emission
+		if (intervals.length > 0) {
+			setTimeout(poll, intervals[index++] ?? 100);
+		}
+
+		return () => {
+			// Cleanup handled by setTimeout naturally expiring
+		};
+	}).pipe(
+		distinctUntilChanged<WalletId[]>(isEqual),
+		shareReplay({ refCount: true, bufferSize: 1 }),
+	);
+};
 
 export const polkadotInjectedWallets$ = new Observable<
 	PolkadotInjectedWallet[]
@@ -59,12 +88,7 @@ export const polkadotInjectedWallets$ = new Observable<
 		store.removeEnabledWalletId(walletId);
 	};
 
-	const walletIds$ = of(0, 200, 500, 1000) // poll for wallets that inject after page load
-		.pipe(
-			mergeMap((time) => timer(time)),
-			map(() => getInjectedWalletsIds()),
-			distinctUntilChanged<WalletId[]>(isEqual),
-		);
+	const walletIds$ = createWalletIdsPoller$();
 
 	const subscription = combineLatest([walletIds$, enabledExtensions$])
 		.pipe(

@@ -7,6 +7,7 @@ import {
 	Observable,
 	of,
 	shareReplay,
+	startWith,
 	take,
 } from "rxjs";
 import { sortWallets } from "@/utils/sortWallets";
@@ -39,8 +40,13 @@ export const getWallets$ = (config: KheopskitConfig) => {
 		const wallets$ = observables.length
 			? combineLatest(observables).pipe(
 					map((wallets) => wallets.flat().sort(sortWallets)),
+					// Emit empty array immediately so UI doesn't wait
+					startWith([] as Wallet[]),
 				)
 			: of([]);
+
+		// Track wallets being reconnected to avoid duplicate attempts
+		const reconnectingWallets = new Set<string>();
 
 		const subAutoReconnect = combineLatest([wallets$, autoReconnectWalletIds$])
 			.pipe(
@@ -51,15 +57,17 @@ export const getWallets$ = (config: KheopskitConfig) => {
 				distinct((w) => w.id),
 			)
 			.subscribe(async (wallet) => {
-				if (wallet.isConnected) {
-					console.warn("Wallet %s already connected", wallet.id);
+				if (wallet.isConnected || reconnectingWallets.has(wallet.id)) {
 					return;
 				}
 
+				reconnectingWallets.add(wallet.id);
 				try {
 					await wallet.connect();
 				} catch (err) {
 					console.error("Failed to reconnect wallet %s", wallet.id, { err });
+				} finally {
+					reconnectingWallets.delete(wallet.id);
 				}
 			});
 

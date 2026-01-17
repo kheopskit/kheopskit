@@ -60,8 +60,5 @@
 			"cjs"
 		],
 		"target": "es2020"
-	},
-	"dependencies": {
-		"@kheopskit/core": "link:packages/core"
 	}
 }
