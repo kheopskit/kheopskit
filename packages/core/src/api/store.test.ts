@@ -120,7 +120,7 @@ describe("createKheopskitStore", () => {
 			};
 			const ssrCookies = `${STORAGE_KEY}=${encodeURIComponent(JSON.stringify(existingData))}`;
 
-			const kstore = createKheopskitStore(ssrCookies);
+			const kstore = createKheopskitStore({ ssrCookies });
 			// Store is created successfully
 			expect(kstore.observable).toBeDefined();
 			expect(kstore.addEnabledWalletId).toBeDefined();
@@ -128,7 +128,7 @@ describe("createKheopskitStore", () => {
 		});
 
 		it("addEnabledWalletId works with cookie storage", () => {
-			const kstore = createKheopskitStore(""); // Empty cookies, uses cookie storage
+			const kstore = createKheopskitStore({ ssrCookies: "" }); // Empty cookies, uses cookie storage
 			kstore.addEnabledWalletId("polkadot:polkadot-js" as WalletId);
 
 			// Should persist to cookies (verify via observable since document.cookie in jsdom may be cleared)
