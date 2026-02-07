@@ -27,7 +27,15 @@ export const getKheopskit$ = (
 	const kc = resolveConfig(config);
 	const store = createKheopskitStore({ ssrCookies, storageKey: kc.storageKey });
 
-	if (config?.debug) console.debug("[kheopskit] config", kc);
+	if (kc.debug) console.debug("[kheopskit] config", kc);
+
+	// Warn about SSR environment without cookies
+	if (kc.debug && typeof window === "undefined" && ssrCookies === undefined) {
+		console.warn(
+			"[kheopskit] Running on server without `ssrCookies`. " +
+				"Wallet state will not be hydrated. Pass cookies for SSR support.",
+		);
+	}
 
 	return new Observable<KheopskitState>((subscriber) => {
 		const wallets$ = getWallets$(kc, store);
