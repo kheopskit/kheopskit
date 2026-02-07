@@ -6,6 +6,9 @@ import "./globals.css";
 export const metadata: Metadata = {
 	title: "Kheopskit Next.js Playground",
 	description: "Library for connecting dapps to multiple platforms & wallets",
+	icons: {
+		icon: "/kheopskit-square.svg",
+	},
 };
 
 export default async function RootLayout({
