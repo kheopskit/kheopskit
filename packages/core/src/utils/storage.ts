@@ -12,7 +12,10 @@ export type SyncableStorage = Storage & {
 	 * Subscribe to storage changes from other tabs.
 	 * Returns an unsubscribe function.
 	 */
-	subscribe?: (key: string, callback: (value: string | null) => void) => () => void;
+	subscribe?: (
+		key: string,
+		callback: (value: string | null) => void,
+	) => () => void;
 };
 
 /**
@@ -177,7 +180,11 @@ export const cookieStorage = (initialCookies?: string): SyncableStorage => {
 			if (!broadcastChannel) return () => {};
 
 			const handler = (event: MessageEvent) => {
-				const data = event.data as { type: string; key: string; value?: string };
+				const data = event.data as {
+					type: string;
+					key: string;
+					value?: string;
+				};
 				if (data.key === key) {
 					if (data.type === "set") {
 						callback(data.value ?? null);
