@@ -20,6 +20,18 @@ export type KheopskitProviderProps = PropsWithChildren & {
 	 * Cookie string for SSR hydration.
 	 * Pass the request cookie header (e.g., from Next.js headers or TanStack Start)
 	 * to hydrate wallet state on the server.
+	 *
+	 * @remarks
+	 * This value should be stable per render to avoid unnecessary store recreation.
+	 * Compute it once in your server component or layout and pass it down.
+	 *
+	 * @example
+	 * ```tsx
+	 * // Next.js App Router
+	 * const cookieStore = await cookies();
+	 * const ssrCookies = cookieStore.getAll().map(c => `${c.name}=${c.value}`).join('; ');
+	 * return <Providers ssrCookies={ssrCookies}>{children}</Providers>
+	 * ```
 	 */
 	ssrCookies?: string;
 };

@@ -19,6 +19,7 @@ const demoConfigStore = createStore<PlaygroundConfig>("playground.config", {
 	platforms: ["polkadot", "ethereum"],
 	walletConnect: !!process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID,
 	debug: true,
+	storageKey: "kheopskit",
 });
 
 export const usePlaygroundConfig = () => {

@@ -95,7 +95,17 @@ export const parseCookie = (
 
 /**
  * Maximum recommended size for cookie storage (3KB to stay well under 4KB limit).
- * Cookies exceeding this may be rejected by browsers or cause issues.
+ *
+ * @remarks
+ * Cookie storage is subject to browser limits (typically 4KB per cookie).
+ * When users connect many wallets, the auto-reconnect list may exceed this limit.
+ * If this happens:
+ * - A console warning will be logged
+ * - Some browsers may silently reject the cookie
+ * - Consider using fewer simultaneous wallet connections
+ *
+ * The stored data includes wallet IDs in format `platform:identifier`
+ * (e.g., `polkadot:talisman`, `ethereum:io.metamask`).
  */
 export const COOKIE_MAX_SIZE = 3 * 1024;
 
@@ -217,4 +227,21 @@ export const cookieStorage = (initialCookies?: string): SyncableStorage => {
 			};
 		},
 	};
+};
+
+/**
+ * Cleanup the shared BroadcastChannel used for cross-tab cookie sync.
+ * Call this when you're done using cookie storage (e.g., in tests or when unmounting).
+ *
+ * @remarks
+ * In normal browser usage, you typically don't need to call this -
+ * the channel will be cleaned up when the page is closed.
+ * This is primarily useful for testing environments where multiple
+ * test runs may accumulate channels.
+ */
+export const cleanupBroadcastChannel = (): void => {
+	if (sharedBroadcastChannel) {
+		sharedBroadcastChannel.close();
+		sharedBroadcastChannel = null;
+	}
 };

@@ -11,6 +11,7 @@ describe("resolveConfig", () => {
 				autoReconnect: true,
 				platforms: ["polkadot"],
 				debug: false,
+				storageKey: "kheopskit",
 			});
 		});
 
@@ -20,6 +21,7 @@ describe("resolveConfig", () => {
 			expect(result.autoReconnect).toBe(true);
 			expect(result.platforms).toEqual(["polkadot"]);
 			expect(result.debug).toBe(false);
+			expect(result.storageKey).toBe("kheopskit");
 		});
 	});
 
@@ -60,12 +62,14 @@ describe("resolveConfig", () => {
 				autoReconnect: false,
 				platforms: ["ethereum"],
 				debug: true,
+				storageKey: "my-custom-key",
 			});
 
 			expect(result).toEqual({
 				autoReconnect: false,
 				platforms: ["ethereum"],
 				debug: true,
+				storageKey: "my-custom-key",
 			});
 		});
 	});

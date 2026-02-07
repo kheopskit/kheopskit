@@ -2,8 +2,7 @@ import { uniq } from "lodash";
 import { createStore } from "../utils/createStore";
 import { cookieStorage, safeLocalStorage } from "../utils/storage";
 import { parseWalletId, type WalletId } from "../utils/WalletId";
-
-const STORAGE_KEY = "kheopskit";
+import { DEFAULT_STORAGE_KEY } from "./config";
 
 export type KheopskitStoreData = {
 	autoReconnect?: WalletId[];
@@ -11,14 +10,33 @@ export type KheopskitStoreData = {
 
 const DEFAULT_SETTINGS: KheopskitStoreData = {};
 
+export type CreateKheopskitStoreOptions = {
+	/**
+	 * Cookie string for SSR hydration.
+	 * When provided, uses cookieStorage instead of localStorage.
+	 */
+	ssrCookies?: string;
+	/**
+	 * Custom storage key to namespace the stored data.
+	 * @default "kheopskit"
+	 */
+	storageKey?: string;
+};
+
 /**
  * Creates a kheopskit store with the appropriate storage backend.
  * Uses cookieStorage when ssrCookies is provided (for SSR hydration),
  * otherwise falls back to safeLocalStorage.
+ *
+ * @param options - Configuration options for the store
  */
-export const createKheopskitStore = (ssrCookies?: string) => {
-	const storage = ssrCookies ? cookieStorage(ssrCookies) : safeLocalStorage;
-	const store = createStore(STORAGE_KEY, DEFAULT_SETTINGS, storage);
+export const createKheopskitStore = (
+	options: CreateKheopskitStoreOptions = {},
+) => {
+	const { ssrCookies, storageKey = DEFAULT_STORAGE_KEY } = options;
+	const storage =
+		ssrCookies !== undefined ? cookieStorage(ssrCookies) : safeLocalStorage;
+	const store = createStore(storageKey, DEFAULT_SETTINGS, storage);
 
 	const addEnabledWalletId = (walletId: WalletId) => {
 		parseWalletId(walletId); // validate walletId

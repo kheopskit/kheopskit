@@ -19,8 +19,18 @@ import type {
 	KheopskitConfig,
 } from "../types";
 
+/**
+ * Observable that emits EIP-6963 provider details from injected wallets.
+ * Returns empty array during SSR since browser wallet APIs are not available.
+ */
 const providersDetails$ = new Observable<EIP6963ProviderDetail[]>(
 	(subscriber) => {
+		// Guard against SSR - mipd requires browser APIs
+		if (typeof window === "undefined") {
+			subscriber.next([]);
+			return () => {};
+		}
+
 		const mipdStore = createMipdStore();
 
 		const unsubscribe = mipdStore.subscribe((providerDetails) => {

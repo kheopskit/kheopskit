@@ -31,6 +31,20 @@ export type KheopskitConfig = {
 		themeVariables?: ThemeVariables;
 	};
 	debug: boolean;
+	/**
+	 * Custom storage key for persisting wallet connection state.
+	 * Useful when running multiple kheopskit instances on the same domain
+	 * to prevent state conflicts between different dapps.
+	 *
+	 * @default "kheopskit"
+	 *
+	 * @example
+	 * ```ts
+	 * // For app "MyDapp" to avoid conflicts
+	 * { storageKey: "kheopskit-mydapp" }
+	 * ```
+	 */
+	storageKey: string;
 };
 
 export type PolkadotInjectedWallet = {

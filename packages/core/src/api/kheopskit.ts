@@ -25,7 +25,7 @@ export const getKheopskit$ = (
 	ssrCookies?: string,
 ) => {
 	const kc = resolveConfig(config);
-	const store = createKheopskitStore(ssrCookies);
+	const store = createKheopskitStore({ ssrCookies, storageKey: kc.storageKey });
 
 	if (config?.debug) console.debug("[kheopskit] config", kc);
 
