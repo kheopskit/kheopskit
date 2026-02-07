@@ -77,9 +77,13 @@ export const parseCookie = (
 	const cookies = cookieString.split(";").reduce(
 		(acc, cookie) => {
 			const [k, ...v] = cookie.split("=");
-			const key = k?.trim();
-			if (key) {
-				acc[key] = decodeURIComponent(v.join("=").trim());
+			const cookieKey = k?.trim();
+			if (cookieKey) {
+				try {
+					acc[cookieKey] = decodeURIComponent(v.join("=").trim());
+				} catch {
+					// Malformed cookie value, skip it
+				}
 			}
 			return acc;
 		},
@@ -101,6 +105,31 @@ export const COOKIE_MAX_SIZE = 3 * 1024;
 const BROADCAST_CHANNEL_NAME = "kheopskit-storage-sync";
 
 /**
+ * Singleton BroadcastChannel for cross-tab cookie sync.
+ * Created once and shared across all cookieStorage instances.
+ */
+let sharedBroadcastChannel: BroadcastChannel | null = null;
+
+const getBroadcastChannel = (): BroadcastChannel | null => {
+	if (sharedBroadcastChannel) return sharedBroadcastChannel;
+	if (typeof BroadcastChannel === "undefined") return null;
+
+	try {
+		sharedBroadcastChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
+	} catch {
+		// BroadcastChannel not supported or failed
+	}
+	return sharedBroadcastChannel;
+};
+
+/**
+ * Check if the current connection is secure (HTTPS).
+ * Must be called at runtime (inside methods) to work correctly after SSR hydration.
+ */
+const isSecureConnection = (): boolean =>
+	typeof window !== "undefined" && window.location.protocol === "https:";
+
+/**
  * A cookie-based storage implementation for SSR environments.
  * Reads cookies from an optional initial cookie string (for SSR hydration),
  * writes to document.cookie on the client.
@@ -113,19 +142,6 @@ const BROADCAST_CHANNEL_NAME = "kheopskit-storage-sync";
  * @param initialCookies - Optional cookie string for server-side hydration
  */
 export const cookieStorage = (initialCookies?: string): SyncableStorage => {
-	// Create BroadcastChannel for cross-tab sync (if available)
-	let broadcastChannel: BroadcastChannel | null = null;
-	if (typeof BroadcastChannel !== "undefined") {
-		try {
-			broadcastChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
-		} catch {
-			// BroadcastChannel not supported or failed
-		}
-	}
-
-	const isSecure =
-		typeof window !== "undefined" && window.location.protocol === "https:";
-
 	return {
 		getItem: (key: string) => {
 			// On server, use initialCookies. On client, read from document.cookie
@@ -151,7 +167,7 @@ export const cookieStorage = (initialCookies?: string): SyncableStorage => {
 
 			// Build cookie string with security attributes
 			let cookieStr = `${key}=${encodedValue};expires=${expires.toUTCString()};path=/;SameSite=Lax`;
-			if (isSecure) {
+			if (isSecureConnection()) {
 				cookieStr += ";Secure";
 			}
 
@@ -159,14 +175,14 @@ export const cookieStorage = (initialCookies?: string): SyncableStorage => {
 			document.cookie = cookieStr;
 
 			// Broadcast change to other tabs
-			broadcastChannel?.postMessage({ type: "set", key, value });
+			getBroadcastChannel()?.postMessage({ type: "set", key, value });
 		},
 		removeItem: (key: string) => {
 			if (typeof document === "undefined") return;
 
 			// Build delete cookie string
 			let cookieStr = `${key}=;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/;SameSite=Lax`;
-			if (isSecure) {
+			if (isSecureConnection()) {
 				cookieStr += ";Secure";
 			}
 
@@ -174,10 +190,11 @@ export const cookieStorage = (initialCookies?: string): SyncableStorage => {
 			document.cookie = cookieStr;
 
 			// Broadcast change to other tabs
-			broadcastChannel?.postMessage({ type: "remove", key });
+			getBroadcastChannel()?.postMessage({ type: "remove", key });
 		},
 		subscribe: (key: string, callback: (value: string | null) => void) => {
-			if (!broadcastChannel) return () => {};
+			const channel = getBroadcastChannel();
+			if (!channel) return () => {};
 
 			const handler = (event: MessageEvent) => {
 				const data = event.data as {
@@ -194,9 +211,9 @@ export const cookieStorage = (initialCookies?: string): SyncableStorage => {
 				}
 			};
 
-			broadcastChannel.addEventListener("message", handler);
+			channel.addEventListener("message", handler);
 			return () => {
-				broadcastChannel?.removeEventListener("message", handler);
+				channel.removeEventListener("message", handler);
 			};
 		},
 	};

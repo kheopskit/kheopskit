@@ -12,8 +12,9 @@ export const createStore = <T>(
 
 	// Cross-tab sync via storage.subscribe (uses storage event for localStorage, BroadcastChannel for cookies)
 	// Only subscribe if window is available (client-side) and storage supports it
+	let unsubscribeStorage: (() => void) | undefined;
 	if (typeof window !== "undefined" && storage.subscribe) {
-		storage.subscribe(key, (newValue) => {
+		unsubscribeStorage = storage.subscribe(key, (newValue) => {
 			subject.next(parseData(newValue, defaultValue));
 		});
 	}
@@ -29,6 +30,13 @@ export const createStore = <T>(
 		mutate: (transform: (prev: T) => T) =>
 			update(transform(subject.getValue())),
 		get: () => structuredClone(subject.getValue()),
+		/**
+		 * Cleanup subscriptions. Call this when the store is no longer needed.
+		 */
+		destroy: () => {
+			unsubscribeStorage?.();
+			subject.complete();
+		},
 	};
 };
 

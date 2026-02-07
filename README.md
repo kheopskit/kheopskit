@@ -157,12 +157,12 @@ export function Providers({ children, ssrCookies }: { children: React.ReactNode;
 // routes/__root.tsx
 import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { createServerFn, Meta, Scripts } from "@tanstack/start";
-import { getWebRequest } from "@tanstack/start/server";
+import { getRequest } from "@tanstack/start/server";
 import { Providers } from "../providers";
 
 const getSSRCookies = createServerFn({ method: "GET" }).handler(async () => {
-  const request = getWebRequest();
-  return request.headers.get("cookie") ?? undefined;
+  const request = getRequest();
+  return request?.headers.get("cookie") ?? undefined;
 });
 
 export const Route = createRootRoute({

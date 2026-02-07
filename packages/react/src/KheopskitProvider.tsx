@@ -7,6 +7,7 @@ import {
 import {
 	type FC,
 	type PropsWithChildren,
+	useEffect,
 	useMemo,
 	useSyncExternalStore,
 } from "react";
@@ -41,6 +42,11 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 		() => createStore(getKheopskit$(config, ssrCookies), defaultValue),
 		[config, ssrCookies, defaultValue],
 	);
+
+	// Cleanup store subscriptions when store changes or component unmounts
+	useEffect(() => {
+		return () => store.destroy();
+	}, [store]);
 
 	const state = useSyncExternalStore(
 		store.subscribe,

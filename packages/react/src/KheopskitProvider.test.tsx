@@ -1,3 +1,4 @@
+/// <reference types="@testing-library/jest-dom" />
 import type { KheopskitConfig } from "@kheopskit/core";
 import { render, screen } from "@testing-library/react";
 import { useContext } from "react";

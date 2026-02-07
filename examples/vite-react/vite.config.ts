@@ -6,7 +6,8 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 // https://vite.dev/config/
 export default defineConfig({
-	plugins: [react(), tailwindcss(), biomePlugin(), tsconfigPaths()],
+	// biome-ignore lint: biomePlugin type mismatch with latest vite
+	plugins: [react(), tailwindcss(), biomePlugin() as any, tsconfigPaths()],
 	server: {
 		port: 3001,
 	},
