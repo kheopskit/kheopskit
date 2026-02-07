@@ -1,4 +1,4 @@
-import type { WalletAccount } from "@/api";
+import type { WalletAccount } from "../api";
 
 export const sortAccounts = (a1: WalletAccount, a2: WalletAccount) => {
 	if (a1.platform === "polkadot") {

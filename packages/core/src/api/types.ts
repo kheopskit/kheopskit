@@ -11,12 +11,18 @@ import type {
 	EIP1193Provider,
 	WalletClient,
 } from "viem";
-import type { WalletAccountId } from "@/utils";
-import type { WalletId } from "@/utils/WalletId";
+import type { WalletAccountId } from "../utils";
+import type { WalletId } from "../utils/WalletId";
 
 export type KheopskitConfig = {
 	autoReconnect: boolean;
 	platforms: WalletPlatform[];
+	/**
+	 * Storage strategy for persisting wallet connection state.
+	 * - "local-storage": Uses localStorage (default, client-side only)
+	 * - "cookie": Uses cookies (SSR-compatible, state readable from server)
+	 */
+	storage?: "cookie" | "local-storage";
 	walletConnect?: {
 		projectId: string;
 		metadata: Metadata;

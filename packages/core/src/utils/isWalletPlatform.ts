@@ -1,4 +1,4 @@
-import type { WalletPlatform } from "@/api/types";
+import type { WalletPlatform } from "../api/types";
 
 export const isWalletPlatform = (
 	platform: unknown,

@@ -2,3 +2,12 @@ node_modules
 dist
 .env
 .DS_Store
+
+# Build outputs
+.next
+.vinxi
+.tanstack
+.output
+.turbo
+*.tsbuildinfo
+app.config.timestamp*.js

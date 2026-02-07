@@ -12,18 +12,20 @@ import {
 	Observable,
 	shareReplay,
 } from "rxjs";
-import { store } from "@/api/store";
+import { store } from "../store";
 import type {
 	KheopskitConfig,
 	PolkadotInjectedWallet,
 	PolkadotWallet,
-} from "@/api/types";
-import { POLKADOT_EXTENSIONS } from "@/utils/polkadotExtensions";
-import { getWalletId, parseWalletId, type WalletId } from "@/utils/WalletId";
+} from "../types";
+import { POLKADOT_EXTENSIONS } from "../../utils/polkadotExtensions";
+import { getWalletId, parseWalletId, type WalletId } from "../../utils/WalletId";
 import { getAppKitWallets$ } from "../appKit";
 
 const getInjectedWalletsIds = () =>
-	getInjectedExtensions().map((name) => getWalletId("polkadot", name));
+	typeof window === "undefined"
+		? []
+		: getInjectedExtensions().map((name) => getWalletId("polkadot", name));
 
 // Create a polling observable that starts immediately and polls at intervals
 const createWalletIdsPoller$ = () => {

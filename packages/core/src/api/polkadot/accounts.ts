@@ -19,8 +19,8 @@ import type {
 	PolkadotAppKitWallet,
 	PolkadotInjectedWallet,
 	PolkadotWallet,
-} from "@/api/types";
-import { getWalletAccountId } from "@/utils";
+} from "../types";
+import { getWalletAccountId } from "../../utils";
 
 const getInjectedWalletAccounts$ = (
 	wallet: PolkadotInjectedWallet,

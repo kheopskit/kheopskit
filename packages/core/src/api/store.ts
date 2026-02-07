@@ -1,6 +1,6 @@
 import { uniq } from "lodash";
-import { createStore } from "@/utils/createStore";
-import { parseWalletId, type WalletId } from "@/utils/WalletId";
+import { createStore } from "../utils/createStore";
+import { parseWalletId, type WalletId } from "../utils/WalletId";
 
 const LOCAL_STORAGE_KEY = "kheopskit";
 

@@ -1,18 +1,28 @@
 import { BehaviorSubject, filter, fromEvent, map } from "rxjs";
+import { type Storage, safeLocalStorage } from "./storage";
 
-export const createStore = <T>(key: string, defaultValue: T) => {
-	const subject = new BehaviorSubject<T>(getStoredData(key, defaultValue));
+export const createStore = <T>(
+	key: string,
+	defaultValue: T,
+	storage: Storage = safeLocalStorage,
+) => {
+	const subject = new BehaviorSubject<T>(
+		getStoredData(key, defaultValue, storage),
+	);
 
 	// Cross-tab sync via 'storage' event (won't fire if key is updated from same tab)
-	fromEvent<StorageEvent>(window, "storage")
-		.pipe(
-			filter((event) => event.key === key),
-			map((event) => parseData(event.newValue, defaultValue)),
-		)
-		.subscribe((newValue) => subject.next(newValue));
+	// Only subscribe to storage events if window is available (client-side)
+	if (typeof window !== "undefined") {
+		fromEvent<StorageEvent>(window, "storage")
+			.pipe(
+				filter((event) => event.key === key),
+				map((event) => parseData(event.newValue, defaultValue)),
+			)
+			.subscribe((newValue) => subject.next(newValue));
+	}
 
 	const update = (val: T) => {
-		setStoredData(key, val);
+		setStoredData(key, val, storage);
 		subject.next(val);
 	};
 
@@ -34,12 +44,16 @@ const parseData = <T>(str: string | null, defaultValue: T): T => {
 	return defaultValue;
 };
 
-const getStoredData = <T>(key: string, defaultValue: T): T => {
-	const str = localStorage.getItem(key);
+const getStoredData = <T>(
+	key: string,
+	defaultValue: T,
+	storage: Storage,
+): T => {
+	const str = storage.getItem(key);
 	return parseData(str, defaultValue);
 };
 
-const setStoredData = <T>(key: string, val: T) => {
+const setStoredData = <T>(key: string, val: T, storage: Storage) => {
 	const str = JSON.stringify(val);
-	localStorage.setItem(key, str);
+	storage.setItem(key, str);
 };

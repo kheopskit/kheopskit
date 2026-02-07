@@ -10,7 +10,7 @@ import {
 	startWith,
 	take,
 } from "rxjs";
-import { sortWallets } from "@/utils/sortWallets";
+import { sortWallets } from "../utils/sortWallets";
 import { getEthereumWallets$ } from "./ethereum/wallets";
 import { getPolkadotWallets$ } from "./polkadot/wallets";
 import { store } from "./store";

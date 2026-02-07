@@ -5,7 +5,7 @@ import {
 	shareReplay,
 	throttleTime,
 } from "rxjs";
-import { logObservable } from "@/utils/logObservable";
+import { logObservable } from "../utils/logObservable";
 import { getAccounts$ } from "./accounts";
 import { resolveConfig } from "./config";
 import type { KheopskitConfig, Wallet, WalletAccount } from "./types";
@@ -19,7 +19,10 @@ export type KheopskitState = {
 	config: KheopskitConfig;
 };
 
-export const getKheopskit$ = (config?: Partial<KheopskitConfig>) => {
+export const getKheopskit$ = (
+	config?: Partial<KheopskitConfig>,
+	_ssrCookies?: string,
+) => {
 	const kc = resolveConfig(config);
 
 	console.debug("[kheopskit] config", kc);

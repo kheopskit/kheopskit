@@ -1,4 +1,4 @@
-import type { WalletPlatform } from "@/api/types";
+import type { WalletPlatform } from "../api/types";
 import { isWalletPlatform } from "./isWalletPlatform";
 
 export type WalletId = string;

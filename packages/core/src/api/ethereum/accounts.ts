@@ -20,9 +20,9 @@ import type {
 	EthereumAppKitWallet,
 	EthereumInjectedWallet,
 	EthereumWallet,
-} from "@/api/types";
-import { getWalletAccountId } from "@/utils";
-import { getCachedObservable$ } from "@/utils/getCachedObservable";
+} from "../types";
+import { getWalletAccountId } from "../../utils";
+import { getCachedObservable$ } from "../../utils/getCachedObservable";
 
 const getInjectedWalletAccounts$ = (
 	wallet: EthereumInjectedWallet,

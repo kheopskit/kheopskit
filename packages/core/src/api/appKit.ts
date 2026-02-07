@@ -8,7 +8,7 @@ import {
 	of,
 	shareReplay,
 } from "rxjs";
-import { getWalletId } from "@/utils/WalletId";
+import { getWalletId } from "../utils/WalletId";
 import type {
 	EthereumAppKitWallet,
 	KheopskitConfig,

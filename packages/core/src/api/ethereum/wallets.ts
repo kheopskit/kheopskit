@@ -7,13 +7,13 @@ import {
 	shareReplay,
 } from "rxjs";
 import type { EIP1193Provider } from "viem";
-import { store } from "@/api/store";
+import { store } from "../store";
 import type {
 	EthereumInjectedWallet,
 	EthereumWallet,
 	KheopskitConfig,
-} from "@/api/types";
-import { getWalletId, type WalletId } from "@/utils/WalletId";
+} from "../types";
+import { getWalletId, type WalletId } from "../../utils/WalletId";
 import { getAppKitWallets$ } from "../appKit";
 
 const providersDetails$ = new Observable<EIP6963ProviderDetail[]>(

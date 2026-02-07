@@ -13,9 +13,21 @@ import {
 import { KheopskitContext } from "./context";
 import { createStore } from "./createStore";
 
-export const KheopskitProvider: FC<
-	PropsWithChildren & { config?: Partial<KheopskitConfig> }
-> = ({ children, config }) => {
+export type KheopskitProviderProps = PropsWithChildren & {
+	config?: Partial<KheopskitConfig>;
+	/**
+	 * Cookie string for SSR hydration.
+	 * Pass the request cookie header (e.g., from Next.js headers or TanStack Start)
+	 * to hydrate wallet state on the server.
+	 */
+	ssrCookies?: string;
+};
+
+export const KheopskitProvider: FC<KheopskitProviderProps> = ({
+	children,
+	config,
+	ssrCookies,
+}) => {
 	const defaultValue = useMemo<KheopskitState>(
 		() => ({
 			wallets: [],
@@ -26,11 +38,15 @@ export const KheopskitProvider: FC<
 	);
 
 	const store = useMemo(
-		() => createStore(getKheopskit$(config), defaultValue),
-		[config, defaultValue],
+		() => createStore(getKheopskit$(config, ssrCookies), defaultValue),
+		[config, ssrCookies, defaultValue],
 	);
 
-	const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
+	const state = useSyncExternalStore(
+		store.subscribe,
+		store.getSnapshot,
+		store.getServerSnapshot,
+	);
 
 	const value = useMemo(() => ({ state }), [state]);
 

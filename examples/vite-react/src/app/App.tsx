@@ -33,7 +33,7 @@ export const App = () => {
 const AppContent = () => (
 	<div className="container mx-auto flex flex-col gap-8 items-center p-8 max-w-3xl">
 		<div className="text-center space-y-2">
-			<h1 className="text-3xl font-bold">Kheopskit Playground</h1>
+			<h1 className="text-3xl font-bold">Kheopskit Playground - Vite.js</h1>
 			<div className="text-sm text-muted-foreground">
 				Library for connecting dapps to multiple platforms & wallets
 			</div>
