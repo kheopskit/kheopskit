@@ -17,7 +17,7 @@ export type PlaygroundConfig = Prettify<
 const demoConfigStore = createStore<PlaygroundConfig>("playground.config", {
 	autoReconnect: true,
 	platforms: ["polkadot", "ethereum"],
-	walletConnect: !!import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID,
+	walletConnect: !!process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID,
 	debug: true,
 });
 
@@ -25,6 +25,7 @@ export const usePlaygroundConfig = () => {
 	const demoConfig = useSyncExternalStore(
 		demoConfigStore.subscribe,
 		demoConfigStore.getSnapshot,
+		demoConfigStore.getServerSnapshot,
 	);
 
 	const setAutoReconnect = useCallback((enabled: boolean) => {
@@ -87,11 +88,11 @@ const getKheopskitConfig = (
 		walletConnect:
 			config.walletConnect && networks
 				? {
-						projectId: import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID,
+						projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID ?? "",
 						metadata: {
 							name: "Kheopskit Demo",
 							description: "Kheopskit Demo",
-							url: window.location.origin,
+							url: typeof window !== "undefined" ? window.location.origin : "",
 							icons: [],
 						},
 						networks,

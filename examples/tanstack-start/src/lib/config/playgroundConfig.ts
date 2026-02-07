@@ -25,6 +25,7 @@ export const usePlaygroundConfig = () => {
 	const demoConfig = useSyncExternalStore(
 		demoConfigStore.subscribe,
 		demoConfigStore.getSnapshot,
+		demoConfigStore.getServerSnapshot,
 	);
 
 	const setAutoReconnect = useCallback((enabled: boolean) => {
@@ -91,7 +92,7 @@ const getKheopskitConfig = (
 						metadata: {
 							name: "Kheopskit Demo",
 							description: "Kheopskit Demo",
-							url: window.location.origin,
+							url: typeof window !== "undefined" ? window.location.origin : "",
 							icons: [],
 						},
 						networks,
