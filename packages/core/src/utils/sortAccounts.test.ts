@@ -229,15 +229,15 @@ describe("sortAccounts", () => {
 			const sorted = [...accounts].sort(sortAccounts);
 
 			// Polkadot accounts first, talisman wallet prioritized
-			expect(sorted[0]!.platform).toBe("polkadot");
-			expect(sorted[0]!.walletName).toBe("talisman");
-			expect(sorted[1]!.platform).toBe("polkadot");
-			expect(sorted[1]!.walletName).toBe("subwallet");
+			expect(sorted[0]?.platform).toBe("polkadot");
+			expect(sorted[0]?.walletName).toBe("talisman");
+			expect(sorted[1]?.platform).toBe("polkadot");
+			expect(sorted[1]?.walletName).toBe("subwallet");
 			// Ethereum accounts after, Talisman wallet prioritized
-			expect(sorted[2]!.platform).toBe("ethereum");
-			expect(sorted[2]!.walletName).toBe("Talisman");
-			expect(sorted[3]!.platform).toBe("ethereum");
-			expect(sorted[3]!.walletName).toBe("MetaMask");
+			expect(sorted[2]?.platform).toBe("ethereum");
+			expect(sorted[2]?.walletName).toBe("Talisman");
+			expect(sorted[3]?.platform).toBe("ethereum");
+			expect(sorted[3]?.walletName).toBe("MetaMask");
 		});
 	});
 });

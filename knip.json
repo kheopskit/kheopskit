@@ -7,7 +7,6 @@
 			"entry": ["papi-whitelist.ts"]
 		},
 		"packages/core": {
-			"entry": ["src/index.ts!"],
 			"ignore": [
 				"src/utils/getQuery.ts",
 				"src/api/store.ts",
@@ -15,12 +14,12 @@
 				"src/utils/getAccountAddressType.ts",
 				"src/utils/sleep.ts",
 				"src/utils/throwAfter.ts",
-				"src/utils/WalletAccountId.ts"
+				"src/utils/WalletAccountId.ts",
+				"src/utils/storage.ts"
 			],
 			"ignoreDependencies": ["@walletconnect/types", "@walletconnect/utils"]
 		},
 		"packages/react": {
-			"entry": ["src/index.ts!"],
 			"ignoreDependencies": ["@types/react-dom", "react-dom"]
 		},
 		"examples/vite-react": {
@@ -33,6 +32,22 @@
 				"src/lib/getPolkadotApi.ts"
 			],
 			"ignoreBinaries": ["tailwindcss"]
+		},
+		"examples/nextjs-react": {
+			"ignore": [
+				"src/components/ui/**",
+				"src/lib/config/chains.ts",
+				"src/lib/config/playgroundConfig.ts",
+				"src/lib/getPolkadotApi.ts"
+			]
+		},
+		"examples/tanstack-start": {
+			"ignore": [
+				"src/components/ui/**",
+				"src/lib/config/chains.ts",
+				"src/lib/config/playgroundConfig.ts",
+				"src/lib/getPolkadotApi.ts"
+			]
 		}
 	}
 }
