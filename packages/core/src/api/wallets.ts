@@ -13,26 +13,29 @@ import {
 import { sortWallets } from "../utils/sortWallets";
 import { getEthereumWallets$ } from "./ethereum/wallets";
 import { getPolkadotWallets$ } from "./polkadot/wallets";
-import { store } from "./store";
+import { store as defaultStore, type KheopskitStore } from "./store";
 import type { KheopskitConfig, Wallet } from "./types";
 
-// lock the list of wallets to auto reconnect on first call
-const autoReconnectWalletIds$ = store.observable.pipe(
-	map((s) => s.autoReconnect ?? []),
-	take(1),
-	shareReplay(1),
-);
+export const getWallets$ = (
+	config: KheopskitConfig,
+	store: KheopskitStore = defaultStore,
+) => {
+	// lock the list of wallets to auto reconnect on first call
+	const autoReconnectWalletIds$ = store.observable.pipe(
+		map((s) => s.autoReconnect ?? []),
+		take(1),
+		shareReplay(1),
+	);
 
-export const getWallets$ = (config: KheopskitConfig) => {
 	return new Observable<Wallet[]>((subscriber) => {
 		// biome-ignore lint/suspicious/useIterableCallbackReturn: false positive
 		const observables = config.platforms.map(
 			(platform): Observable<Wallet[]> => {
 				switch (platform) {
 					case "polkadot":
-						return getPolkadotWallets$(config);
+						return getPolkadotWallets$(config, store);
 					case "ethereum":
-						return getEthereumWallets$(config);
+						return getEthereumWallets$(config, store);
 				}
 			},
 		);

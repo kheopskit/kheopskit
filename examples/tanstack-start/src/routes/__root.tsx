@@ -19,10 +19,9 @@ export const Route = createRootRoute({
 });
 
 function RootComponent() {
-	// Note: For full SSR cookie hydration in TanStack Start, you would need
-	// to use createServerFn with getWebRequest() from '@tanstack/react-start/server'
-	// to extract cookies. The SSR implementation still works for state management
-	// via useSyncExternalStore even without cookie hydration.
+	// SSR cookie hydration for auto-reconnect requires createServerFn/getWebRequest
+	// which needs @tanstack/react-start >= 1.200. For now, SSR state management
+	// works via useSyncExternalStore even without cookie hydration.
 	return (
 		<html lang="en" className="dark">
 			<head>

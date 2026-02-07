@@ -8,6 +8,7 @@ import {
 import { logObservable } from "../utils/logObservable";
 import { getAccounts$ } from "./accounts";
 import { resolveConfig } from "./config";
+import { createKheopskitStore } from "./store";
 import type { KheopskitConfig, Wallet, WalletAccount } from "./types";
 import { getWallets$ } from "./wallets";
 
@@ -21,14 +22,15 @@ export type KheopskitState = {
 
 export const getKheopskit$ = (
 	config?: Partial<KheopskitConfig>,
-	_ssrCookies?: string,
+	ssrCookies?: string,
 ) => {
 	const kc = resolveConfig(config);
+	const store = createKheopskitStore(ssrCookies);
 
-	console.debug("[kheopskit] config", kc);
+	if (config?.debug) console.debug("[kheopskit] config", kc);
 
 	return new Observable<KheopskitState>((subscriber) => {
-		const wallets$ = getWallets$(kc);
+		const wallets$ = getWallets$(kc, store);
 
 		const subscription = combineLatest({
 			wallets: wallets$,

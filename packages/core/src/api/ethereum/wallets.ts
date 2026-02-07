@@ -1,4 +1,7 @@
-import { createStore, type EIP6963ProviderDetail } from "mipd";
+import {
+	createStore as createMipdStore,
+	type EIP6963ProviderDetail,
+} from "mipd";
 import {
 	BehaviorSubject,
 	combineLatest,
@@ -9,7 +12,7 @@ import {
 import type { EIP1193Provider } from "viem";
 import { getWalletId, type WalletId } from "../../utils/WalletId";
 import { getAppKitWallets$ } from "../appKit";
-import { store } from "../store";
+import { store as defaultStore, type KheopskitStore } from "../store";
 import type {
 	EthereumInjectedWallet,
 	EthereumWallet,
@@ -18,25 +21,25 @@ import type {
 
 const providersDetails$ = new Observable<EIP6963ProviderDetail[]>(
 	(subscriber) => {
-		const store = createStore();
+		const mipdStore = createMipdStore();
 
-		const unsubscribe = store.subscribe((providerDetails) => {
+		const unsubscribe = mipdStore.subscribe((providerDetails) => {
 			subscriber.next(providerDetails as EIP6963ProviderDetail[]);
 		});
 
-		const providerDetails = store.getProviders();
+		const providerDetails = mipdStore.getProviders();
 
 		subscriber.next(providerDetails as EIP6963ProviderDetail[]);
 
 		return () => {
 			unsubscribe();
-			store.destroy();
+			mipdStore.destroy();
 		};
 	},
 ).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
 
-const ethereumInjectedWallets$ = new Observable<EthereumInjectedWallet[]>(
-	(subscriber) => {
+const createEthereumInjectedWallets$ = (store: KheopskitStore) =>
+	new Observable<EthereumInjectedWallet[]>((subscriber) => {
 		const enabledWalletIds$ = new BehaviorSubject<Set<WalletId>>(new Set());
 
 		const connectWallet = async (
@@ -94,13 +97,15 @@ const ethereumInjectedWallets$ = new Observable<EthereumInjectedWallet[]>(
 		return () => {
 			sub.unsubscribe();
 		};
-	},
-).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
+	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
 
-export const getEthereumWallets$ = (config: KheopskitConfig) => {
+export const getEthereumWallets$ = (
+	config: KheopskitConfig,
+	store: KheopskitStore = defaultStore,
+) => {
 	return new Observable<EthereumWallet[]>((subscriber) => {
 		const subscription = combineLatest([
-			ethereumInjectedWallets$,
+			createEthereumInjectedWallets$(store),
 			getAppKitWallets$(config)?.pipe(map((w) => w.ethereum)),
 		])
 			.pipe(
