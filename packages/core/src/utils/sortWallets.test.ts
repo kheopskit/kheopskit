@@ -79,14 +79,14 @@ describe("sortWallets", () => {
 			const sorted = [...wallets].sort(sortWallets);
 
 			// Polkadot wallets first, Talisman first among them
-			expect(sorted[0].name).toBe("Talisman");
-			expect(sorted[0].platform).toBe("polkadot");
+			expect(sorted[0]!.name).toBe("Talisman");
+			expect(sorted[0]!.platform).toBe("polkadot");
 			// Then other polkadot wallets alphabetically
-			expect(sorted[1].name).toBe("Polkadot.js");
-			expect(sorted[2].name).toBe("SubWallet");
+			expect(sorted[1]!.name).toBe("Polkadot.js");
+			expect(sorted[2]!.name).toBe("SubWallet");
 			// Then ethereum wallets alphabetically
-			expect(sorted[3].name).toBe("MetaMask");
-			expect(sorted[4].name).toBe("Rainbow");
+			expect(sorted[3]!.name).toBe("MetaMask");
+			expect(sorted[4]!.name).toBe("Rainbow");
 		});
 	});
 });

@@ -104,6 +104,98 @@ kheopskit$.subscribe(({ wallets, accounts }) => {
 });
 ```
 
+### Server-Side Rendering (SSR)
+
+Kheopskit supports SSR with frameworks like Next.js and TanStack Start. Pass the `ssrCookies` prop to enable cookie-based storage that works on the server.
+
+When you pass `ssrCookies`:
+- Storage switches from localStorage to cookies
+- Server can read initial state from request headers
+- No hydration mismatch between server and client
+
+#### Next.js (App Router)
+
+```tsx
+// app/layout.tsx
+import { cookies } from "next/headers";
+import { Providers } from "./providers";
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
+  const ssrCookies = cookieStore.toString();
+
+  return (
+    <html>
+      <body>
+        <Providers ssrCookies={ssrCookies}>{children}</Providers>
+      </body>
+    </html>
+  );
+}
+```
+
+```tsx
+// app/providers.tsx
+"use client";
+
+import { KheopskitProvider } from "@kheopskit/react";
+
+const config = { platforms: ["polkadot", "ethereum"], autoReconnect: true };
+
+export function Providers({ children, ssrCookies }: { children: React.ReactNode; ssrCookies?: string }) {
+  return (
+    <KheopskitProvider config={config} ssrCookies={ssrCookies}>
+      {children}
+    </KheopskitProvider>
+  );
+}
+```
+
+#### TanStack Start
+
+```tsx
+// routes/__root.tsx
+import { createRootRoute, Outlet } from "@tanstack/react-router";
+import { createServerFn, Meta, Scripts } from "@tanstack/start";
+import { getWebRequest } from "@tanstack/start/server";
+import { Providers } from "../providers";
+
+const getSSRCookies = createServerFn({ method: "GET" }).handler(async () => {
+  const request = getWebRequest();
+  return request.headers.get("cookie") ?? undefined;
+});
+
+export const Route = createRootRoute({
+  loader: async () => ({ ssrCookies: await getSSRCookies() }),
+  component: RootComponent,
+});
+
+function RootComponent() {
+  const { ssrCookies } = Route.useLoaderData();
+  return (
+    <html>
+      <head><Meta /></head>
+      <body>
+        <Providers ssrCookies={ssrCookies}><Outlet /></Providers>
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+```
+
+#### SSR Considerations
+
+| Feature | Client-Only | SSR (with `ssrCookies`) |
+|---------|-------------|-------------------------|
+| Storage | localStorage | Cookies |
+| Server access | ❌ | ✅ |
+| Hydration match | ⚠️ Flash possible | ✅ No flash |
+| Size limit | ~5MB | ~4KB |
+| Cross-tab sync | `storage` event | BroadcastChannel |
+
+**Cookie attributes**: Kheopskit uses `SameSite=Lax`, `Secure` (on HTTPS), `path=/`, and 1-year expiry.
+
 ---
 
 ## Roadmap
