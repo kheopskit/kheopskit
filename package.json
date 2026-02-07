@@ -3,7 +3,6 @@
 	"version": "0.0.27",
 	"private": true,
 	"description": "",
-	"main": "index.js",
 	"engines": {
 		"node": ">=24"
 	},
@@ -19,7 +18,8 @@
 		"publish": "pnpm publish -r --no-git-checks --access public --tag latest",
 		"changeset-release-pr": "changeset version && pnpm install && pnpm build:packages",
 		"check": "pnpm biome check .",
-		"typecheck": "pnpm -r --parallel typecheck"
+		"typecheck": "pnpm -r --parallel typecheck",
+		"knip": "knip"
 	},
 	"keywords": [],
 	"author": "",
@@ -30,6 +30,7 @@
 		"@changesets/changelog-github": "^0.5.2",
 		"@changesets/cli": "^2.29.8",
 		"concurrently": "^9.2.1",
+		"knip": "^5.83.0",
 		"simple-git-hooks": "^2.13.1",
 		"tsup": "^8.5.1",
 		"typescript": "~5.9.3"
