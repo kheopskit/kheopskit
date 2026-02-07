@@ -43,28 +43,6 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 }) => {
 	const resolvedConfig = useMemo(() => resolveConfig(config), [config]);
 
-	// Warn if SSR is detected but ssrCookies is not provided
-	useEffect(() => {
-		if (!resolvedConfig.debug) return;
-
-		// Check if we're in an SSR-capable environment (React 18+ with hydrateRoot)
-		// by detecting if localStorage has data that wasn't available during SSR
-		if (ssrCookies === undefined && typeof window !== "undefined") {
-			const storageKey = resolvedConfig.storageKey;
-			const storedData = localStorage.getItem(storageKey);
-
-			if (storedData && storedData !== "{}") {
-				console.warn(
-					`[kheopskit] Persisted wallet data found in localStorage but no \`ssrCookies\` prop provided.\n` +
-						`This may cause hydration mismatches in SSR frameworks (Next.js, TanStack Start, etc.).\n` +
-						`To fix: Pass the request cookies to KheopskitProvider:\n\n` +
-						`  <KheopskitProvider ssrCookies={cookies} config={config}>\n\n` +
-						`See: https://github.com/kheopskit/kheopskit#server-side-rendering-ssr`,
-				);
-			}
-		}
-	}, [ssrCookies, resolvedConfig.debug, resolvedConfig.storageKey]);
-
 	const defaultValue = useMemo<KheopskitState>(
 		() => ({
 			wallets: [],
