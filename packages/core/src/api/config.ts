@@ -3,7 +3,6 @@ import type { KheopskitConfig } from "./types";
 const DEFAULT_CONFIG: KheopskitConfig = {
 	autoReconnect: true,
 	platforms: ["polkadot"],
-	storage: "local-storage",
 	debug: false,
 };
 
