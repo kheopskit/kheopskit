@@ -53,7 +53,12 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 	);
 
 	const store = useMemo(
-		() => createStore(getKheopskit$(config, ssrCookies), defaultValue),
+		() =>
+			createStore(
+				getKheopskit$(config, ssrCookies),
+				defaultValue,
+				defaultValue,
+			),
 		[config, ssrCookies, defaultValue],
 	);
 

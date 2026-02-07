@@ -6,33 +6,24 @@
 	"files": [
 		"dist"
 	],
-	"main": "./src/index.ts",
-	"module": "./src/index.ts",
-	"types": "./src/index.ts",
+	"main": "./dist/index.cjs",
+	"module": "./dist/index.mjs",
+	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
-			"types": "./src/index.ts",
-			"development": "./src/index.ts",
-			"default": "./dist/index.mjs"
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.mjs",
+			"require": "./dist/index.cjs"
 		}
 	},
 	"publishConfig": {
-		"access": "public",
-		"main": "./dist/index.cjs",
-		"module": "./dist/index.mjs",
-		"types": "./dist/index.d.ts",
-		"exports": {
-			".": {
-				"types": "./dist/index.d.ts",
-				"import": "./dist/index.mjs",
-				"require": "./dist/index.cjs"
-			}
-		}
+		"access": "public"
 	},
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
 		"dev": "tsup --watch",
 		"build": "tsup",
+		"prepack": "tsup",
 		"clean": "rm -rf ./dist && rm -rf ./node_modules",
 		"typecheck": "tsc --noEmit"
 	},
@@ -44,7 +35,7 @@
 	},
 	"license": "ISC",
 	"peerDependencies": {
-		"@kheopskit/core": "workspace:*",
+		"@kheopskit/core": "^0.0.22",
 		"react": ">=18.0.0",
 		"react-dom": ">=18.0.0",
 		"rxjs": ">=7.0.0"
@@ -61,6 +52,7 @@
 		"entry": [
 			"src/index.ts"
 		],
+		"tsconfig": "tsconfig.build.json",
 		"splitting": false,
 		"sourcemap": true,
 		"clean": true,

@@ -1,4 +1,8 @@
 {
+	"references": [
+		{ "path": "../../packages/core" },
+		{ "path": "../../packages/react" }
+	],
 	"compilerOptions": {
 		"tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
 		"target": "ES2022",
