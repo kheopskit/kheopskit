@@ -5,6 +5,9 @@
 		"clientKind": "git",
 		"useIgnoreFile": true
 	},
+	"files": {
+		"includes": ["**", "!**/routeTree.gen.ts"]
+	},
 	"assist": {
 		"actions": {
 			"source": {

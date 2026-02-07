@@ -2,7 +2,7 @@
 
 import { KheopskitProvider } from "@kheopskit/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState, type FC, type PropsWithChildren } from "react";
+import { type FC, type PropsWithChildren, useState } from "react";
 import { WagmiProvider } from "wagmi";
 import { Toaster } from "@/components/ui/sonner";
 import { usePlaygroundConfig } from "@/lib/config/playgroundConfig";

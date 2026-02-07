@@ -12,15 +12,19 @@ import {
 	Observable,
 	shareReplay,
 } from "rxjs";
+import { POLKADOT_EXTENSIONS } from "../../utils/polkadotExtensions";
+import {
+	getWalletId,
+	parseWalletId,
+	type WalletId,
+} from "../../utils/WalletId";
+import { getAppKitWallets$ } from "../appKit";
 import { store } from "../store";
 import type {
 	KheopskitConfig,
 	PolkadotInjectedWallet,
 	PolkadotWallet,
 } from "../types";
-import { POLKADOT_EXTENSIONS } from "../../utils/polkadotExtensions";
-import { getWalletId, parseWalletId, type WalletId } from "../../utils/WalletId";
-import { getAppKitWallets$ } from "../appKit";
 
 const getInjectedWalletsIds = () =>
 	typeof window === "undefined"

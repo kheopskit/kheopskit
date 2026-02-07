@@ -1,4 +1,5 @@
 import { useWallets } from "@kheopskit/react";
+import { ClientOnly } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useAccount, useConnect } from "wagmi";
@@ -43,7 +44,21 @@ export const Wagmi = () => {
 	);
 };
 
-const Connectors = () => {
+const ConnectorsFallback = () => (
+	<div>
+		<h3>Connectors</h3>
+		<div className="text-muted-foreground text-sm">
+			Select active Wagmi connector:
+		</div>
+		<ul className="flex flex-wrap gap-2 py-1" />
+		<div className="text-sm text-muted-foreground">
+			<div>Active connector: N/A</div>
+			<div>Active account: N/A</div>
+		</div>
+	</div>
+);
+
+const ConnectorsContent = () => {
 	const { connectors, connect } = useConnect();
 	const { connector: current, address } = useAccount();
 
@@ -77,6 +92,12 @@ const Connectors = () => {
 		</div>
 	);
 };
+
+const Connectors = () => (
+	<ClientOnly fallback={<ConnectorsFallback />}>
+		<ConnectorsContent />
+	</ClientOnly>
+);
 
 const ActiveAccount = () => {
 	const { accounts } = useWallets(); // kheopskit

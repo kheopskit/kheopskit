@@ -1,7 +1,8 @@
 "use client";
 
 import { useWallets } from "@kheopskit/react";
-import { useMemo, useState } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useAccount, useConnect } from "wagmi";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,28 @@ export const Wagmi = () => {
 const Connectors = () => {
 	const { connectors, connect } = useConnect();
 	const { connector: current, address } = useAccount();
+	const [isClient, setIsClient] = useState(false);
+
+	useEffect(() => {
+		setIsClient(true);
+	}, []);
+
+	// Prevent hydration mismatch - Wagmi connectors are only available client-side
+	if (!isClient) {
+		return (
+			<div>
+				<h3>Connectors</h3>
+				<div className="text-muted-foreground text-sm">
+					Select active Wagmi connector:
+				</div>
+				<ul className="flex flex-wrap gap-2 py-1" />
+				<div className="text-sm text-muted-foreground">
+					<div>Active connector: N/A</div>
+					<div>Active account: N/A</div>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div>
@@ -65,7 +88,13 @@ const Connectors = () => {
 							className="disabled:bg-green-500"
 						>
 							{connector.icon && (
-								<img src={connector.icon} alt="" className="size-4" />
+								<Image
+									src={connector.icon}
+									alt=""
+									width={16}
+									height={16}
+									unoptimized
+								/>
 							)}{" "}
 							{connector.name}
 						</Button>

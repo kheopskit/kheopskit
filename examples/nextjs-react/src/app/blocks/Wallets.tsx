@@ -1,6 +1,7 @@
 "use client";
 
 import { useWallets } from "@kheopskit/react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import {
 	Table,
@@ -36,10 +37,13 @@ export const Wallets = () => {
 							<TableCell>{wallet.platform}</TableCell>
 							<TableCell>
 								{wallet.icon ? (
-									<img
+									<Image
 										src={wallet.icon}
 										alt={wallet.name}
-										className="w-6 h-6 mr-2 inline"
+										width={24}
+										height={24}
+										className="mr-2 inline"
+										unoptimized
 									/>
 								) : null}
 								{wallet.name}

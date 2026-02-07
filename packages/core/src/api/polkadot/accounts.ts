@@ -14,13 +14,13 @@ import {
 	shareReplay,
 	switchMap,
 } from "rxjs";
+import { getWalletAccountId } from "../../utils";
 import type {
 	PolkadotAccount,
 	PolkadotAppKitWallet,
 	PolkadotInjectedWallet,
 	PolkadotWallet,
 } from "../types";
-import { getWalletAccountId } from "../../utils";
 
 const getInjectedWalletAccounts$ = (
 	wallet: PolkadotInjectedWallet,
