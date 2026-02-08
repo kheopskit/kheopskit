@@ -106,8 +106,41 @@ export const createKheopskitStore = (
 
 export type KheopskitStore = ReturnType<typeof createKheopskitStore>;
 
-// Default store for backward compatibility (uses localStorage on client, noop on server)
-export const store = createKheopskitStore();
+/**
+ * Cached default store instance.
+ * Lazily initialized on first access to be SSR-safe.
+ */
+let _defaultStore: KheopskitStore | null = null;
+
+/**
+ * Gets the default store, creating it on first access.
+ * Uses localStorage on client, noop on server.
+ * Lazily initialized to avoid SSR issues with module-level code.
+ */
+export const getDefaultStore = (): KheopskitStore => {
+	if (_defaultStore === null) {
+		_defaultStore = createKheopskitStore();
+	}
+	return _defaultStore;
+};
+
+/**
+ * @deprecated Use createKheopskitStore() or getDefaultStore() instead.
+ * This export is kept for backward compatibility but may cause SSR issues
+ * if imported at module level in server environments.
+ */
+export const store = {
+	get observable() {
+		return getDefaultStore().observable;
+	},
+	addEnabledWalletId: (walletId: WalletId) =>
+		getDefaultStore().addEnabledWalletId(walletId),
+	removeEnabledWalletId: (walletId: WalletId) =>
+		getDefaultStore().removeEnabledWalletId(walletId),
+	getCachedState: () => getDefaultStore().getCachedState(),
+	setCachedState: (wallets: CachedWallet[], accounts: CachedAccount[]) =>
+		getDefaultStore().setCachedState(wallets, accounts),
+};
 
 const isCompactStore = (value: unknown): value is CompactStoreV1 => {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return false;
