@@ -6,7 +6,7 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -27,7 +27,10 @@ if (currentPeerVersion !== newPeerVersion) {
 		`Updating @kheopskit/react peerDependency @kheopskit/core: ${currentPeerVersion} → ${newPeerVersion}`,
 	);
 	reactPackage.peerDependencies["@kheopskit/core"] = newPeerVersion;
-	writeFileSync(reactPackagePath, `${JSON.stringify(reactPackage, null, "\t")}\n`);
+	writeFileSync(
+		reactPackagePath,
+		`${JSON.stringify(reactPackage, null, "\t")}\n`,
+	);
 } else {
 	console.log(
 		`@kheopskit/react peerDependency @kheopskit/core already at ${newPeerVersion}`,

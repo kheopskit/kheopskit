@@ -45,6 +45,16 @@ export type KheopskitConfig = {
 	 * ```
 	 */
 	storageKey: string;
+	/**
+	 * Grace period in milliseconds to wait for wallets to inject before
+	 * syncing to actual state. During this period, cached wallet/account
+	 * state from storage is preserved to prevent UI flashing.
+	 *
+	 * Set to 0 to disable hydration buffering.
+	 *
+	 * @default 500
+	 */
+	hydrationGracePeriod: number;
 };
 
 export type PolkadotInjectedWallet = {
@@ -123,3 +133,29 @@ export type EthereumAccount = {
 };
 
 export type WalletAccount = PolkadotAccount | EthereumAccount;
+
+/**
+ * Serializable wallet data for SSR hydration cache.
+ * Contains only the data needed to render wallet UI without flash.
+ */
+export type CachedWallet = {
+	id: WalletId;
+	platform: WalletPlatform;
+	type: "injected" | "appKit";
+	name: string;
+	icon: string;
+	isConnected: boolean;
+};
+
+/**
+ * Serializable account data for SSR hydration cache.
+ * Contains only the data needed to render account UI without flash.
+ */
+export type CachedAccount = {
+	id: string;
+	platform: WalletPlatform;
+	address: string;
+	name?: string;
+	walletId: WalletId;
+	walletName: string;
+};

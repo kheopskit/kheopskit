@@ -12,6 +12,7 @@ describe("resolveConfig", () => {
 				platforms: ["polkadot"],
 				debug: false,
 				storageKey: "kheopskit",
+				hydrationGracePeriod: 500,
 			});
 		});
 
@@ -70,6 +71,7 @@ describe("resolveConfig", () => {
 				platforms: ["ethereum"],
 				debug: true,
 				storageKey: "my-custom-key",
+				hydrationGracePeriod: 500,
 			});
 		});
 	});

@@ -1,5 +1,8 @@
 import {
+	createKheopskitStore,
 	getKheopskit$,
+	hydrateAccount,
+	hydrateWallet,
 	type KheopskitConfig,
 	type KheopskitState,
 	resolveConfig,
@@ -43,13 +46,30 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 }) => {
 	const resolvedConfig = useMemo(() => resolveConfig(config), [config]);
 
+	// Create a temporary store to read cached state for SSR
+	const cachedState = useMemo(() => {
+		if (ssrCookies === undefined) {
+			return { wallets: [], accounts: [] };
+		}
+		const tempStore = createKheopskitStore({
+			ssrCookies,
+			storageKey: resolvedConfig.storageKey,
+		});
+		const cached = tempStore.getCachedState();
+		return {
+			wallets: cached.wallets.map(hydrateWallet),
+			accounts: cached.accounts.map(hydrateAccount),
+		};
+	}, [ssrCookies, resolvedConfig.storageKey]);
+
 	const defaultValue = useMemo<KheopskitState>(
 		() => ({
-			wallets: [],
-			accounts: [],
+			wallets: cachedState.wallets,
+			accounts: cachedState.accounts,
 			config: resolvedConfig,
+			isHydrating: true,
 		}),
-		[resolvedConfig],
+		[resolvedConfig, cachedState],
 	);
 
 	const store = useMemo(

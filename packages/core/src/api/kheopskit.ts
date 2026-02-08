@@ -1,10 +1,23 @@
 import {
 	combineLatest,
+	debounceTime,
+	distinctUntilChanged,
+	filter,
 	map,
 	Observable,
 	shareReplay,
 	throttleTime,
 } from "rxjs";
+import {
+	createAccountHydrationBuffer,
+	createHydrationBuffer,
+} from "../utils/createHydrationBuffer";
+import {
+	hydrateAccount,
+	hydrateWallet,
+	serializeAccount,
+	serializeWallet,
+} from "../utils/hydrateState";
 import { logObservable } from "../utils/logObservable";
 import { getAccounts$ } from "./accounts";
 import { resolveConfig } from "./config";
@@ -18,6 +31,14 @@ export type KheopskitState = {
 	wallets: Wallet[];
 	accounts: WalletAccount[];
 	config: KheopskitConfig;
+	/**
+	 * Whether the state is still being hydrated from cache.
+	 * During hydration, cached wallets/accounts may be displayed
+	 * before the actual wallet extensions have injected.
+	 *
+	 * Use this to show loading indicators or disable certain actions.
+	 */
+	isHydrating: boolean;
 };
 
 export const getKheopskit$ = (
@@ -37,18 +58,111 @@ export const getKheopskit$ = (
 		);
 	}
 
-	return new Observable<KheopskitState>((subscriber) => {
-		const wallets$ = getWallets$(kc, store);
+	// Get cached state for hydration
+	const cachedState = store.getCachedState();
+	const cachedWallets = cachedState.wallets.map(hydrateWallet);
+	const cachedAccounts = cachedState.accounts.map(hydrateAccount);
 
+	if (kc.debug && cachedWallets.length > 0) {
+		console.debug("[kheopskit] hydrating from cache:", {
+			wallets: cachedWallets.length,
+			accounts: cachedAccounts.length,
+		});
+	}
+
+	return new Observable<KheopskitState>((subscriber) => {
+		// Get live wallets and accounts
+		const liveWallets$ = getWallets$(kc, store);
+		const liveAccounts$ = getAccounts$(kc, liveWallets$);
+
+		// Apply hydration buffer to wallets
+		const bufferedWallets$ = createHydrationBuffer(
+			cachedWallets,
+			liveWallets$,
+			kc.hydrationGracePeriod,
+			(w) => w.id,
+		);
+
+		// Apply hydration buffer to accounts
+		const bufferedAccounts$ = createAccountHydrationBuffer(
+			cachedAccounts,
+			liveAccounts$,
+			kc.hydrationGracePeriod,
+			(a) => a.walletId,
+		);
+
+		// Combine buffered wallets and accounts
 		const subscription = combineLatest({
-			wallets: wallets$,
-			accounts: getAccounts$(kc, wallets$),
+			wallets: bufferedWallets$,
+			accounts: bufferedAccounts$,
 		})
-			.pipe(map(({ wallets, accounts }) => ({ config: kc, wallets, accounts })))
+			.pipe(
+				map(({ wallets, accounts }) => {
+					if (kc.debug) {
+						console.debug("[kheopskit] hydration state", {
+							walletsHydrating: wallets.isHydrating,
+							accountsHydrating: accounts.isHydrating,
+							walletsConnected: wallets.items.filter((w) => w.isConnected)
+								.length,
+							walletsTotal: wallets.items.length,
+						});
+					}
+					return {
+						config: kc,
+						wallets: wallets.items,
+						accounts: accounts.items,
+						isHydrating: wallets.isHydrating || accounts.isHydrating,
+					};
+				}),
+			)
 			.subscribe(subscriber);
+
+		// Persist state snapshot when hydration completes and state stabilizes
+		const persistSub = combineLatest({
+			wallets: bufferedWallets$,
+			accounts: bufferedAccounts$,
+		})
+			.pipe(
+				// Wait for hydration to complete
+				filter(
+					({ wallets, accounts }) =>
+						!wallets.isHydrating && !accounts.isHydrating,
+				),
+				// Debounce to avoid excessive writes
+				debounceTime(1000),
+				// Only persist if state actually changed
+				distinctUntilChanged(
+					(prev, curr) =>
+						JSON.stringify(prev.wallets.items.map((w) => w.id)) ===
+							JSON.stringify(curr.wallets.items.map((w) => w.id)) &&
+						JSON.stringify(prev.accounts.items.map((a) => a.id)) ===
+							JSON.stringify(curr.accounts.items.map((a) => a.id)),
+				),
+			)
+			.subscribe(({ wallets, accounts }) => {
+				// Only cache connected wallets and their accounts
+				const connectedWallets = wallets.items.filter((w) => w.isConnected);
+				const connectedWalletIds = new Set(connectedWallets.map((w) => w.id));
+				const relevantAccounts = accounts.items.filter((a) =>
+					connectedWalletIds.has(a.walletId),
+				);
+
+				if (kc.debug) {
+					console.debug("[kheopskit] persisting state snapshot:", {
+						wallets: connectedWallets.length,
+						accounts: relevantAccounts.length,
+					});
+				}
+
+				store.setCachedState(
+					connectedWallets.map(serializeWallet),
+					relevantAccounts.map(serializeAccount),
+				);
+			});
 
 		return () => {
 			subscription.unsubscribe();
+			persistSub.unsubscribe();
 		};
 	}).pipe(
 		throttleTime(16, undefined, { leading: true, trailing: true }), // ~1 frame at 60fps

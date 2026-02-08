@@ -12,6 +12,7 @@ const DEFAULT_CONFIG: KheopskitConfig = {
 	platforms: ["polkadot"],
 	debug: false,
 	storageKey: DEFAULT_STORAGE_KEY,
+	hydrationGracePeriod: 500,
 };
 
 export const resolveConfig = (

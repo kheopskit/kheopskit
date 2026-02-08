@@ -178,6 +178,103 @@ describe("createStore (React)", () => {
 		});
 	});
 
+	describe("React StrictMode compatibility", () => {
+		it("reconnects observable after destroy when resubscribed", () => {
+			// React StrictMode mounts → unmounts → remounts components
+			// This test simulates that pattern
+			const subject = new BehaviorSubject({ value: 0 });
+			const store = createStore(subject.asObservable(), { value: 0 });
+
+			// First mount: subscribe
+			const callback1 = vi.fn();
+			const unsub1 = store.subscribe(callback1);
+			expect(callback1).toHaveBeenCalledWith({ value: 0 });
+
+			// StrictMode unmount: destroy is called
+			unsub1();
+			store.destroy();
+
+			// StrictMode remount: subscribe again
+			const callback2 = vi.fn();
+			const unsub2 = store.subscribe(callback2);
+			expect(callback2).toHaveBeenCalledWith({ value: 0 });
+
+			// Now emit new value - should reach the second subscriber
+			subject.next({ value: 100 });
+
+			expect(callback2).toHaveBeenCalledWith({ value: 100 });
+			expect(store.getSnapshot()).toEqual({ value: 100 });
+
+			unsub2();
+		});
+
+		it("continues working after multiple destroy/resubscribe cycles", () => {
+			const subject = new BehaviorSubject({ count: 0 });
+			const store = createStore(subject.asObservable(), { count: 0 });
+
+			// Cycle 1
+			const cb1 = vi.fn();
+			store.subscribe(cb1)();
+			store.destroy();
+
+			// Cycle 2
+			const cb2 = vi.fn();
+			store.subscribe(cb2)();
+			store.destroy();
+
+			// Cycle 3 - should still work
+			const cb3 = vi.fn();
+			const unsub3 = store.subscribe(cb3);
+
+			subject.next({ count: 42 });
+
+			expect(cb3).toHaveBeenCalledWith({ count: 42 });
+			expect(store.getSnapshot()).toEqual({ count: 42 });
+
+			unsub3();
+		});
+
+		it("does not disconnect while subscribers exist", () => {
+			const subject = new BehaviorSubject({ data: "initial" });
+			const store = createStore(subject.asObservable(), { data: "initial" });
+
+			const callback = vi.fn();
+			const unsub = store.subscribe(callback);
+
+			// Calling destroy while subscribed should not break things
+			store.destroy();
+
+			// New emissions should still work because we have an active subscriber
+			subject.next({ data: "updated" });
+
+			expect(callback).toHaveBeenCalledWith({ data: "updated" });
+			expect(store.getSnapshot()).toEqual({ data: "updated" });
+
+			unsub();
+		});
+
+		it("getSnapshot returns updated value after reconnection", () => {
+			const subject = new BehaviorSubject({ status: "pending" });
+			const store = createStore(subject.asObservable(), { status: "pending" });
+
+			// Simulate StrictMode: subscribe, unsubscribe, destroy
+			store.subscribe(() => {})();
+			store.destroy();
+
+			// Resubscribe
+			const callback = vi.fn();
+			const unsub = store.subscribe(callback);
+
+			// Emit new value
+			subject.next({ status: "complete" });
+
+			// getSnapshot should reflect the new value
+			expect(store.getSnapshot()).toEqual({ status: "complete" });
+
+			unsub();
+		});
+	});
+
 	describe("SSR scenarios", () => {
 		it("server: getServerSnapshot provides consistent value for hydration", () => {
 			const serverData = { wallets: [], accounts: [], config: {} };

@@ -3,9 +3,14 @@ import { createStore } from "../utils/createStore";
 import { cookieStorage, safeLocalStorage } from "../utils/storage";
 import { parseWalletId, type WalletId } from "../utils/WalletId";
 import { DEFAULT_STORAGE_KEY } from "./config";
+import type { CachedAccount, CachedWallet } from "./types";
 
 export type KheopskitStoreData = {
 	autoReconnect?: WalletId[];
+	/** Cached wallet state for SSR hydration to prevent UI flash */
+	cachedWallets?: CachedWallet[];
+	/** Cached account state for SSR hydration to prevent UI flash */
+	cachedAccounts?: CachedAccount[];
 };
 
 const DEFAULT_SETTINGS: KheopskitStoreData = {};
@@ -55,10 +60,31 @@ export const createKheopskitStore = (
 		}));
 	};
 
+	const getCachedState = () => {
+		const data = store.get();
+		return {
+			wallets: data.cachedWallets ?? [],
+			accounts: data.cachedAccounts ?? [],
+		};
+	};
+
+	const setCachedState = (
+		wallets: CachedWallet[],
+		accounts: CachedAccount[],
+	) => {
+		store.mutate((prev) => ({
+			...prev,
+			cachedWallets: wallets,
+			cachedAccounts: accounts,
+		}));
+	};
+
 	return {
 		observable: store.observable,
 		addEnabledWalletId,
 		removeEnabledWalletId,
+		getCachedState,
+		setCachedState,
 	};
 };
 
