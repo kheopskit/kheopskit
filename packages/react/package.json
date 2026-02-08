@@ -1,6 +1,6 @@
 {
 	"name": "@kheopskit/react",
-	"version": "0.0.26",
+	"version": "1.0.0",
 	"description": "",
 	"private": false,
 	"files": [
@@ -35,7 +35,7 @@
 	},
 	"license": "ISC",
 	"peerDependencies": {
-		"@kheopskit/core": "^0.0.22",
+		"@kheopskit/core": "^0.1.0",
 		"react": ">=18.0.0",
 		"react-dom": ">=18.0.0",
 		"rxjs": ">=7.0.0"
