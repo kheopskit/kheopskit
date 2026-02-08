@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import type { KheopskitConfig } from "@kheopskit/core";
 import type { AppKitNetwork } from "@reown/appkit/networks";
 import { APPKIT_CHAINS, isEthereumNetwork, isPolkadotNetwork } from "./chains";
@@ -36,7 +37,7 @@ const getKheopskitConfig = (
 						metadata: {
 							name: "Kheopskit Demo",
 							description: "Kheopskit Demo",
-							url: window.location.origin,
+							url: typeof window !== "undefined" ? window.location.origin : "",
 							icons: [],
 						},
 						networks,

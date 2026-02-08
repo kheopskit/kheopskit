@@ -15,7 +15,7 @@ export type PlaygroundConfig = Prettify<
 export const demoConfig: PlaygroundConfig = {
 	autoReconnect: true,
 	platforms: ["polkadot", "ethereum"],
-	walletConnect: !!import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID,
+	walletConnect: !!process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID,
 	debug: true,
 	storageKey: "kheopskit",
 	hydrationGracePeriod: 500,
@@ -32,11 +32,11 @@ const getKheopskitConfig = (
 		walletConnect:
 			config.walletConnect && networks
 				? {
-						projectId: import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID,
+						projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID ?? "",
 						metadata: {
 							name: "Kheopskit Demo",
 							description: "Kheopskit Demo",
-							url: window.location.origin,
+							url: typeof window !== "undefined" ? window.location.origin : "",
 							icons: [],
 						},
 						networks,

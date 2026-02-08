@@ -32,6 +32,7 @@ const WalletIcon: FC<{
 		</div>
 	);
 };
+
 export const Wallets = () => {
 	const { wallets, accounts } = useWallets();
 

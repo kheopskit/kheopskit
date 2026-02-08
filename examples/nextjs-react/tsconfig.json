@@ -1,8 +1,4 @@
 {
-	"references": [
-		{ "path": "../../packages/core" },
-		{ "path": "../../packages/react" }
-	],
 	"compilerOptions": {
 		"target": "ES2022",
 		"lib": ["DOM", "DOM.Iterable", "ES2023"],

@@ -135,7 +135,7 @@ const ActiveAccount = () => {
 			</p>
 			<div className="flex gap-4 mt-2">
 				<Select onValueChange={setAccountId}>
-					<SelectTrigger className="w-[180px]">
+					<SelectTrigger className="w-45">
 						<SelectValue placeholder="Account" />
 					</SelectTrigger>
 					<SelectContent>
