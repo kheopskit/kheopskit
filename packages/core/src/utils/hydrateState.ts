@@ -8,8 +8,27 @@ import type {
 	Wallet,
 	WalletAccount,
 } from "../api/types";
+import { POLKADOT_EXTENSIONS } from "./polkadotExtensions";
 import type { WalletAccountId } from "./WalletAccountId";
 import { parseWalletId, type WalletId } from "./WalletId";
+
+/**
+ * Looks up the icon for a wallet from known Polkadot extensions only.
+ * Ethereum icons will be populated from the localStorage icon cache via the merge function.
+ *
+ * Note: We DON'T use localStorage icon cache here because hydrateWallet is called
+ * during SSR (server) and client hydration. localStorage isn't available on server,
+ * so using it would cause a hydration mismatch. Icons for Ethereum wallets will be
+ * populated when the hydration buffer merges cached wallets with live wallets.
+ */
+const lookupWalletIcon = (platform: string, identifier: string): string => {
+	// Only Polkadot extensions have hardcoded icons that are safe for SSR
+	if (platform === "polkadot") {
+		return POLKADOT_EXTENSIONS[identifier]?.icon ?? "";
+	}
+	// Ethereum icons come from localStorage or live wallets - not here
+	return "";
+};
 
 /**
  * Error thrown when trying to use a placeholder wallet that hasn't fully loaded yet.
@@ -42,6 +61,8 @@ export const hydrateWallet = (cached: CachedWallet): Wallet => {
 	// so they use injected type as a display fallback and will be replaced
 	// when the real wallet loads.
 
+	const icon = lookupWalletIcon(platform, identifier);
+
 	if (platform === "polkadot") {
 		return {
 			id: cached.id,
@@ -50,7 +71,7 @@ export const hydrateWallet = (cached: CachedWallet): Wallet => {
 			extensionId: identifier,
 			extension: undefined,
 			name: cached.name,
-			icon: cached.icon,
+			icon,
 			isConnected: cached.isConnected,
 			connect: throwPending,
 			disconnect: throwPending,
@@ -65,7 +86,7 @@ export const hydrateWallet = (cached: CachedWallet): Wallet => {
 			providerId: identifier,
 			provider: {} as never, // Placeholder - will be replaced by real wallet
 			name: cached.name,
-			icon: cached.icon,
+			icon,
 			isConnected: cached.isConnected,
 			connect: throwPending,
 			disconnect: throwPending,
@@ -124,7 +145,7 @@ export const serializeWallet = (wallet: Wallet): CachedWallet => ({
 	platform: wallet.platform,
 	type: wallet.type,
 	name: wallet.name,
-	icon: wallet.icon,
+	// Note: icon is NOT stored to save cookie space
 	isConnected: wallet.isConnected,
 });
 

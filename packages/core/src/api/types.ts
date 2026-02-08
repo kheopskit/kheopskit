@@ -137,13 +137,13 @@ export type WalletAccount = PolkadotAccount | EthereumAccount;
 /**
  * Serializable wallet data for SSR hydration cache.
  * Contains only the data needed to render wallet UI without flash.
+ * Note: icon is NOT stored to save cookie space - it's looked up at hydration time.
  */
 export type CachedWallet = {
 	id: WalletId;
 	platform: WalletPlatform;
 	type: "injected" | "appKit";
 	name: string;
-	icon: string;
 	isConnected: boolean;
 };
 

@@ -1,18 +1,23 @@
-import { BehaviorSubject, type Observable, type Subscription } from "rxjs";
+import type { Observable, Subscription } from "rxjs";
 
 export const createStore = <T>(
 	observable$: Observable<T>,
 	initialValue: T,
 	serverValue?: T,
 ) => {
-	const subject = new BehaviorSubject<T>(initialValue);
+	// Use null as sentinel to indicate we haven't received first emission yet
+	let latestValue: T | null = null;
 	let subscription: Subscription | null = null;
 	let subscriberCount = 0;
+	const listeners = new Set<(value: T) => void>();
 
 	const ensureSubscription = () => {
 		if (!subscription || subscription.closed) {
 			subscription = observable$.subscribe((value) => {
-				subject.next(value);
+				latestValue = value;
+				for (const listener of listeners) {
+					listener(value);
+				}
 			});
 		}
 	};
@@ -20,25 +25,30 @@ export const createStore = <T>(
 	// Start subscription immediately
 	ensureSubscription();
 
-	const getSnapshot = () => subject.getValue();
+	// If observable emitted synchronously, use that value
+	// Otherwise fall back to initialValue
+	const getSnapshot = () => latestValue ?? initialValue;
 
 	/**
 	 * Returns the server-side snapshot for SSR hydration.
 	 * This prevents hydration mismatches by providing a consistent
-	 * value during server rendering.
+	 * value during server rendering. Must return the same value as
+	 * what the server rendered.
 	 */
 	const getServerSnapshot = () => serverValue ?? initialValue;
 
 	const subscribe = (callback: (value: T) => void) => {
 		subscriberCount++;
+		listeners.add(callback);
 		// Ensure observable subscription is active when someone subscribes
 		ensureSubscription();
 
-		const rxSub = subject.subscribe(callback);
+		// Immediately emit current value (BehaviorSubject semantics)
+		callback(getSnapshot());
 
 		return () => {
 			subscriberCount--;
-			rxSub.unsubscribe();
+			listeners.delete(callback);
 			// Don't close the observable subscription on unsubscribe
 			// Let destroy() handle that when the store is truly being disposed
 		};

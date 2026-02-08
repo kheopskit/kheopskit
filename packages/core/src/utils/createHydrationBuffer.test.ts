@@ -79,9 +79,12 @@ describe("createHydrationBuffer", () => {
 			});
 		});
 
-		it("merges live items with cached, live takes precedence", () => {
-			const liveItems$ = new Subject<{ id: string }[]>();
-			const cached = [{ id: "a" }, { id: "b" }];
+		it("merges live items with cached, cached takes precedence for matching keys", () => {
+			const liveItems$ = new Subject<{ id: string; value?: string }[]>();
+			const cached = [
+				{ id: "a", value: "cached-a" },
+				{ id: "b", value: "cached-b" },
+			];
 
 			const result$ = createHydrationBuffer(
 				cached,
@@ -94,12 +97,40 @@ describe("createHydrationBuffer", () => {
 			result$.subscribe((r) => results.push(r));
 
 			// Emit live item that matches cached "a"
-			liveItems$.next([{ id: "a" }]);
+			liveItems$.next([{ id: "a", value: "live-a" }]);
 
 			expect(results).toHaveLength(2);
-			// Should have live "a" + cached "b" (not yet appeared in live)
+			// Should have cached "a" (preserved) + cached "b" (not yet appeared in live)
 			expect(results[1]).toEqual({
-				items: [{ id: "a" }, { id: "b" }],
+				items: [
+					{ id: "a", value: "cached-a" },
+					{ id: "b", value: "cached-b" },
+				],
+				isHydrating: true,
+			});
+		});
+
+		it("adds new live items not in the cache during hydration", () => {
+			const liveItems$ = new Subject<{ id: string }[]>();
+			const cached = [{ id: "a" }];
+
+			const result$ = createHydrationBuffer(
+				cached,
+				liveItems$,
+				500,
+				(i) => i.id,
+			);
+
+			const results: unknown[] = [];
+			result$.subscribe((r) => results.push(r));
+
+			// Emit live items including a new one not in cache
+			liveItems$.next([{ id: "a" }, { id: "c" }]);
+
+			expect(results).toHaveLength(2);
+			// "a" uses cached version, "c" is new from live
+			expect(results[1]).toEqual({
+				items: [{ id: "a" }, { id: "c" }],
 				isHydrating: true,
 			});
 		});
@@ -195,6 +226,183 @@ describe("createHydrationBuffer", () => {
 				items: [{ id: "new" }],
 				isHydrating: false,
 			});
+		});
+	});
+
+	describe("with convergence check", () => {
+		it("keeps hydrating after timer if convergence not met", () => {
+			const liveItems$ = new BehaviorSubject([{ id: "a", isConnected: false }]);
+			const cached = [{ id: "a", isConnected: true }];
+
+			const isConverged = (
+				live: { id: string; isConnected: boolean }[],
+				cache: { id: string; isConnected: boolean }[],
+			) => {
+				const connectedIds = new Set(
+					cache.filter((w) => w.isConnected).map((w) => w.id),
+				);
+				return [...connectedIds].every((id) =>
+					live.some((w) => w.id === id && w.isConnected),
+				);
+			};
+
+			const result$ = createHydrationBuffer(
+				cached,
+				liveItems$,
+				500,
+				(i) => i.id,
+				isConverged,
+			);
+
+			const results: { items: unknown[]; isHydrating: boolean }[] = [];
+			result$.subscribe((r) => results.push(r));
+
+			// Advance past grace period
+			vi.advanceTimersByTime(600);
+
+			// Should STILL be hydrating (cached wallet is connected, live is not)
+			expect(results[results.length - 1]?.isHydrating).toBe(true);
+			// Should still use cached version (connected)
+			expect(results[results.length - 1]?.items).toEqual([
+				{ id: "a", isConnected: true },
+			]);
+		});
+
+		it("ends hydration when convergence is met after timer", () => {
+			const liveItems$ = new BehaviorSubject([{ id: "a", isConnected: false }]);
+			const cached = [{ id: "a", isConnected: true }];
+
+			const isConverged = (
+				live: { id: string; isConnected: boolean }[],
+				cache: { id: string; isConnected: boolean }[],
+			) => {
+				const connectedIds = new Set(
+					cache.filter((w) => w.isConnected).map((w) => w.id),
+				);
+				return [...connectedIds].every((id) =>
+					live.some((w) => w.id === id && w.isConnected),
+				);
+			};
+
+			const result$ = createHydrationBuffer(
+				cached,
+				liveItems$,
+				500,
+				(i) => i.id,
+				isConverged,
+			);
+
+			const results: { items: unknown[]; isHydrating: boolean }[] = [];
+			result$.subscribe((r) => results.push(r));
+
+			// Advance past grace period
+			vi.advanceTimersByTime(600);
+
+			// Still hydrating
+			expect(results[results.length - 1]?.isHydrating).toBe(true);
+
+			// Simulate auto-reconnect completing
+			liveItems$.next([{ id: "a", isConnected: true }]);
+
+			// Now hydration should end with live items
+			expect(results[results.length - 1]?.isHydrating).toBe(false);
+			expect(results[results.length - 1]?.items).toEqual([
+				{ id: "a", isConnected: true },
+			]);
+		});
+
+		it("forces end of hydration at max timeout even without convergence", () => {
+			const liveItems$ = new BehaviorSubject([{ id: "a", isConnected: false }]);
+			const cached = [{ id: "a", isConnected: true }];
+
+			// Convergence never met (always returns false)
+			const isConverged = () => false;
+
+			const result$ = createHydrationBuffer(
+				cached,
+				liveItems$,
+				500,
+				(i) => i.id,
+				isConverged,
+			);
+
+			const results: { items: unknown[]; isHydrating: boolean }[] = [];
+			result$.subscribe((r) => results.push(r));
+
+			// Advance past grace period
+			vi.advanceTimersByTime(600);
+
+			// Still hydrating
+			expect(results[results.length - 1]?.isHydrating).toBe(true);
+
+			// Advance past max timeout (6x grace period = 3000ms)
+			vi.advanceTimersByTime(3000);
+
+			// Should be forced out of hydration
+			expect(results[results.length - 1]?.isHydrating).toBe(false);
+			expect(results[results.length - 1]?.items).toEqual([
+				{ id: "a", isConnected: false },
+			]);
+		});
+
+		it("ends hydration immediately if convergence is already met when timer fires", () => {
+			const liveItems$ = new BehaviorSubject([{ id: "a", isConnected: true }]);
+			const cached = [{ id: "a", isConnected: true }];
+
+			const isConverged = (
+				live: { id: string; isConnected: boolean }[],
+				cache: { id: string; isConnected: boolean }[],
+			) => {
+				const connectedIds = new Set(
+					cache.filter((w) => w.isConnected).map((w) => w.id),
+				);
+				return [...connectedIds].every((id) =>
+					live.some((w) => w.id === id && w.isConnected),
+				);
+			};
+
+			const result$ = createHydrationBuffer(
+				cached,
+				liveItems$,
+				500,
+				(i) => i.id,
+				isConverged,
+			);
+
+			const results: { items: unknown[]; isHydrating: boolean }[] = [];
+			result$.subscribe((r) => results.push(r));
+
+			// Before timer
+			expect(results[results.length - 1]?.isHydrating).toBe(true);
+
+			// Advance past grace period - convergence already met
+			vi.advanceTimersByTime(600);
+
+			// Should immediately end hydration
+			expect(results[results.length - 1]?.isHydrating).toBe(false);
+		});
+
+		it("without convergence check, behaves like before (ends on timer)", () => {
+			const liveItems$ = new BehaviorSubject([{ id: "a" }]);
+			const cached = [{ id: "a" }, { id: "b" }];
+
+			const result$ = createHydrationBuffer(
+				cached,
+				liveItems$,
+				500,
+				(i) => i.id,
+				// no isConverged
+			);
+
+			const results: { items: unknown[]; isHydrating: boolean }[] = [];
+			result$.subscribe((r) => results.push(r));
+
+			// Advance past grace period
+			vi.advanceTimersByTime(600);
+
+			// Should end hydration on timer alone
+			expect(results[results.length - 1]?.isHydrating).toBe(false);
+			expect(results[results.length - 1]?.items).toEqual([{ id: "a" }]);
 		});
 	});
 });
@@ -347,5 +555,56 @@ describe("createAccountHydrationBuffer", () => {
 			],
 			isHydrating: false,
 		});
+	});
+
+	it("with convergence check, keeps hydrating until all cached wallets have live accounts", () => {
+		const liveAccounts$ = new BehaviorSubject<
+			{ id: string; walletId: string }[]
+		>([]);
+		const cachedAccounts = [
+			{ id: "acc1", walletId: "wallet1" },
+			{ id: "acc2", walletId: "wallet2" },
+		];
+
+		const isConverged = (
+			live: { id: string; walletId: string }[],
+			cached: { id: string; walletId: string }[],
+		) => {
+			const cachedWalletIds = new Set(cached.map((a) => a.walletId));
+			const liveWalletIds = new Set(live.map((a) => a.walletId));
+			return [...cachedWalletIds].every((id) => liveWalletIds.has(id));
+		};
+
+		const result$ = createAccountHydrationBuffer(
+			cachedAccounts,
+			liveAccounts$,
+			500,
+			(a) => a.walletId,
+			isConverged,
+		);
+
+		const results: { items: unknown[]; isHydrating: boolean }[] = [];
+		result$.subscribe((r) => results.push(r));
+
+		// Advance past grace period
+		vi.advanceTimersByTime(600);
+
+		// Still hydrating - no live accounts for either wallet
+		expect(results[results.length - 1]?.isHydrating).toBe(true);
+
+		// wallet1 provides accounts
+		liveAccounts$.next([{ id: "acc1", walletId: "wallet1" }]);
+
+		// Still hydrating - wallet2 hasn't provided accounts
+		expect(results[results.length - 1]?.isHydrating).toBe(true);
+
+		// wallet2 provides accounts
+		liveAccounts$.next([
+			{ id: "acc1", walletId: "wallet1" },
+			{ id: "acc2", walletId: "wallet2" },
+		]);
+
+		// Now converged - hydration ends
+		expect(results[results.length - 1]?.isHydrating).toBe(false);
 	});
 });

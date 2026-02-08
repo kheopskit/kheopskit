@@ -18,6 +18,7 @@ import {
 	serializeAccount,
 	serializeWallet,
 } from "../utils/hydrateState";
+import { getCachedIcon, setCachedIcons } from "../utils/iconCache";
 import { logObservable } from "../utils/logObservable";
 import { getAccounts$ } from "./accounts";
 import { resolveConfig } from "./config";
@@ -66,7 +67,18 @@ export const getKheopskit$ = (
 
 	// Get cached state for hydration
 	const cachedState = store.getCachedState();
-	const cachedWallets = cachedState.wallets.map(hydrateWallet);
+	// Hydrate wallets and enrich with icons from localStorage cache
+	const cachedWallets = cachedState.wallets.map((w) => {
+		const wallet = hydrateWallet(w);
+		// If wallet doesn't have icon (e.g., Ethereum), try localStorage cache
+		if (!wallet.icon) {
+			const cachedIcon = getCachedIcon(wallet.id);
+			if (cachedIcon) {
+				return { ...wallet, icon: cachedIcon };
+			}
+		}
+		return wallet;
+	});
 	const cachedAccounts = cachedState.accounts.map(hydrateAccount);
 
 	if (kc.debug && cachedWallets.length > 0) {
@@ -87,6 +99,30 @@ export const getKheopskit$ = (
 			liveWallets$,
 			kc.hydrationGracePeriod,
 			(w) => w.id,
+			// Hydration converges when all cached-connected wallets are connected in live
+			(liveWallets, cached) => {
+				const cachedConnectedIds = new Set(
+					cached.filter((w) => w.isConnected).map((w) => w.id),
+				);
+				if (cachedConnectedIds.size === 0) return true;
+				return [...cachedConnectedIds].every((id) =>
+					liveWallets.some((w) => w.id === id && w.isConnected),
+				);
+			},
+			// Merge: prefer cached isConnected state but get icon from cache or live
+			(live, cached) => ({
+				...cached,
+				// Priority: cached icon > localStorage cache > live icon
+				icon: cached.icon || getCachedIcon(cached.id) || live.icon,
+				// Use live wallet's connect/disconnect functions
+				connect: live.connect,
+				disconnect: live.disconnect,
+			}),
+			// Transform cached-only items: add icon from localStorage cache
+			(cached) => ({
+				...cached,
+				icon: cached.icon || getCachedIcon(cached.id) || "",
+			}),
 		);
 
 		// Apply hydration buffer to accounts
@@ -95,6 +131,13 @@ export const getKheopskit$ = (
 			liveAccounts$,
 			kc.hydrationGracePeriod,
 			(a) => a.walletId,
+			// Hydration converges when all wallets with cached accounts have provided live accounts
+			(liveAccounts, cached) => {
+				const cachedWalletIds = new Set(cached.map((a) => a.walletId));
+				if (cachedWalletIds.size === 0) return true;
+				const liveWalletIds = new Set(liveAccounts.map((a) => a.walletId));
+				return [...cachedWalletIds].every((id) => liveWalletIds.has(id));
+			},
 		);
 
 		// Combine buffered wallets and accounts
@@ -149,24 +192,35 @@ export const getKheopskit$ = (
 				}),
 			)
 			.subscribe(({ wallets, accounts }) => {
-				// Only cache connected wallets and their accounts
-				const connectedWallets = wallets.items.filter((w) => w.isConnected);
-				const connectedWalletIds = new Set(connectedWallets.map((w) => w.id));
+				// Cache ALL wallets to avoid wallet list flash on reload
+				// Only accounts from connected wallets are cached
+				const connectedWalletIds = new Set(
+					wallets.items.filter((w) => w.isConnected).map((w) => w.id),
+				);
 				const relevantAccounts = accounts.items.filter((a) =>
 					connectedWalletIds.has(a.walletId),
 				);
 
 				if (kc.debug) {
 					console.debug("[kheopskit] persisting state snapshot:", {
-						wallets: connectedWallets.length,
+						wallets: wallets.items.length,
 						accounts: relevantAccounts.length,
 					});
 				}
 
 				store.setCachedState(
-					connectedWallets.map(serializeWallet),
+					wallets.items.map(serializeWallet),
 					relevantAccounts.map(serializeAccount),
 				);
+
+				// Cache wallet icons in localStorage (separate from cookies for size)
+				const icons: Record<string, string> = {};
+				for (const wallet of wallets.items) {
+					if (wallet.icon) {
+						icons[wallet.id] = wallet.icon;
+					}
+				}
+				setCachedIcons(icons);
 			});
 
 		return () => {

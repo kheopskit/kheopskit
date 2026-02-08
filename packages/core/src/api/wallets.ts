@@ -7,7 +7,6 @@ import {
 	Observable,
 	of,
 	shareReplay,
-	startWith,
 	take,
 } from "rxjs";
 import { sortWallets } from "../utils/sortWallets";
@@ -43,8 +42,7 @@ export const getWallets$ = (
 		const wallets$ = observables.length
 			? combineLatest(observables).pipe(
 					map((wallets) => wallets.flat().sort(sortWallets)),
-					// Emit empty array immediately so UI doesn't wait
-					startWith([] as Wallet[]),
+					// Note: No startWith([]) here - the hydration buffer handles initial state
 				)
 			: of([]);
 

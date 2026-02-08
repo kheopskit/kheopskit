@@ -11,14 +11,9 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { usePlaygroundConfig } from "@/lib/config/playgroundConfig";
 import { AppBlock } from "./AppBlock";
 
 export const Wagmi = () => {
-	const { demoConfig } = usePlaygroundConfig();
-
-	if (!demoConfig.platforms?.includes("ethereum")) return null;
-
 	return (
 		<AppBlock
 			title="Usage with Wagmi"

@@ -45,7 +45,9 @@ export const Wallets = () => {
 										className="mr-2 inline"
 										unoptimized
 									/>
-								) : null}
+								) : (
+									<div className="inline-block size-6 shrink-0 mr-2"></div>
+								)}
 								{wallet.name}
 							</TableCell>
 							<TableCell className="text-right">

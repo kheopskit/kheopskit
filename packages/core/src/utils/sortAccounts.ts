@@ -27,8 +27,7 @@ export const sortAccounts = (a1: WalletAccount, a2: WalletAccount) => {
 			return a1.walletName.localeCompare(a2.walletName);
 		}
 
-		// keep order as provider by the wallet
-		return 0;
+		return a1.id.localeCompare(a2.id);
 	}
 
 	// impossible case

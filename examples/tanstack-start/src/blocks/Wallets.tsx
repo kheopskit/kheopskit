@@ -1,4 +1,5 @@
 import { useWallets } from "@kheopskit/react";
+import type { FC } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	Table,
@@ -8,8 +9,29 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { AppBlock } from "./AppBlock";
 
+/**
+ * Wallet icon component that handles SSR hydration gracefully.
+ * The container maintains stable size to prevent layout shift.
+ * Icons fade in smoothly when they become available.
+ */
+const WalletIcon: FC<{
+	icon: string;
+	name?: string;
+	className?: string;
+}> = ({ icon, name, className }) => {
+	// Container always takes up space to prevent layout shift
+	// Icon fades in when available
+	return (
+		<div className={cn("size-6 inline-block shrink-0 relative", className)}>
+			{icon && (
+				<img src={icon} alt={name} className="size-6 absolute inset-0" />
+			)}
+		</div>
+	);
+};
 export const Wallets = () => {
 	const { wallets, accounts } = useWallets();
 
@@ -33,14 +55,10 @@ export const Wallets = () => {
 						<TableRow key={wallet.id}>
 							<TableCell>{wallet.platform}</TableCell>
 							<TableCell>
-								{wallet.icon ? (
-									<img
-										src={wallet.icon}
-										alt={wallet.name}
-										className="w-6 h-6 mr-2 inline"
-									/>
-								) : null}
-								{wallet.name}
+								<div className="flex gap-2 items-center">
+									<WalletIcon icon={wallet.icon} name={wallet.name} />
+									<div>{wallet.name}</div>
+								</div>
 							</TableCell>
 							<TableCell className="text-right">
 								{accounts.filter((a) => a.walletId === wallet.id).length}

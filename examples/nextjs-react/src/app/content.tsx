@@ -3,7 +3,6 @@
 import { GithubIcon } from "@/assets/GithubIcon";
 import { Button } from "@/components/ui/button";
 import { Accounts } from "./blocks/Accounts";
-import { Config } from "./blocks/Config";
 import { SubmitTx } from "./blocks/SubmitTx";
 import { Wagmi } from "./blocks/Wagmi";
 import { Wallets } from "./blocks/Wallets";
@@ -16,7 +15,6 @@ export const AppContent = () => (
 				Library for connecting dapps to multiple platforms & wallets
 			</div>
 		</div>
-		<Config />
 		<Wallets />
 		<Accounts />
 		<SubmitTx />

@@ -1,5 +1,6 @@
 import {
 	createKheopskitStore,
+	getCachedIcon,
 	getKheopskit$,
 	hydrateAccount,
 	hydrateWallet,
@@ -57,35 +58,54 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 	);
 
 	// Read cached state from the store for SSR hydration
-	const cachedState = useMemo(() => {
+	// This produces wallets WITHOUT localStorage icons (Ethereum wallets have no icon)
+	// because localStorage isn't available on server
+	const serverValue = useMemo<KheopskitState>(() => {
 		if (ssrCookies === undefined) {
-			return { wallets: [], accounts: [] };
+			return {
+				wallets: [],
+				accounts: [],
+				config: resolvedConfig,
+				isHydrating: true,
+			};
 		}
 		const cached = kheopskitStore.getCachedState();
 		return {
 			wallets: cached.wallets.map(hydrateWallet),
 			accounts: cached.accounts.map(hydrateAccount),
-		};
-	}, [ssrCookies, kheopskitStore]);
-
-	const defaultValue = useMemo<KheopskitState>(
-		() => ({
-			wallets: cachedState.wallets,
-			accounts: cachedState.accounts,
 			config: resolvedConfig,
 			isHydrating: true,
-		}),
-		[resolvedConfig, cachedState],
-	);
+		};
+	}, [ssrCookies, kheopskitStore, resolvedConfig]);
+
+	// Initial value for client includes localStorage icons
+	// This is what we WANT the client to render, not what server rendered
+	const initialValue = useMemo<KheopskitState>(() => {
+		// On client, enrich wallets with localStorage icons
+		// getCachedIcon returns empty on server (no localStorage), so this is safe
+		const enrichedWallets = serverValue.wallets.map((w) => {
+			if (!w.icon) {
+				const cachedIcon = getCachedIcon(w.id);
+				if (cachedIcon) {
+					return { ...w, icon: cachedIcon };
+				}
+			}
+			return w;
+		});
+		return {
+			...serverValue,
+			wallets: enrichedWallets,
+		};
+	}, [serverValue]);
 
 	const store = useMemo(
 		() =>
 			createStore(
 				getKheopskit$(config, ssrCookies, kheopskitStore),
-				defaultValue,
-				defaultValue,
+				initialValue,
+				serverValue,
 			),
-		[config, ssrCookies, kheopskitStore, defaultValue],
+		[config, ssrCookies, kheopskitStore, initialValue, serverValue],
 	);
 
 	// Cleanup store subscriptions when store changes or component unmounts

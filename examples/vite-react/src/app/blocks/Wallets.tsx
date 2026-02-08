@@ -37,9 +37,11 @@ export const Wallets = () => {
 									<img
 										src={wallet.icon}
 										alt={wallet.name}
-										className="w-6 h-6 mr-2 inline"
+										className="w-6 h-6 mr-2 inline shrink-0"
 									/>
-								) : null}
+								) : (
+									<div className="w-6 h-6 mr-2 inline-block shrink-0"></div>
+								)}
 								{wallet.name}
 							</TableCell>
 							<TableCell className="text-right">
