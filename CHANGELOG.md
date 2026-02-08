@@ -1,5 +1,13 @@
 # kheopskit
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [[`bd76383`](https://github.com/kheopskit/kheopskit/commit/bd763833afea4443923fe7f9592471ab73af676d)]:
+  - @kheopskit/core@0.1.1
+  - @kheopskit/react@1.0.1
+
 ## 0.1.0
 
 ### Minor Changes

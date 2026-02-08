@@ -1,5 +1,17 @@
 # @kheopskit/core
 
+## 0.1.1
+
+### Patch Changes
+
+- [#31](https://github.com/kheopskit/kheopskit/pull/31) [`bd76383`](https://github.com/kheopskit/kheopskit/commit/bd763833afea4443923fe7f9592471ab73af676d) Thanks [@0xKheops](https://github.com/0xKheops)! - fix: SSR compatibility with edge runtimes like Cloudflare Workers
+
+  - Lazy initialize `safeLocalStorage` to avoid accessing browser globals at module load
+  - Lazy initialize default store via `getDefaultStore()` for SSR safety
+  - Dynamically import `@reown/appkit/core` to prevent Lit (browser-only) code from loading on server
+  - Add SSR safety tests to prevent regressions
+  - Export `getDefaultStore` and `getSafeLocalStorage` for advanced use cases
+
 ## 0.1.0
 
 ### Minor Changes
