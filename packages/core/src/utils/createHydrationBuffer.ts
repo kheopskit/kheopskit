@@ -3,7 +3,8 @@ import {
 	combineLatest,
 	filter,
 	map,
-	type Observable,
+	Observable,
+	Subscription,
 	shareReplay,
 	startWith,
 	take,
@@ -49,56 +50,79 @@ const createBufferCore = <T>(
 		return liveItems$.pipe(map((items) => ({ items, isHydrating: false })));
 	}
 
-	// Track whether we're still in the hydration grace period
-	// Using BehaviorSubject to keep a stateful value that doesn't complete
-	const isHydrating$ = new BehaviorSubject(true);
+	// Wrap in an Observable to properly manage all subscriptions
+	return new Observable<HydrationBufferResult<T>>((subscriber) => {
+		const subscriptions = new Subscription();
 
-	// Use startWith to emit cached items immediately before any live emissions
-	const liveWithInitial$ = liveItems$.pipe(startWith([] as T[]));
+		// Track whether we're still in the hydration grace period
+		// Using BehaviorSubject to keep a stateful value that doesn't complete
+		const isHydrating$ = new BehaviorSubject(true);
 
-	if (isConverged) {
-		// With convergence check: hydration ends when timer fires AND live state has caught up
-		const timerFired$ = timer(gracePeriodMs).pipe(
-			map(() => true),
-			startWith(false),
-			shareReplay(1),
+		// Use startWith to emit cached items immediately before any live emissions
+		const liveWithInitial$ = liveItems$.pipe(startWith([] as T[]));
+
+		if (isConverged) {
+			// With convergence check: hydration ends when timer fires AND live state has caught up
+			const timerFired$ = timer(gracePeriodMs).pipe(
+				map(() => true),
+				startWith(false),
+				shareReplay({ bufferSize: 1, refCount: true }),
+			);
+
+			// End hydration when timer has fired AND convergence is met
+			subscriptions.add(
+				combineLatest([liveWithInitial$, timerFired$])
+					.pipe(
+						filter(([, timerFired]) => timerFired),
+						filter(([liveItems]) => isConverged(liveItems, cachedItems)),
+						take(1),
+					)
+					.subscribe(() => {
+						isHydrating$.next(false);
+					}),
+			);
+
+			// Max timeout (6x grace period) to prevent infinite hydration
+			// e.g., if auto-reconnect fails, we still end hydration
+			subscriptions.add(
+				timer(gracePeriodMs * 6).subscribe(() => {
+					if (isHydrating$.value) {
+						isHydrating$.next(false);
+					}
+				}),
+			);
+		} else {
+			// Without convergence check: end hydration on timer only
+			subscriptions.add(
+				timer(gracePeriodMs).subscribe(() => {
+					isHydrating$.next(false);
+				}),
+			);
+		}
+
+		subscriptions.add(
+			combineLatest([liveWithInitial$, isHydrating$])
+				.pipe(
+					map(([liveItems, isHydrating]) => {
+						if (!isHydrating) {
+							// Hydration complete - return only live items
+							return { items: liveItems, isHydrating: false };
+						}
+
+						return {
+							items: mergeFn(liveItems, cachedItems),
+							isHydrating: true,
+						};
+					}),
+				)
+				.subscribe(subscriber),
 		);
 
-		// End hydration when timer has fired AND convergence is met
-		combineLatest([liveWithInitial$, timerFired$])
-			.pipe(
-				filter(([, timerFired]) => timerFired),
-				filter(([liveItems]) => isConverged(liveItems, cachedItems)),
-				take(1),
-			)
-			.subscribe(() => {
-				isHydrating$.next(false);
-			});
-
-		// Max timeout (6x grace period) to prevent infinite hydration
-		// e.g., if auto-reconnect fails, we still end hydration
-		timer(gracePeriodMs * 6).subscribe(() => {
-			if (isHydrating$.value) {
-				isHydrating$.next(false);
-			}
-		});
-	} else {
-		// Without convergence check: end hydration on timer only
-		timer(gracePeriodMs).subscribe(() => {
-			isHydrating$.next(false);
-		});
-	}
-
-	return combineLatest([liveWithInitial$, isHydrating$]).pipe(
-		map(([liveItems, isHydrating]) => {
-			if (!isHydrating) {
-				// Hydration complete - return only live items
-				return { items: liveItems, isHydrating: false };
-			}
-
-			return { items: mergeFn(liveItems, cachedItems), isHydrating: true };
-		}),
-	);
+		return () => {
+			subscriptions.unsubscribe();
+			isHydrating$.complete();
+		};
+	});
 };
 
 /**

@@ -117,6 +117,7 @@ const createPolkadotInjectedWallets$ = (store: KheopskitStore) =>
 						};
 					});
 				}),
+				distinctUntilChanged(walletsEqual),
 			)
 			.subscribe(subscriber);
 
@@ -145,4 +146,20 @@ export const getPolkadotWallets$ = (
 			subscription.unsubscribe();
 		};
 	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
+};
+
+/**
+ * Compare two wallet arrays by their relevant properties (not functions).
+ */
+const walletsEqual = (
+	a: PolkadotInjectedWallet[],
+	b: PolkadotInjectedWallet[],
+): boolean => {
+	if (a.length !== b.length) return false;
+	return a.every(
+		(w, i) =>
+			w.id === b[i]?.id &&
+			w.isConnected === b[i]?.isConnected &&
+			w.name === b[i]?.name,
+	);
 };

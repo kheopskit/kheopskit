@@ -26,9 +26,6 @@ import { createKheopskitStore } from "./store";
 import type { KheopskitConfig, Wallet, WalletAccount } from "./types";
 import { getWallets$ } from "./wallets";
 
-const arraysEqual = (a: string[], b: string[]) =>
-	a.length === b.length && a.every((v, i) => v === b[i]);
-
 export type { KheopskitConfig } from "./types";
 
 export type KheopskitState = {
@@ -228,8 +225,25 @@ export const getKheopskit$ = (
 			persistSub.unsubscribe();
 		};
 	}).pipe(
+		distinctUntilChanged(statesEqual),
 		throttleTime(16, undefined, { leading: true, trailing: true }), // ~1 frame at 60fps
 		logObservable("kheopskit$", { enabled: kc.debug, printValue: true }),
 		shareReplay({ bufferSize: 1, refCount: true }),
 	);
 };
+
+const arraysEqual = (a: string[], b: string[]) =>
+	a.length === b.length && a.every((v, i) => v === b[i]);
+
+/**
+ * Deep equality check for KheopskitState to prevent unnecessary emissions.
+ */
+const statesEqual = (a: KheopskitState, b: KheopskitState): boolean =>
+	a.isHydrating === b.isHydrating &&
+	a.wallets.length === b.wallets.length &&
+	a.accounts.length === b.accounts.length &&
+	a.wallets.every(
+		(w, i) =>
+			w.id === b.wallets[i]?.id && w.isConnected === b.wallets[i]?.isConnected,
+	) &&
+	a.accounts.every((acc, i) => acc.id === b.accounts[i]?.id);

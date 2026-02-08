@@ -5,6 +5,7 @@ import {
 import {
 	BehaviorSubject,
 	combineLatest,
+	distinctUntilChanged,
 	map,
 	Observable,
 	shareReplay,
@@ -101,6 +102,7 @@ const createEthereumInjectedWallets$ = (store: KheopskitStore) =>
 						};
 					});
 				}),
+				distinctUntilChanged(walletsEqual),
 			)
 			.subscribe(subscriber);
 
@@ -129,4 +131,20 @@ export const getEthereumWallets$ = (
 			subscription.unsubscribe();
 		};
 	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
+};
+
+/**
+ * Compare two wallet arrays by their relevant properties (not functions).
+ */
+const walletsEqual = (
+	a: EthereumInjectedWallet[],
+	b: EthereumInjectedWallet[],
+): boolean => {
+	if (a.length !== b.length) return false;
+	return a.every(
+		(w, i) =>
+			w.id === b[i]?.id &&
+			w.isConnected === b[i]?.isConnected &&
+			w.name === b[i]?.name,
+	);
 };

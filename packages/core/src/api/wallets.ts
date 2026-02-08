@@ -23,7 +23,7 @@ export const getWallets$ = (
 	const autoReconnectWalletIds$ = store.observable.pipe(
 		map((s) => s.autoReconnect ?? []),
 		take(1),
-		shareReplay(1),
+		shareReplay({ bufferSize: 1, refCount: true }),
 	);
 
 	return new Observable<Wallet[]>((subscriber) => {
