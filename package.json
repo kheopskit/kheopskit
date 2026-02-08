@@ -12,7 +12,7 @@
 		"dev:vite": "pnpm --filter vite-react dev",
 		"dev:tanstack": "pnpm --filter tanstack-start dev",
 		"dev:next": "pnpm --filter nextjs-react dev",
-		"build": "pnpm -r build",
+		"build": "pnpm build:packages && pnpm --filter vite-react build",
 		"build:packages": "pnpm -F @kheopskit/core -F @kheopskit/react build",
 		"format": "pnpm biome format --write .",
 		"postinstall": "pnpm papi --whitelist papi-whitelist.ts",
@@ -45,8 +45,8 @@
 		"vitest": "^4.0.18"
 	},
 	"dependencies": {
-		"@kheopskit/core": "link:packages/core",
-		"@kheopskit/react": "link:packages/react",
+		"@kheopskit/core": "workspace:*",
+		"@kheopskit/react": "workspace:*",
 		"@polkadot-api/descriptors": "file:.papi/descriptors",
 		"polkadot-api": "^1.23.3"
 	},

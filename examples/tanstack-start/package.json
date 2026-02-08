@@ -12,8 +12,8 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@kheopskit/core": "link:../../packages/core",
-		"@kheopskit/react": "link:../../packages/react",
+		"@kheopskit/core": "workspace:*",
+		"@kheopskit/react": "workspace:*",
 		"@radix-ui/react-checkbox": "^1.3.3",
 		"@radix-ui/react-select": "^2.2.6",
 		"@radix-ui/react-slot": "^1.2.4",

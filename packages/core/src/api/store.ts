@@ -1,6 +1,7 @@
 import { uniq } from "lodash-es";
 import { createStore } from "../utils/createStore";
 import { cookieStorage, safeLocalStorage } from "../utils/storage";
+import { getWalletAccountId } from "../utils/WalletAccountId";
 import { parseWalletId, type WalletId } from "../utils/WalletId";
 import { DEFAULT_STORAGE_KEY } from "./config";
 import type { CachedAccount, CachedWallet } from "./types";
@@ -11,6 +12,19 @@ type KheopskitStoreData = {
 	cachedWallets?: CachedWallet[];
 	/** Cached account state for SSR hydration to prevent UI flash */
 	cachedAccounts?: CachedAccount[];
+};
+
+type CompactWalletEntry = [WalletId, string, 0 | 1, 0 | 1];
+type CompactAccountEntry = [WalletId, string, string | null];
+
+type CompactStoreV1 = {
+	v: 1;
+	// autoReconnect
+	r?: WalletId[];
+	// wallets: [id, name, isConnected(0|1), type(0=injected,1=appKit)?]
+	w?: CompactWalletEntry[];
+	// accounts: [walletId, address, name?]
+	a?: CompactAccountEntry[];
 };
 
 const DEFAULT_SETTINGS: KheopskitStoreData = {};
@@ -40,7 +54,9 @@ export const createKheopskitStore = (
 ) => {
 	const { ssrCookies, storageKey = DEFAULT_STORAGE_KEY } = options;
 	const storage =
-		ssrCookies !== undefined ? cookieStorage(ssrCookies) : safeLocalStorage;
+		ssrCookies !== undefined
+			? createCompactCookieStorage(ssrCookies)
+			: safeLocalStorage;
 	const store = createStore(storageKey, DEFAULT_SETTINGS, storage);
 
 	const addEnabledWalletId = (walletId: WalletId) => {
@@ -92,3 +108,125 @@ export type KheopskitStore = ReturnType<typeof createKheopskitStore>;
 
 // Default store for backward compatibility (uses localStorage on client, noop on server)
 export const store = createKheopskitStore();
+
+const isCompactStore = (value: unknown): value is CompactStoreV1 => {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+	if ("cachedWallets" in value || "cachedAccounts" in value) return false;
+	return "v" in value || "w" in value || "a" in value || "r" in value;
+};
+
+const toCompactStore = (data: KheopskitStoreData): CompactStoreV1 => {
+	const wallets = data.cachedWallets?.map(
+		(wallet): CompactWalletEntry => [
+			wallet.id,
+			wallet.name,
+			wallet.isConnected ? 1 : 0,
+			wallet.type === "appKit" ? 1 : 0,
+		],
+	);
+
+	const accounts = data.cachedAccounts?.map(
+		(account): CompactAccountEntry => [
+			account.walletId,
+			account.address,
+			account.name ?? null,
+		],
+	);
+
+	return {
+		v: 1,
+		r: data.autoReconnect,
+		w: wallets?.length ? wallets : undefined,
+		a: accounts?.length ? accounts : undefined,
+	};
+};
+
+const fromCompactStore = (data: CompactStoreV1): KheopskitStoreData => {
+	const walletNameMap = new Map<WalletId, string>();
+
+	const wallets: CachedWallet[] = (data.w ?? []).map((item) => {
+		const [id, name, isConnected, type] = item;
+		walletNameMap.set(id, name);
+		const { platform } = parseWalletId(id);
+		return {
+			id,
+			platform,
+			type: type === 1 ? "appKit" : "injected",
+			name,
+			isConnected: isConnected === 1,
+		};
+	});
+
+	const accounts: CachedAccount[] = (data.a ?? []).map((item) => {
+		const [walletId, address, name] = item;
+		const { platform } = parseWalletId(walletId);
+		return {
+			id: getWalletAccountId(walletId, address),
+			platform,
+			address,
+			name: name ?? undefined,
+			walletId,
+			walletName: walletNameMap.get(walletId) ?? walletId,
+		};
+	});
+
+	return {
+		autoReconnect: data.r,
+		cachedWallets: wallets,
+		cachedAccounts: accounts,
+	};
+};
+
+const decodeStore = (raw: string, fallback: KheopskitStoreData) => {
+	try {
+		const parsed = JSON.parse(raw) as unknown;
+		if (isCompactStore(parsed)) return fromCompactStore(parsed);
+		return parsed as KheopskitStoreData;
+	} catch {
+		return fallback;
+	}
+};
+
+const encodeStore = (data: KheopskitStoreData): string =>
+	JSON.stringify(toCompactStore(data));
+
+const createCompactCookieStorage = (initialCookies?: string) => {
+	const base = cookieStorage(initialCookies);
+
+	return {
+		getItem: (key: string) => {
+			const raw = base.getItem(key);
+			if (!raw) return null;
+			const expanded = decodeStore(raw, DEFAULT_SETTINGS);
+			if (typeof document !== "undefined") {
+				try {
+					const parsed = JSON.parse(raw) as unknown;
+					if (!isCompactStore(parsed)) {
+						base.setItem(key, encodeStore(expanded));
+					}
+				} catch {
+					// Ignore malformed cookie during migration
+				}
+			}
+			return JSON.stringify(expanded);
+		},
+		setItem: (key: string, value: string) => {
+			const expanded = decodeStore(value, DEFAULT_SETTINGS);
+			base.setItem(key, encodeStore(expanded));
+		},
+		removeItem: base.removeItem,
+		subscribe: (key: string, callback: (value: string | null) => void) => {
+			const unsubscribe = base.subscribe?.(key, (value) => {
+				if (!value) {
+					callback(null);
+					return;
+				}
+				const expanded = decodeStore(value, DEFAULT_SETTINGS);
+				callback(JSON.stringify(expanded));
+			});
+			return () => {
+				unsubscribe?.();
+			};
+		},
+	};
+};
