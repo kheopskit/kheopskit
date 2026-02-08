@@ -118,7 +118,9 @@ When you pass `ssrCookies`:
 ```tsx
 // app/layout.tsx
 import { cookies } from "next/headers";
-import { Providers } from "./providers";
+import { App } from "./app";
+
+const config = { platforms: ["polkadot", "ethereum"], autoReconnect: true };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
@@ -127,26 +129,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html>
       <body>
-        <Providers ssrCookies={ssrCookies}>{children}</Providers>
+        <KheopskitProvider config={config} ssrCookies={ssrCookies}>
+          {children}
+        </KheopskitProvider>
       </body>
     </html>
-  );
-}
-```
-
-```tsx
-// app/providers.tsx
-"use client";
-
-import { KheopskitProvider } from "@kheopskit/react";
-
-const config = { platforms: ["polkadot", "ethereum"], autoReconnect: true };
-
-export function Providers({ children, ssrCookies }: { children: React.ReactNode; ssrCookies?: string }) {
-  return (
-    <KheopskitProvider config={config} ssrCookies={ssrCookies}>
-      {children}
-    </KheopskitProvider>
   );
 }
 ```
@@ -158,7 +145,9 @@ export function Providers({ children, ssrCookies }: { children: React.ReactNode;
 import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { createServerFn, Meta, Scripts } from "@tanstack/start";
 import { getRequest } from "@tanstack/start/server";
-import { Providers } from "../providers";
+import { KheopskitProvider } from "@kheopskit/react";
+
+const config = { platforms: ["polkadot", "ethereum"], autoReconnect: true };
 
 const getSSRCookies = createServerFn({ method: "GET" }).handler(async () => {
   const request = getRequest();
@@ -176,7 +165,9 @@ function RootComponent() {
     <html>
       <head><Meta /></head>
       <body>
-        <Providers ssrCookies={ssrCookies}><Outlet /></Providers>
+        <KheopskitProvider config={config} ssrCookies={ssrCookies}>
+          <Outlet />
+        </KheopskitProvider>
         <Scripts />
       </body>
     </html>

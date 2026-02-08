@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { Providers } from "./providers";
+import { App } from "./app";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,15 +17,12 @@ export default async function RootLayout({
 	children: React.ReactNode;
 }>) {
 	const cookieStore = await cookies();
-	const ssrCookies = cookieStore
-		.getAll()
-		.map((c) => `${c.name}=${c.value}`)
-		.join("; ");
+	const ssrCookies = cookieStore.toString();
 
 	return (
 		<html lang="en" className="dark">
 			<body>
-				<Providers ssrCookies={ssrCookies}>{children}</Providers>
+				<App ssrCookies={ssrCookies}>{children}</App>
 			</body>
 		</html>
 	);

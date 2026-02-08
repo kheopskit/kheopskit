@@ -8,7 +8,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { usePlaygroundConfig } from "@/lib/config/playgroundConfig";
 import { wagmiConfig } from "@/lib/wagmi";
 
-export const Providers: FC<PropsWithChildren<{ ssrCookies?: string }>> = ({
+export const App: FC<PropsWithChildren<{ ssrCookies?: string }>> = ({
 	children,
 	ssrCookies,
 }) => {

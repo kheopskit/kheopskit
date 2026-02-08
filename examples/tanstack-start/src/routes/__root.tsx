@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
-import { Providers } from "../providers";
+import { App } from "../app";
 import appCss from "../styles.css?url";
 
 const getSSRCookies = createServerFn({ method: "GET" }).handler(async () => {
@@ -41,9 +41,9 @@ function RootComponent() {
 				<HeadContent />
 			</head>
 			<body className="bg-background text-foreground">
-				<Providers ssrCookies={ssrCookies}>
+				<App ssrCookies={ssrCookies}>
 					<Outlet />
-				</Providers>
+				</App>
 				<Scripts />
 			</body>
 		</html>
