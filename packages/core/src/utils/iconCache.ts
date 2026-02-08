@@ -53,19 +53,6 @@ export const getCachedIcon = (walletId: string): string | undefined => {
 };
 
 /**
- * Sets a cached icon for a wallet.
- * @param walletId - The wallet ID
- * @param icon - The icon data URI or URL
- */
-export const setCachedIcon = (walletId: string, icon: string): void => {
-	const cache = loadCache();
-	if (cache[walletId] !== icon && icon) {
-		cache[walletId] = icon;
-		saveCache(cache);
-	}
-};
-
-/**
  * Sets multiple cached icons at once.
  * More efficient than calling setCachedIcon multiple times.
  * @param icons - Map of wallet ID to icon
@@ -84,12 +71,4 @@ export const setCachedIcons = (icons: Record<string, string>): void => {
 	if (changed) {
 		saveCache(cache);
 	}
-};
-
-/**
- * Clears all cached icons.
- */
-export const clearIconCache = (): void => {
-	safeLocalStorage.removeItem(ICON_CACHE_KEY);
-	memoryCache = null;
 };
