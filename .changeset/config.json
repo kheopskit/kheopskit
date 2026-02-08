@@ -9,7 +9,7 @@
 	"baseBranch": "main",
 	"updateInternalDependencies": "patch",
 	"version": "synchronized",
-	"ignore": ["vite-react"],
+	"ignore": ["vite-react", "tanstack-start", "nextjs-react"],
 	"tools": {
 		"pnpm": true
 	}

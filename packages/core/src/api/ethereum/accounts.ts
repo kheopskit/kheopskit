@@ -15,14 +15,14 @@ import {
 	type EIP1193Provider,
 	getAddress,
 } from "viem";
+import { getWalletAccountId } from "../../utils";
+import { getCachedObservable$ } from "../../utils/getCachedObservable";
 import type {
 	EthereumAccount,
 	EthereumAppKitWallet,
 	EthereumInjectedWallet,
 	EthereumWallet,
-} from "@/api/types";
-import { getWalletAccountId } from "@/utils";
-import { getCachedObservable$ } from "@/utils/getCachedObservable";
+} from "../types";
 
 const getInjectedWalletAccounts$ = (
 	wallet: EthereumInjectedWallet,

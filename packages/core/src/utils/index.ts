@@ -6,5 +6,6 @@ export * from "./isSs58Address";
 export * from "./isValidAddress";
 export * from "./isWalletPlatform";
 export * from "./sleep";
+export * from "./storage";
 export * from "./throwAfter";
 export * from "./WalletAccountId";

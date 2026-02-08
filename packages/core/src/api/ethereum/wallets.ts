@@ -1,42 +1,56 @@
-import { createStore, type EIP6963ProviderDetail } from "mipd";
+import {
+	createStore as createMipdStore,
+	type EIP6963ProviderDetail,
+} from "mipd";
 import {
 	BehaviorSubject,
 	combineLatest,
+	distinctUntilChanged,
 	map,
 	Observable,
 	shareReplay,
 } from "rxjs";
 import type { EIP1193Provider } from "viem";
-import { store } from "@/api/store";
+import { getWalletId, type WalletId } from "../../utils/WalletId";
+import { getAppKitWallets$ } from "../appKit";
+import { store as defaultStore, type KheopskitStore } from "../store";
 import type {
 	EthereumInjectedWallet,
 	EthereumWallet,
 	KheopskitConfig,
-} from "@/api/types";
-import { getWalletId, type WalletId } from "@/utils/WalletId";
-import { getAppKitWallets$ } from "../appKit";
+} from "../types";
 
+/**
+ * Observable that emits EIP-6963 provider details from injected wallets.
+ * Returns empty array during SSR since browser wallet APIs are not available.
+ */
 const providersDetails$ = new Observable<EIP6963ProviderDetail[]>(
 	(subscriber) => {
-		const store = createStore();
+		// Guard against SSR - mipd requires browser APIs
+		if (typeof window === "undefined") {
+			subscriber.next([]);
+			return () => {};
+		}
 
-		const unsubscribe = store.subscribe((providerDetails) => {
+		const mipdStore = createMipdStore();
+
+		const unsubscribe = mipdStore.subscribe((providerDetails) => {
 			subscriber.next(providerDetails as EIP6963ProviderDetail[]);
 		});
 
-		const providerDetails = store.getProviders();
+		const providerDetails = mipdStore.getProviders();
 
 		subscriber.next(providerDetails as EIP6963ProviderDetail[]);
 
 		return () => {
 			unsubscribe();
-			store.destroy();
+			mipdStore.destroy();
 		};
 	},
 ).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
 
-const ethereumInjectedWallets$ = new Observable<EthereumInjectedWallet[]>(
-	(subscriber) => {
+const createEthereumInjectedWallets$ = (store: KheopskitStore) =>
+	new Observable<EthereumInjectedWallet[]>((subscriber) => {
 		const enabledWalletIds$ = new BehaviorSubject<Set<WalletId>>(new Set());
 
 		const connectWallet = async (
@@ -88,19 +102,22 @@ const ethereumInjectedWallets$ = new Observable<EthereumInjectedWallet[]>(
 						};
 					});
 				}),
+				distinctUntilChanged(walletsEqual),
 			)
 			.subscribe(subscriber);
 
 		return () => {
 			sub.unsubscribe();
 		};
-	},
-).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
+	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
 
-export const getEthereumWallets$ = (config: KheopskitConfig) => {
+export const getEthereumWallets$ = (
+	config: KheopskitConfig,
+	store: KheopskitStore = defaultStore,
+) => {
 	return new Observable<EthereumWallet[]>((subscriber) => {
 		const subscription = combineLatest([
-			ethereumInjectedWallets$,
+			createEthereumInjectedWallets$(store),
 			getAppKitWallets$(config)?.pipe(map((w) => w.ethereum)),
 		])
 			.pipe(
@@ -114,4 +131,20 @@ export const getEthereumWallets$ = (config: KheopskitConfig) => {
 			subscription.unsubscribe();
 		};
 	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
+};
+
+/**
+ * Compare two wallet arrays by their relevant properties (not functions).
+ */
+const walletsEqual = (
+	a: EthereumInjectedWallet[],
+	b: EthereumInjectedWallet[],
+): boolean => {
+	if (a.length !== b.length) return false;
+	return a.every(
+		(w, i) =>
+			w.id === b[i]?.id &&
+			w.isConnected === b[i]?.isConnected &&
+			w.name === b[i]?.name,
+	);
 };

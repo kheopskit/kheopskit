@@ -104,6 +104,91 @@ kheopskit$.subscribe(({ wallets, accounts }) => {
 });
 ```
 
+### Server-Side Rendering (SSR)
+
+Kheopskit supports SSR with frameworks like Next.js and TanStack Start. Pass the `ssrCookies` prop to enable cookie-based storage that works on the server.
+
+When you pass `ssrCookies`:
+- Storage switches from localStorage to cookies
+- Server can read initial state from request headers
+- No hydration mismatch between server and client
+
+#### Next.js (App Router)
+
+```tsx
+// app/layout.tsx
+import { cookies } from "next/headers";
+import { App } from "./app";
+
+const config = { platforms: ["polkadot", "ethereum"], autoReconnect: true };
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
+  const ssrCookies = cookieStore.toString();
+
+  return (
+    <html>
+      <body>
+        <KheopskitProvider config={config} ssrCookies={ssrCookies}>
+          {children}
+        </KheopskitProvider>
+      </body>
+    </html>
+  );
+}
+```
+
+#### TanStack Start
+
+```tsx
+// routes/__root.tsx
+import { createRootRoute, Outlet } from "@tanstack/react-router";
+import { createServerFn, Meta, Scripts } from "@tanstack/start";
+import { getRequest } from "@tanstack/start/server";
+import { KheopskitProvider } from "@kheopskit/react";
+
+const config = { platforms: ["polkadot", "ethereum"], autoReconnect: true };
+
+const getSSRCookies = createServerFn({ method: "GET" }).handler(async () => {
+  const request = getRequest();
+  return request?.headers.get("cookie") ?? undefined;
+});
+
+export const Route = createRootRoute({
+  loader: async () => ({ ssrCookies: await getSSRCookies() }),
+  component: RootComponent,
+});
+
+function RootComponent() {
+  const { ssrCookies } = Route.useLoaderData();
+  return (
+    <html>
+      <head><Meta /></head>
+      <body>
+        <KheopskitProvider config={config} ssrCookies={ssrCookies}>
+          <Outlet />
+        </KheopskitProvider>
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+```
+
+#### SSR Considerations
+
+| Feature | Client-Only | SSR (with `ssrCookies`) |
+|---------|-------------|-------------------------|
+| Storage | localStorage | Cookies |
+| Server access | ❌ | ✅ |
+| Hydration match | ⚠️ Flash possible | ✅ No flash |
+| Size limit | ~5MB | ~4KB |
+| Cross-tab sync | `storage` event | BroadcastChannel |
+
+**Cookie attributes**: Kheopskit uses `SameSite=Lax`, `Secure` (on HTTPS), `path=/`, and 1-year expiry.
+
+**Cookie size limit (compact format)**: Cookie storage uses a compact JSON schema to stay under the ~4KB limit. As a rule of thumb, with 6 connected wallets you can fit about 30-40 accounts when most accounts do not include a name. If many accounts have names, expect closer to 25-30. When the cookie grows too large, browsers may reject it.
+
 ---
 
 ## Roadmap

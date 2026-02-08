@@ -1,5 +1,5 @@
 import { combineLatest, map, Observable, of, shareReplay } from "rxjs";
-import { sortAccounts } from "@/utils/sortAccounts";
+import { sortAccounts } from "../utils/sortAccounts";
 import { getEthereumAccounts$ } from "./ethereum/accounts";
 import { getPolkadotAccounts$ } from "./polkadot/accounts";
 import type { KheopskitConfig, Wallet, WalletAccount } from "./types";

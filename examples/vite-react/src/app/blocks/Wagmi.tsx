@@ -10,13 +10,11 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { usePlaygroundConfig } from "@/lib/config/playgroundConfig";
+import { kheopskitConfig } from "@/lib/config/playgroundConfig";
 import { AppBlock } from "./AppBlock";
 
 export const Wagmi = () => {
-	const { demoConfig } = usePlaygroundConfig();
-
-	if (!demoConfig.platforms?.includes("ethereum")) return null;
+	if (!kheopskitConfig.platforms?.includes("ethereum")) return null;
 
 	return (
 		<AppBlock
@@ -119,7 +117,7 @@ const ActiveAccount = () => {
 			</p>
 			<div className="flex gap-4 mt-2">
 				<Select onValueChange={setAccountId}>
-					<SelectTrigger className="w-[180px]">
+					<SelectTrigger className="w-45">
 						<SelectValue placeholder="Account" />
 					</SelectTrigger>
 					<SelectContent>

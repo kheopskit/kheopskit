@@ -11,8 +11,8 @@ import type {
 	EIP1193Provider,
 	WalletClient,
 } from "viem";
-import type { WalletAccountId } from "@/utils";
-import type { WalletId } from "@/utils/WalletId";
+import type { WalletAccountId } from "../utils";
+import type { WalletId } from "../utils/WalletId";
 
 export type KheopskitConfig = {
 	autoReconnect: boolean;
@@ -31,6 +31,30 @@ export type KheopskitConfig = {
 		themeVariables?: ThemeVariables;
 	};
 	debug: boolean;
+	/**
+	 * Custom storage key for persisting wallet connection state.
+	 * Useful when running multiple kheopskit instances on the same domain
+	 * to prevent state conflicts between different dapps.
+	 *
+	 * @default "kheopskit"
+	 *
+	 * @example
+	 * ```ts
+	 * // For app "MyDapp" to avoid conflicts
+	 * { storageKey: "kheopskit-mydapp" }
+	 * ```
+	 */
+	storageKey: string;
+	/**
+	 * Grace period in milliseconds to wait for wallets to inject before
+	 * syncing to actual state. During this period, cached wallet/account
+	 * state from storage is preserved to prevent UI flashing.
+	 *
+	 * Set to 0 to disable hydration buffering.
+	 *
+	 * @default 500
+	 */
+	hydrationGracePeriod: number;
 };
 
 export type PolkadotInjectedWallet = {
@@ -109,3 +133,29 @@ export type EthereumAccount = {
 };
 
 export type WalletAccount = PolkadotAccount | EthereumAccount;
+
+/**
+ * Serializable wallet data for SSR hydration cache.
+ * Contains only the data needed to render wallet UI without flash.
+ * Note: icon is NOT stored to save cookie space - it's looked up at hydration time.
+ */
+export type CachedWallet = {
+	id: WalletId;
+	platform: WalletPlatform;
+	type: "injected" | "appKit";
+	name: string;
+	isConnected: boolean;
+};
+
+/**
+ * Serializable account data for SSR hydration cache.
+ * Contains only the data needed to render account UI without flash.
+ */
+export type CachedAccount = {
+	id: string;
+	platform: WalletPlatform;
+	address: string;
+	name?: string;
+	walletId: WalletId;
+	walletName: string;
+};

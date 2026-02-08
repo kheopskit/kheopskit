@@ -1,4 +1,4 @@
-import type { Wallet } from "@/api";
+import type { Wallet } from "../api";
 
 export const sortWallets = (w1: Wallet, w2: Wallet) => {
 	// Sort by platform first: polkadot first, then ethereum

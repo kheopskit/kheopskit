@@ -2,16 +2,13 @@
 	"name": "@kheopskit/react",
 	"version": "0.0.26",
 	"description": "",
-	"publishConfig": {
-		"access": "public"
-	},
 	"private": false,
 	"files": [
 		"dist"
 	],
-	"main": "dist/index.cjs",
-	"module": "dist/index.mjs",
-	"types": "dist/index.d.ts",
+	"main": "./dist/index.cjs",
+	"module": "./dist/index.mjs",
+	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
@@ -19,10 +16,14 @@
 			"require": "./dist/index.cjs"
 		}
 	},
+	"publishConfig": {
+		"access": "public"
+	},
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
 		"dev": "tsup --watch",
 		"build": "tsup",
+		"prepack": "tsup",
 		"clean": "rm -rf ./dist && rm -rf ./node_modules",
 		"typecheck": "tsc --noEmit"
 	},
@@ -34,23 +35,24 @@
 	},
 	"license": "ISC",
 	"peerDependencies": {
-		"@kheopskit/core": "workspace:*",
+		"@kheopskit/core": "^0.0.22",
 		"react": ">=18.0.0",
 		"react-dom": ">=18.0.0",
 		"rxjs": ">=7.0.0"
 	},
 	"devDependencies": {
 		"@kheopskit/core": "workspace:*",
-		"@types/react": "^19.1.5",
-		"@types/react-dom": "^19.1.5",
-		"react": "^19.1.0",
-		"react-dom": "^19.1.0",
+		"@types/react": "^19.2.11",
+		"@types/react-dom": "^19.2.3",
+		"react": "^19.2.4",
+		"react-dom": "^19.2.4",
 		"rxjs": "^7.8.2"
 	},
 	"tsup": {
 		"entry": [
 			"src/index.ts"
 		],
+		"tsconfig": "tsconfig.build.json",
 		"splitting": false,
 		"sourcemap": true,
 		"clean": true,

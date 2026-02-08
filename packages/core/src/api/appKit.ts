@@ -8,7 +8,7 @@ import {
 	of,
 	shareReplay,
 } from "rxjs";
-import { getWalletId } from "@/utils/WalletId";
+import { getWalletId } from "../utils/WalletId";
 import type {
 	EthereumAppKitWallet,
 	KheopskitConfig,
@@ -25,6 +25,15 @@ type AppKitWallets = {
 
 // once it exists, appKit object should never be recreated
 let cachedAppKit: Observable<AppKitWallets> | null = null;
+
+/**
+ * Clears the cached AppKit observable.
+ * Use when configuration changes or for testing purposes.
+ * Note: This does NOT destroy the appKit instance created by Reown.
+ */
+export const resetAppKitCache = (): void => {
+	cachedAppKit = null;
+};
 
 export const getAppKitWallets$ = (
 	config: KheopskitConfig,
