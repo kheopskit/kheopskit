@@ -29,11 +29,16 @@ export const noopStorage: SyncableStorage = {
 };
 
 /**
- * A safe localStorage wrapper that falls back to noopStorage
- * when localStorage is not available (e.g., during SSR).
- * Includes cross-tab sync via the native 'storage' event.
+ * Cached localStorage wrapper instance.
+ * Lazily initialized on first access to avoid SSR issues.
  */
-export const safeLocalStorage: SyncableStorage = (() => {
+let _safeLocalStorage: SyncableStorage | null = null;
+
+/**
+ * Creates the localStorage wrapper, testing for availability.
+ * Returns noopStorage if localStorage is unavailable (SSR, private browsing, etc.)
+ */
+const createSafeLocalStorage = (): SyncableStorage => {
 	if (typeof window === "undefined") return noopStorage;
 
 	try {
@@ -60,7 +65,36 @@ export const safeLocalStorage: SyncableStorage = (() => {
 	} catch {
 		return noopStorage;
 	}
-})();
+};
+
+/**
+ * A safe localStorage wrapper that falls back to noopStorage
+ * when localStorage is not available (e.g., during SSR).
+ * Includes cross-tab sync via the native 'storage' event.
+ *
+ * Lazily initialized on first access to be SSR-safe.
+ */
+export const getSafeLocalStorage = (): SyncableStorage => {
+	if (_safeLocalStorage === null) {
+		_safeLocalStorage = createSafeLocalStorage();
+	}
+	return _safeLocalStorage;
+};
+
+/**
+ * @deprecated Use getSafeLocalStorage() instead. This is kept for backward compatibility.
+ * Returns a proxy that lazily initializes on first method call.
+ */
+export const safeLocalStorage: SyncableStorage = {
+	getItem: (key: string) => getSafeLocalStorage().getItem(key),
+	setItem: (key: string, value: string) =>
+		getSafeLocalStorage().setItem(key, value),
+	removeItem: (key: string) => getSafeLocalStorage().removeItem(key),
+	subscribe: (key: string, callback: (value: string | null) => void) => {
+		const storage = getSafeLocalStorage();
+		return storage.subscribe?.(key, callback) ?? (() => {});
+	},
+};
 
 /**
  * Parse a cookie string to extract the value for a specific key.

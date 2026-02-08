@@ -1,5 +1,3 @@
-"use client";
-
 import { GithubIcon } from "@/assets/GithubIcon";
 import { Button } from "@/components/ui/button";
 import { Accounts } from "./blocks/Accounts";
