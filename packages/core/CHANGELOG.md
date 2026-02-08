@@ -1,5 +1,11 @@
 # @kheopskit/core
 
+## 0.1.0
+
+### Minor Changes
+
+- [#29](https://github.com/kheopskit/kheopskit/pull/29) [`27518cf`](https://github.com/kheopskit/kheopskit/commit/27518cf85af04fcc617365193fe885a4f9184fcd) Thanks [@0xKheops](https://github.com/0xKheops)! - feat: SSR support with cookie-based storage and storageKey namespace option
+
 ## 0.0.22
 
 ### Patch Changes
