@@ -367,7 +367,7 @@ importers:
       '@walletconnect/utils':
         specifier: ^2.23.4
         version: 2.23.4(db0@0.3.4)(ioredis@5.9.2)(typescript@5.9.3)(zod@4.3.6)
-      lodash:
+      lodash-es:
         specifier: ^4.17.23
         version: 4.17.23
       mipd:
@@ -377,9 +377,9 @@ importers:
         specifier: ^2.45.1
         version: 2.45.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
     devDependencies:
-      '@types/lodash':
-        specifier: ^4.17.23
-        version: 4.17.23
+      '@types/lodash-es':
+        specifier: ^4.17.12
+        version: 4.17.12
       polkadot-api:
         specifier: ^1.23.3
         version: 1.23.3(bufferutil@4.1.0)(jiti@2.6.1)(postcss@8.5.6)(rxjs@7.8.2)(tsx@4.21.0)(utf-8-validate@5.0.10)
@@ -2883,6 +2883,9 @@ packages:
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
+  '@types/lodash-es@4.17.12':
+    resolution: {integrity: sha512-0NgftHUcV4v34VhXm8QBSftKVXtbkBG3ViCjs6+eJ5a6y6Mi/jiFGPc1sC7QK+9BFhWrURE3EOggmWaSxL9OzQ==}
+
   '@types/lodash@4.17.23':
     resolution: {integrity: sha512-RDvF6wTulMPjrNdCoYRC8gNR880JNGT8uB+REUpC2Ns4pRqQJhGz90wh7rgdXDPpCczF3VGktDuFGVnz8zP7HA==}
 
@@ -4341,6 +4344,9 @@ packages:
   locate-path@5.0.0:
     resolution: {integrity: sha512-t7hw9pI+WvuwNJXwk5zVHpyhIqzg2qTlklJOf0mVxGSbe3Fp2VieZcduNYjaLDoy6p9uGpQEGWG87WpMKlNq8g==}
     engines: {node: '>=8'}
+
+  lodash-es@4.17.23:
+    resolution: {integrity: sha512-kVI48u3PZr38HdYz98UmfPnXl2DXrpdctLrFLCd3kOx1xUkOmpFPx7gCWWM5MPkL/fD8zb+Ph0QzjGFs4+hHWg==}
 
   lodash.defaults@4.2.0:
     resolution: {integrity: sha512-qjxPLHd3r5DnsdGacqOMU6pb/avJzdh9tFX2ymgoZE27BmjXrNy/y4LoaiTeAb+O3gL8AfpJGtqfX/ae2leYYQ==}
@@ -9748,6 +9754,10 @@ snapshots:
 
   '@types/estree@1.0.8': {}
 
+  '@types/lodash-es@4.17.12':
+    dependencies:
+      '@types/lodash': 4.17.23
+
   '@types/lodash@4.17.23': {}
 
   '@types/ms@2.1.0':
@@ -12687,6 +12697,8 @@ snapshots:
     dependencies:
       p-locate: 4.1.0
 
+  lodash-es@4.17.23: {}
+
   lodash.defaults@4.2.0:
     optional: true
 
@@ -12697,7 +12709,8 @@ snapshots:
 
   lodash.startcase@4.4.0: {}
 
-  lodash@4.17.23: {}
+  lodash@4.17.23:
+    optional: true
 
   log-symbols@7.0.1:
     dependencies:

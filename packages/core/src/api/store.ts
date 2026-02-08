@@ -1,11 +1,11 @@
-import { uniq } from "lodash";
+import { uniq } from "lodash-es";
 import { createStore } from "../utils/createStore";
 import { cookieStorage, safeLocalStorage } from "../utils/storage";
 import { parseWalletId, type WalletId } from "../utils/WalletId";
 import { DEFAULT_STORAGE_KEY } from "./config";
 import type { CachedAccount, CachedWallet } from "./types";
 
-export type KheopskitStoreData = {
+type KheopskitStoreData = {
 	autoReconnect?: WalletId[];
 	/** Cached wallet state for SSR hydration to prevent UI flash */
 	cachedWallets?: CachedWallet[];
@@ -15,7 +15,7 @@ export type KheopskitStoreData = {
 
 const DEFAULT_SETTINGS: KheopskitStoreData = {};
 
-export type CreateKheopskitStoreOptions = {
+type CreateKheopskitStoreOptions = {
 	/**
 	 * Cookie string for SSR hydration.
 	 * When provided, uses cookieStorage instead of localStorage.

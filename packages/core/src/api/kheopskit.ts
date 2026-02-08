@@ -25,6 +25,9 @@ import { createKheopskitStore } from "./store";
 import type { KheopskitConfig, Wallet, WalletAccount } from "./types";
 import { getWallets$ } from "./wallets";
 
+const arraysEqual = (a: string[], b: string[]) =>
+	a.length === b.length && a.every((v, i) => v === b[i]);
+
 export type { KheopskitConfig } from "./types";
 
 export type KheopskitState = {
@@ -44,9 +47,12 @@ export type KheopskitState = {
 export const getKheopskit$ = (
 	config?: Partial<KheopskitConfig>,
 	ssrCookies?: string,
+	existingStore?: ReturnType<typeof createKheopskitStore>,
 ) => {
 	const kc = resolveConfig(config);
-	const store = createKheopskitStore({ ssrCookies, storageKey: kc.storageKey });
+	const store =
+		existingStore ??
+		createKheopskitStore({ ssrCookies, storageKey: kc.storageKey });
 
 	if (kc.debug) console.debug("[kheopskit] config", kc);
 
@@ -131,13 +137,16 @@ export const getKheopskit$ = (
 				// Debounce to avoid excessive writes
 				debounceTime(1000),
 				// Only persist if state actually changed
-				distinctUntilChanged(
-					(prev, curr) =>
-						JSON.stringify(prev.wallets.items.map((w) => w.id)) ===
-							JSON.stringify(curr.wallets.items.map((w) => w.id)) &&
-						JSON.stringify(prev.accounts.items.map((a) => a.id)) ===
-							JSON.stringify(curr.accounts.items.map((a) => a.id)),
-				),
+				distinctUntilChanged((prev, curr) => {
+					const prevWalletIds = prev.wallets.items.map((w) => w.id);
+					const currWalletIds = curr.wallets.items.map((w) => w.id);
+					const prevAccountIds = prev.accounts.items.map((a) => a.id);
+					const currAccountIds = curr.accounts.items.map((a) => a.id);
+					return (
+						arraysEqual(prevWalletIds, currWalletIds) &&
+						arraysEqual(prevAccountIds, currAccountIds)
+					);
+				}),
 			)
 			.subscribe(({ wallets, accounts }) => {
 				// Only cache connected wallets and their accounts

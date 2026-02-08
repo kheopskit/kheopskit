@@ -8,13 +8,8 @@
 		},
 		"packages/core": {
 			"ignore": [
-				"src/utils/getQuery.ts",
-				"src/api/store.ts",
-				"src/api/polkadot/wallets.ts",
-				"src/utils/getAccountAddressType.ts",
 				"src/utils/sleep.ts",
 				"src/utils/throwAfter.ts",
-				"src/utils/WalletAccountId.ts",
 				"src/utils/storage.ts"
 			],
 			"ignoreDependencies": ["@walletconnect/types", "@walletconnect/utils"]

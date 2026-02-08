@@ -46,21 +46,27 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 }) => {
 	const resolvedConfig = useMemo(() => resolveConfig(config), [config]);
 
-	// Create a temporary store to read cached state for SSR
+	// Create a single store for both reading cached state and powering the observable
+	const kheopskitStore = useMemo(
+		() =>
+			createKheopskitStore({
+				ssrCookies,
+				storageKey: resolvedConfig.storageKey,
+			}),
+		[ssrCookies, resolvedConfig.storageKey],
+	);
+
+	// Read cached state from the store for SSR hydration
 	const cachedState = useMemo(() => {
 		if (ssrCookies === undefined) {
 			return { wallets: [], accounts: [] };
 		}
-		const tempStore = createKheopskitStore({
-			ssrCookies,
-			storageKey: resolvedConfig.storageKey,
-		});
-		const cached = tempStore.getCachedState();
+		const cached = kheopskitStore.getCachedState();
 		return {
 			wallets: cached.wallets.map(hydrateWallet),
 			accounts: cached.accounts.map(hydrateAccount),
 		};
-	}, [ssrCookies, resolvedConfig.storageKey]);
+	}, [ssrCookies, kheopskitStore]);
 
 	const defaultValue = useMemo<KheopskitState>(
 		() => ({
@@ -75,11 +81,11 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 	const store = useMemo(
 		() =>
 			createStore(
-				getKheopskit$(config, ssrCookies),
+				getKheopskit$(config, ssrCookies, kheopskitStore),
 				defaultValue,
 				defaultValue,
 			),
-		[config, ssrCookies, defaultValue],
+		[config, ssrCookies, kheopskitStore, defaultValue],
 	);
 
 	// Cleanup store subscriptions when store changes or component unmounts

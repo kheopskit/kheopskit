@@ -14,7 +14,7 @@ import { parseWalletId, type WalletId } from "./WalletId";
 /**
  * Error thrown when trying to use a placeholder wallet that hasn't fully loaded yet.
  */
-export class PendingWalletError extends Error {
+class PendingWalletError extends Error {
 	constructor(walletId: string) {
 		super(
 			`Wallet ${walletId} is still loading. Wait for isHydrating to be false before calling connect/disconnect.`,
@@ -37,27 +37,16 @@ export const hydrateWallet = (cached: CachedWallet): Wallet => {
 		throw new PendingWalletError(cached.id);
 	};
 
+	// All wallet types (injected + AppKit) are hydrated as injected placeholders.
+	// AppKit wallets can't be hydrated properly without the AppKit instance,
+	// so they use injected type as a display fallback and will be replaced
+	// when the real wallet loads.
+
 	if (platform === "polkadot") {
-		if (cached.type === "injected") {
-			return {
-				id: cached.id,
-				platform: "polkadot",
-				type: "injected",
-				extensionId: identifier,
-				extension: undefined,
-				name: cached.name,
-				icon: cached.icon,
-				isConnected: cached.isConnected,
-				connect: throwPending,
-				disconnect: throwPending,
-			} satisfies PolkadotInjectedWallet;
-		}
-		// AppKit wallets can't be hydrated properly without the AppKit instance
-		// They will be replaced when the real wallet loads
 		return {
 			id: cached.id,
 			platform: "polkadot",
-			type: "injected", // Fallback to injected type for display
+			type: "injected",
 			extensionId: identifier,
 			extension: undefined,
 			name: cached.name,
@@ -69,27 +58,12 @@ export const hydrateWallet = (cached: CachedWallet): Wallet => {
 	}
 
 	if (platform === "ethereum") {
-		if (cached.type === "injected") {
-			return {
-				id: cached.id,
-				platform: "ethereum",
-				type: "injected",
-				providerId: identifier,
-				provider: {} as never, // Placeholder - will be replaced by real wallet
-				name: cached.name,
-				icon: cached.icon,
-				isConnected: cached.isConnected,
-				connect: throwPending,
-				disconnect: throwPending,
-			} satisfies EthereumInjectedWallet;
-		}
-		// AppKit wallets can't be hydrated properly without the AppKit instance
 		return {
 			id: cached.id,
 			platform: "ethereum",
-			type: "injected", // Fallback to injected type for display
+			type: "injected",
 			providerId: identifier,
-			provider: {} as never,
+			provider: {} as never, // Placeholder - will be replaced by real wallet
 			name: cached.name,
 			icon: cached.icon,
 			isConnected: cached.isConnected,

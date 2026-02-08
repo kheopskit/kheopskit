@@ -74,23 +74,19 @@ export const parseCookie = (
 ): string | null => {
 	if (!cookieString) return null;
 
-	const cookies = cookieString.split(";").reduce(
-		(acc, cookie) => {
-			const [k, ...v] = cookie.split("=");
-			const cookieKey = k?.trim();
-			if (cookieKey) {
-				try {
-					acc[cookieKey] = decodeURIComponent(v.join("=").trim());
-				} catch {
-					// Malformed cookie value, skip it
-				}
+	for (const cookie of cookieString.split(";")) {
+		const [k, ...v] = cookie.split("=");
+		const cookieKey = k?.trim();
+		if (cookieKey === key) {
+			try {
+				return decodeURIComponent(v.join("=").trim());
+			} catch {
+				return null; // Malformed cookie value
 			}
-			return acc;
-		},
-		{} as Record<string, string>,
-	);
+		}
+	}
 
-	return cookies[key] ?? null;
+	return null;
 };
 
 /**
