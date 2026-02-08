@@ -84,69 +84,69 @@ export const getAppKitWallets$ = (
 					});
 
 					const unsubProviders = appKit.subscribeProviders((providers) => {
-				status$.next({
-					isPolkadotConnected: !!providers.polkadot,
-					isEthereumConnected: !!providers.eip155,
-				});
-			});
+						status$.next({
+							isPolkadotConnected: !!providers.polkadot,
+							isEthereumConnected: !!providers.eip155,
+						});
+					});
 
-			const polkadotWallet$ = appKit.chainNamespaces.includes("polkadot")
-				? status$.pipe(
-						map((s) => s.isPolkadotConnected),
-						distinctUntilChanged(),
-						map((isConnected): PolkadotAppKitWallet => {
-							const walletInfo = appKit.getWalletInfo();
+					const polkadotWallet$ = appKit.chainNamespaces.includes("polkadot")
+						? status$.pipe(
+								map((s) => s.isPolkadotConnected),
+								distinctUntilChanged(),
+								map((isConnected): PolkadotAppKitWallet => {
+									const walletInfo = appKit.getWalletInfo();
 
-							return {
-								id: getWalletId("polkadot", "walletconnect"),
-								platform: "polkadot",
-								type: "appKit",
-								appKit, // todo maybe we dont want to expose the appKit instance
-								name: walletInfo?.name ?? "WalletConnect",
-								icon: walletInfo?.icon ?? WALLET_CONNECT_ICON,
-								connect: async () => {
-									if (!isConnected) await appKit.open();
-								},
-								disconnect: () => {
-									if (isConnected) appKit.disconnect();
-								},
-								isConnected,
-							};
-						}),
-					)
-				: of(undefined);
+									return {
+										id: getWalletId("polkadot", "walletconnect"),
+										platform: "polkadot",
+										type: "appKit",
+										appKit, // todo maybe we dont want to expose the appKit instance
+										name: walletInfo?.name ?? "WalletConnect",
+										icon: walletInfo?.icon ?? WALLET_CONNECT_ICON,
+										connect: async () => {
+											if (!isConnected) await appKit.open();
+										},
+										disconnect: () => {
+											if (isConnected) appKit.disconnect();
+										},
+										isConnected,
+									};
+								}),
+							)
+						: of(undefined);
 
-			const ethereumWallet$ = appKit.chainNamespaces.includes("eip155")
-				? status$.pipe(
-						map((s) => s.isEthereumConnected),
-						distinctUntilChanged(),
-						map((isConnected): EthereumAppKitWallet => {
-							const walletInfo = appKit.getWalletInfo();
+					const ethereumWallet$ = appKit.chainNamespaces.includes("eip155")
+						? status$.pipe(
+								map((s) => s.isEthereumConnected),
+								distinctUntilChanged(),
+								map((isConnected): EthereumAppKitWallet => {
+									const walletInfo = appKit.getWalletInfo();
 
-							return {
-								id: getWalletId("ethereum", "walletconnect"),
-								platform: "ethereum",
-								type: "appKit",
-								appKit,
-								name: walletInfo?.name ?? "WalletConnect",
-								icon: walletInfo?.icon ?? WALLET_CONNECT_ICON,
-								connect: () => appKit.open(),
-								disconnect: () => appKit.disconnect(),
-								isConnected,
-							};
-						}),
-					)
-				: of(undefined);
+									return {
+										id: getWalletId("ethereum", "walletconnect"),
+										platform: "ethereum",
+										type: "appKit",
+										appKit,
+										name: walletInfo?.name ?? "WalletConnect",
+										icon: walletInfo?.icon ?? WALLET_CONNECT_ICON,
+										connect: () => appKit.open(),
+										disconnect: () => appKit.disconnect(),
+										isConnected,
+									};
+								}),
+							)
+						: of(undefined);
 
-			const sub = combineLatest({
-				polkadot: polkadotWallet$,
-				ethereum: ethereumWallet$,
-			}).subscribe(subscriber);
+					const sub = combineLatest({
+						polkadot: polkadotWallet$,
+						ethereum: ethereumWallet$,
+					}).subscribe(subscriber);
 
-			return () => {
-				sub.unsubscribe();
-				unsubProviders();
-			};
+					return () => {
+						sub.unsubscribe();
+						unsubProviders();
+					};
 				});
 			}),
 			shareReplay({ refCount: true, bufferSize: 1 }),
