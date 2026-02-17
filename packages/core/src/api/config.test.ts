@@ -10,6 +10,7 @@ describe("resolveConfig", () => {
 			expect(result).toEqual({
 				autoReconnect: true,
 				platforms: ["polkadot"],
+				polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa"],
 				debug: false,
 				storageKey: "kheopskit",
 				hydrationGracePeriod: 500,
@@ -21,6 +22,11 @@ describe("resolveConfig", () => {
 
 			expect(result.autoReconnect).toBe(true);
 			expect(result.platforms).toEqual(["polkadot"]);
+			expect(result.polkadotAccountTypes).toEqual([
+				"sr25519",
+				"ed25519",
+				"ecdsa",
+			]);
 			expect(result.debug).toBe(false);
 			expect(result.storageKey).toBe("kheopskit");
 		});
@@ -40,7 +46,20 @@ describe("resolveConfig", () => {
 
 			expect(result.autoReconnect).toBe(true);
 			expect(result.platforms).toEqual(["ethereum"]);
+			expect(result.polkadotAccountTypes).toEqual([
+				"sr25519",
+				"ed25519",
+				"ecdsa",
+			]);
 			expect(result.debug).toBe(false);
+		});
+
+		it("overrides polkadotAccountTypes", () => {
+			const result = resolveConfig({
+				polkadotAccountTypes: ["ethereum"],
+			});
+
+			expect(result.polkadotAccountTypes).toEqual(["ethereum"]);
 		});
 
 		it("overrides debug", () => {
@@ -62,6 +81,7 @@ describe("resolveConfig", () => {
 			const result = resolveConfig({
 				autoReconnect: false,
 				platforms: ["ethereum"],
+				polkadotAccountTypes: ["ecdsa"],
 				debug: true,
 				storageKey: "my-custom-key",
 			});
@@ -69,6 +89,7 @@ describe("resolveConfig", () => {
 			expect(result).toEqual({
 				autoReconnect: false,
 				platforms: ["ethereum"],
+				polkadotAccountTypes: ["ecdsa"],
 				debug: true,
 				storageKey: "my-custom-key",
 				hydrationGracePeriod: 500,

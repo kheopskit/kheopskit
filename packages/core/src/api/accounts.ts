@@ -18,6 +18,7 @@ export const getAccounts$ = (
 							wallets.pipe(
 								map((w) => w.filter((w) => w.platform === "polkadot")),
 							),
+							config.polkadotAccountTypes,
 						);
 					case "ethereum":
 						return getEthereumAccounts$(

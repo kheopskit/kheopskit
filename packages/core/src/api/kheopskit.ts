@@ -76,7 +76,13 @@ export const getKheopskit$ = (
 		}
 		return wallet;
 	});
-	const cachedAccounts = cachedState.accounts.map(hydrateAccount);
+	const cachedAccounts = cachedState.accounts
+		.map(hydrateAccount)
+		.filter(
+			(account) =>
+				account.platform !== "polkadot" ||
+				kc.polkadotAccountTypes.includes(account.type),
+		);
 
 	if (kc.debug && cachedWallets.length > 0) {
 		console.debug("[kheopskit] hydrating from cache:", {

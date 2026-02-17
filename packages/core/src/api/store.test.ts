@@ -154,6 +154,62 @@ describe("createKheopskitStore", () => {
 			expect(values[0]?.autoReconnect).not.toContain("polkadot:talisman");
 			sub.unsubscribe();
 		});
+
+		it("preserves polkadotAccountType in compact cookie storage", () => {
+			const kstore = createKheopskitStore({ ssrCookies: "" });
+			kstore.setCachedState(
+				[
+					{
+						id: "polkadot:talisman" as WalletId,
+						platform: "polkadot",
+						type: "injected",
+						name: "Talisman",
+						isConnected: true,
+					},
+				],
+				[
+					{
+						id: "polkadot:talisman::5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+						platform: "polkadot",
+						address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+						polkadotAccountType: "ethereum",
+						walletId: "polkadot:talisman" as WalletId,
+						walletName: "Talisman",
+					},
+				],
+			);
+
+			const kstoreReloaded = createKheopskitStore({
+				ssrCookies: document.cookie,
+			});
+			const cached = kstoreReloaded.getCachedState();
+
+			expect(cached.accounts).toHaveLength(1);
+			expect(cached.accounts[0]?.polkadotAccountType).toBe("ethereum");
+		});
+
+		it("reads legacy compact account entries without polkadotAccountType", () => {
+			const legacyCompact = {
+				v: 1,
+				w: [["polkadot:talisman", "Talisman", 1, 0]],
+				a: [
+					[
+						"polkadot:talisman",
+						"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+						null,
+						null,
+					],
+				],
+			};
+			// biome-ignore lint/suspicious/noDocumentCookie: necessary for test setup
+			document.cookie = `${STORAGE_KEY}=${encodeURIComponent(JSON.stringify(legacyCompact))};path=/`;
+
+			const kstore = createKheopskitStore({ ssrCookies: document.cookie });
+			const cached = kstore.getCachedState();
+
+			expect(cached.accounts).toHaveLength(1);
+			expect(cached.accounts[0]?.polkadotAccountType).toBeUndefined();
+		});
 	});
 
 	describe("observable behavior", () => {

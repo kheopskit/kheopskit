@@ -10,6 +10,7 @@ export const DEFAULT_STORAGE_KEY = "kheopskit";
 const DEFAULT_CONFIG: KheopskitConfig = {
 	autoReconnect: true,
 	platforms: ["polkadot"],
+	polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa"],
 	debug: false,
 	storageKey: DEFAULT_STORAGE_KEY,
 	hydrationGracePeriod: 500,
