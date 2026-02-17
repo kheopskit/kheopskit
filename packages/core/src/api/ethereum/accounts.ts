@@ -24,6 +24,38 @@ import type {
 	EthereumWallet,
 } from "../types";
 
+const normalizeEvmChainId = (value: unknown): number | undefined => {
+	let raw = value;
+
+	if (typeof raw === "string" && raw.startsWith("eip155:")) {
+		raw = raw.slice("eip155:".length);
+	}
+
+	if (typeof raw === "bigint") {
+		return raw >= 0n ? Number(raw) : undefined;
+	}
+
+	if (typeof raw === "number") {
+		return Number.isInteger(raw) && raw >= 0 ? raw : undefined;
+	}
+
+	if (typeof raw === "string") {
+		const normalized = raw.trim().toLowerCase();
+		if (!normalized) return undefined;
+		const parsed = normalized.startsWith("0x")
+			? Number.parseInt(normalized, 16)
+			: Number.parseInt(normalized, 10);
+		return Number.isNaN(parsed) ? undefined : parsed;
+	}
+
+	return undefined;
+};
+
+const toCaipNetworkId = (value: unknown): string | undefined => {
+	const chainId = normalizeEvmChainId(value);
+	return chainId === undefined ? undefined : `eip155:${chainId}`;
+};
+
 const getInjectedWalletAccounts$ = (
 	wallet: EthereumInjectedWallet,
 ): Observable<EthereumAccount[]> => {
@@ -61,15 +93,7 @@ const getInjectedWalletAccounts$ = (
 			};
 
 			const handleChainChanged = (chainIdHex: unknown) => {
-				const parsed =
-					typeof chainIdHex === "string"
-						? Number.parseInt(chainIdHex, 16)
-						: typeof chainIdHex === "number"
-							? chainIdHex
-							: undefined;
-				chainId$.next(
-					parsed !== undefined && !Number.isNaN(parsed) ? parsed : undefined,
-				);
+				chainId$.next(normalizeEvmChainId(chainIdHex));
 			};
 
 			const handleDisconnect = () => {
@@ -157,7 +181,10 @@ const getAppKitAccounts$ = (
 			const caipNetworkId$ = new ReplaySubject<string>(1);
 
 			const handleChainChanged = (chainId: unknown) => {
-				caipNetworkId$.next(`eip155:${chainId}`);
+				const caipNetworkId = toCaipNetworkId(chainId);
+				if (caipNetworkId) {
+					caipNetworkId$.next(caipNetworkId);
+				}
 			};
 
 			provider.on("chainChanged", handleChainChanged);
@@ -167,11 +194,7 @@ const getAppKitAccounts$ = (
 				.pipe(
 					distinctUntilChanged(),
 					map((caipNetworkId) => {
-						// Extract numeric chain ID from CAIP-2 format ("eip155:1" -> 1)
-						const chainId = Number.parseInt(
-							caipNetworkId.split(":")[1] ?? "",
-							10,
-						);
+						const chainId = normalizeEvmChainId(caipNetworkId);
 						const transport = custom(
 							wrapWalletConnectProvider(
 								provider as EIP1193Provider,
@@ -180,10 +203,7 @@ const getAppKitAccounts$ = (
 								caipNetworkId,
 							),
 						);
-						return {
-							transport,
-							chainId: Number.isNaN(chainId) ? undefined : chainId,
-						};
+						return { transport, chainId };
 					}),
 					map(({ transport, chainId }) =>
 						account.allAccounts.map((acc, i): EthereumAccount => {

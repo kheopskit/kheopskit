@@ -1,7 +1,7 @@
 import { firstValueFrom, of, take, toArray } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import type { WalletId } from "../../utils/WalletId";
-import type { EthereumInjectedWallet } from "../types";
+import type { EthereumAppKitWallet, EthereumInjectedWallet } from "../types";
 
 // Valid Ethereum address for tests
 const MOCK_ADDRESS = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
@@ -56,6 +56,34 @@ const createMockInjectedWallet = (
 	isConnected: true,
 	connect: vi.fn(),
 	disconnect: vi.fn(),
+	...overrides,
+});
+
+const createMockAppKitWallet = (
+	provider: ReturnType<typeof createMockProvider>,
+	overrides: Partial<EthereumAppKitWallet> = {},
+): EthereumAppKitWallet => ({
+	platform: "ethereum",
+	type: "appKit",
+	id: "ethereum:appkit" as WalletId,
+	name: "AppKit",
+	icon: "data:image/svg+xml,...",
+	isConnected: true,
+	connect: vi.fn(),
+	disconnect: vi.fn(),
+	appKit: {
+		getAccount: vi.fn(() => ({
+			allAccounts: [{ address: MOCK_ADDRESS }],
+		})),
+		getProvider: vi.fn(
+			() =>
+				provider as unknown as EthereumAppKitWallet["appKit"] extends infer T
+					? T extends { getProvider: (...args: never[]) => infer P }
+						? P
+						: never
+					: never,
+		),
+	} as unknown as EthereumAppKitWallet["appKit"],
 	...overrides,
 });
 
@@ -248,6 +276,30 @@ describe("Ethereum chain ID tracking", () => {
 			expect(results).toHaveLength(2);
 			expect(results[0]?.[0]?.chainId).toBe(1);
 			expect(results[1]?.[0]?.chainId).toBe(10);
+		});
+	});
+
+	describe("appKit wallet chainId", () => {
+		it("normalizes hex chainId from provider request", async () => {
+			const provider = createMockProvider();
+			(provider as unknown as { session: { topic: string } }).session = {
+				topic: "test-topic",
+			};
+			(provider as unknown as { off: typeof provider.removeListener }).off =
+				provider.removeListener;
+
+			provider.request.mockImplementation(async ({ method }) => {
+				if (method === "eth_chainId") return "0x89";
+				return null;
+			});
+
+			const wallet = createMockAppKitWallet(provider);
+			const { getEthereumAccounts$ } = await importAccounts();
+
+			const accounts = await firstValueFrom(getEthereumAccounts$(of([wallet])));
+
+			expect(accounts).toHaveLength(1);
+			expect(accounts[0]?.chainId).toBe(137);
 		});
 	});
 });
