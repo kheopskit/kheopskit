@@ -1,6 +1,6 @@
 ---
-"@kheopskit/core": patch
-"kheopskit": patch
+"@kheopskit/core": minor
+"kheopskit": minor
 ---
 
 polkadot account type filter

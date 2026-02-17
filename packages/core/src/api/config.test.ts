@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { resolveConfig } from "./config";
 import type { KheopskitConfig } from "./types";
 
@@ -113,6 +113,33 @@ describe("resolveConfig", () => {
 
 			expect(result1).not.toBe(result2);
 			expect(result1).toEqual(result2);
+		});
+	});
+
+	describe("validation", () => {
+		it("warns about unrecognized polkadotAccountTypes", () => {
+			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+			resolveConfig({
+				polkadotAccountTypes: ["sr25519", "typo" as never],
+			});
+
+			expect(warnSpy).toHaveBeenCalledWith(
+				expect.stringContaining("Unknown polkadotAccountTypes"),
+			);
+			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('"typo"'));
+			warnSpy.mockRestore();
+		});
+
+		it("does not warn for valid polkadotAccountTypes", () => {
+			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+			resolveConfig({
+				polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa", "ethereum"],
+			});
+
+			expect(warnSpy).not.toHaveBeenCalled();
+			warnSpy.mockRestore();
 		});
 	});
 });

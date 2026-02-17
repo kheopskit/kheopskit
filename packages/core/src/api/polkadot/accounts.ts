@@ -120,6 +120,8 @@ const getAppKitAccounts$ = (wallet: PolkadotAppKitWallet) => {
 				polkadotSigner: getAppKitPolkadotSigner(wallet.appKit, acc.address),
 				genesisHash: null,
 				name: `${wallet.name} Polkadot`,
+				// WalletConnect (Reown AppKit) doesn't expose account key type;
+				// default to sr25519, which is the most common Polkadot key type.
 				type: "sr25519",
 			}),
 		),

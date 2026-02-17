@@ -245,6 +245,41 @@ describe("KheopskitProvider", () => {
 
 			expect(screen.getByTestId("hook-wallets")).toBeInTheDocument();
 		});
+
+		it("filters cached polkadot accounts by polkadotAccountTypes during SSR hydration", () => {
+			// Compact cookie with wallet + ecdsa account (type index 2)
+			const compactCookie = {
+				v: 1,
+				w: [["polkadot:talisman", "Talisman", 1, 0]],
+				a: [
+					[
+						"polkadot:talisman",
+						"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+						null,
+						null,
+						2,
+					],
+				],
+			};
+			const cookieValue = encodeURIComponent(JSON.stringify(compactCookie));
+			// biome-ignore lint/suspicious/noDocumentCookie: necessary for test setup
+			document.cookie = `kheopskit=${cookieValue};path=/`;
+			const ssrCookies = document.cookie;
+
+			render(
+				<KheopskitProvider
+					config={{ polkadotAccountTypes: ["sr25519"] }}
+					ssrCookies={ssrCookies}
+				>
+					<ContextConsumer />
+				</KheopskitProvider>,
+			);
+
+			// ecdsa account should be filtered out since only sr25519 is allowed
+			expect(screen.getByTestId("accounts-count")).toHaveTextContent("0");
+			// wallet should still appear
+			expect(screen.getByTestId("wallets-count")).toHaveTextContent("1");
+		});
 	});
 
 	describe("config + ssrCookies combinations", () => {

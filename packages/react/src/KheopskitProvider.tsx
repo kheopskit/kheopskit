@@ -72,7 +72,13 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 		const cached = kheopskitStore.getCachedState();
 		return {
 			wallets: cached.wallets.map(hydrateWallet),
-			accounts: cached.accounts.map(hydrateAccount),
+			accounts: cached.accounts
+				.map(hydrateAccount)
+				.filter(
+					(account) =>
+						account.platform !== "polkadot" ||
+						resolvedConfig.polkadotAccountTypes.includes(account.type),
+				),
 			config: resolvedConfig,
 			isHydrating: true,
 		};
