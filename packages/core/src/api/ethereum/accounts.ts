@@ -24,6 +24,38 @@ import type {
 	EthereumWallet,
 } from "../types";
 
+const normalizeEvmChainId = (value: unknown): number | undefined => {
+	let raw = value;
+
+	if (typeof raw === "string" && raw.startsWith("eip155:")) {
+		raw = raw.slice("eip155:".length);
+	}
+
+	if (typeof raw === "bigint") {
+		return raw >= 0n ? Number(raw) : undefined;
+	}
+
+	if (typeof raw === "number") {
+		return Number.isInteger(raw) && raw >= 0 ? raw : undefined;
+	}
+
+	if (typeof raw === "string") {
+		const normalized = raw.trim().toLowerCase();
+		if (!normalized) return undefined;
+		const parsed = normalized.startsWith("0x")
+			? Number.parseInt(normalized, 16)
+			: Number.parseInt(normalized, 10);
+		return Number.isNaN(parsed) ? undefined : parsed;
+	}
+
+	return undefined;
+};
+
+const toCaipNetworkId = (value: unknown): string | undefined => {
+	const chainId = normalizeEvmChainId(value);
+	return chainId === undefined ? undefined : `eip155:${chainId}`;
+};
+
 const getInjectedWalletAccounts$ = (
 	wallet: EthereumInjectedWallet,
 ): Observable<EthereumAccount[]> => {
@@ -31,8 +63,14 @@ const getInjectedWalletAccounts$ = (
 
 	return getCachedObservable$(`accounts:${wallet.id}`, () =>
 		new Observable<EthereumAccount[]>((subscriber) => {
-			const getAccount = (address: string, i: number): EthereumAccount => {
-				// console.log("[Injected] createWalletClient", address);
+			const addresses$ = new ReplaySubject<string[]>(1);
+			const chainId$ = new ReplaySubject<number | undefined>(1);
+
+			const getAccount = (
+				address: string,
+				i: number,
+				chainId: number | undefined,
+			): EthereumAccount => {
 				const client = createWalletClient({
 					account: address as `0x${string}`,
 					transport: custom(wallet.provider as EIP1193Provider),
@@ -43,35 +81,61 @@ const getInjectedWalletAccounts$ = (
 					platform: "ethereum",
 					client,
 					address: getAddress(address),
+					chainId,
 					walletName: wallet.name,
 					walletId: wallet.id,
 					isWalletDefault: i === 0,
 				};
 			};
 
-			const handleAccountsChanged = (addresses: string[]) => {
-				subscriber.next(addresses.map(getAccount));
+			const handleAccountsChanged = (addrs: string[]) => {
+				addresses$.next(addrs);
 			};
 
-			// subscribe to changes
-			wallet.provider.on("accountsChanged", handleAccountsChanged);
+			const handleChainChanged = (chainIdHex: unknown) => {
+				chainId$.next(normalizeEvmChainId(chainIdHex));
+			};
 
-			// initial value
+			const handleDisconnect = () => {
+				chainId$.next(undefined);
+			};
+
+			// Subscribe to provider events
+			wallet.provider.on("accountsChanged", handleAccountsChanged);
+			wallet.provider.on("chainChanged", handleChainChanged);
+			wallet.provider.on("disconnect", handleDisconnect);
+
+			// Fetch initial values
 			wallet.provider
 				.request({ method: "eth_accounts" })
-				.then((addresses: string[]) => {
-					subscriber.next(addresses.map(getAccount));
-				})
+				.then((addrs: string[]) => addresses$.next(addrs))
 				.catch((err) => {
 					console.error("Failed to get accounts", err);
-					subscriber.next([]);
+					addresses$.next([]);
 				});
+
+			wallet.provider
+				.request({ method: "eth_chainId" })
+				.then(handleChainChanged)
+				.catch(() => chainId$.next(undefined));
+
+			// Combine addresses + chainId into account list
+			const sub = combineLatest([addresses$, chainId$])
+				.pipe(
+					map(([addresses, chainId]) =>
+						addresses.map((addr, i) => getAccount(addr, i, chainId)),
+					),
+				)
+				.subscribe(subscriber);
 
 			return () => {
 				wallet.provider.removeListener(
 					"accountsChanged",
 					handleAccountsChanged,
 				);
+				wallet.provider.removeListener("chainChanged", handleChainChanged);
+				wallet.provider.removeListener("disconnect", handleDisconnect);
+				sub.unsubscribe();
 			};
 		}).pipe(shareReplay({ refCount: true, bufferSize: 1 })),
 	);
@@ -117,7 +181,10 @@ const getAppKitAccounts$ = (
 			const caipNetworkId$ = new ReplaySubject<string>(1);
 
 			const handleChainChanged = (chainId: unknown) => {
-				caipNetworkId$.next(`eip155:${chainId}`);
+				const caipNetworkId = toCaipNetworkId(chainId);
+				if (caipNetworkId) {
+					caipNetworkId$.next(caipNetworkId);
+				}
 			};
 
 			provider.on("chainChanged", handleChainChanged);
@@ -126,19 +193,20 @@ const getAppKitAccounts$ = (
 			const sub = caipNetworkId$
 				.pipe(
 					distinctUntilChanged(),
-					map((caipNetworkId) =>
-						custom(
+					map((caipNetworkId) => {
+						const chainId = normalizeEvmChainId(caipNetworkId);
+						const transport = custom(
 							wrapWalletConnectProvider(
 								provider as EIP1193Provider,
 								// biome-ignore lint/style/noNonNullAssertion: legacy
 								provider.session!.topic,
 								caipNetworkId,
 							),
-						),
-					),
-					map((transport) =>
+						);
+						return { transport, chainId };
+					}),
+					map(({ transport, chainId }) =>
 						account.allAccounts.map((acc, i): EthereumAccount => {
-							// console.log("[AppKit] createWalletClient", acc);
 							const client = createWalletClient({
 								account: acc.address as `0x${string}`,
 								transport,
@@ -151,6 +219,7 @@ const getAppKitAccounts$ = (
 								walletId: wallet.id,
 								address: acc.address as `0x${string}`,
 								client,
+								chainId,
 								isWalletDefault: i === 0,
 							};
 						}),
@@ -201,5 +270,8 @@ export const getEthereumAccounts$ = (
 
 const isSameAccountsList = (a: EthereumAccount[], b: EthereumAccount[]) => {
 	if (a.length !== b.length) return false;
-	return a.every((account, i) => account.id === b[i]?.id);
+	return a.every(
+		(account, i) =>
+			account.id === b[i]?.id && account.chainId === b[i]?.chainId,
+	);
 };

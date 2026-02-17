@@ -15,7 +15,7 @@ type KheopskitStoreData = {
 };
 
 type CompactWalletEntry = [WalletId, string, 0 | 1, 0 | 1];
-type CompactAccountEntry = [WalletId, string, string | null];
+type CompactAccountEntry = [WalletId, string, string | null, number | null];
 
 type CompactStoreV1 = {
 	v: 1;
@@ -163,6 +163,7 @@ const toCompactStore = (data: KheopskitStoreData): CompactStoreV1 => {
 			account.walletId,
 			account.address,
 			account.name ?? null,
+			account.chainId ?? null,
 		],
 	);
 
@@ -191,13 +192,14 @@ const fromCompactStore = (data: CompactStoreV1): KheopskitStoreData => {
 	});
 
 	const accounts: CachedAccount[] = (data.a ?? []).map((item) => {
-		const [walletId, address, name] = item;
+		const [walletId, address, name, chainId] = item;
 		const { platform } = parseWalletId(walletId);
 		return {
 			id: getWalletAccountId(walletId, address),
 			platform,
 			address,
 			name: name ?? undefined,
+			chainId: chainId ?? undefined,
 			walletId,
 			walletName: walletNameMap.get(walletId) ?? walletId,
 		};
