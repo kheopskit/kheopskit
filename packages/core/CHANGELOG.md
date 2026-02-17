@@ -1,5 +1,11 @@
 # @kheopskit/core
 
+## 0.1.2
+
+### Patch Changes
+
+- [#33](https://github.com/kheopskit/kheopskit/pull/33) [`6fb777a`](https://github.com/kheopskit/kheopskit/commit/6fb777ad9605465050a2e477084c6be7426c4abf) Thanks [@0xKheops](https://github.com/0xKheops)! - chainId property on ethereum wallets
+
 ## 0.1.1
 
 ### Patch Changes
