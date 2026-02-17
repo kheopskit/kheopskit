@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WalletAccount } from "../api";
 import { sortAccounts } from "./sortAccounts";
+import { getWalletId } from "./WalletId";
 
 const createAccount = (
 	platform: "polkadot" | "ethereum",
@@ -8,12 +9,17 @@ const createAccount = (
 	name: string | undefined,
 	address: string,
 ): WalletAccount =>
-	({
-		platform,
-		walletName,
-		name,
-		address,
-	}) as WalletAccount;
+	((walletId) =>
+		({
+			id: `${walletId}::${address}`,
+			platform,
+			walletId,
+			walletName,
+			name,
+			address,
+		}) as WalletAccount)(
+		getWalletId(platform, walletName.toLowerCase().replace(/\s+/g, "-")),
+	);
 
 describe("sortAccounts", () => {
 	describe("platform sorting", () => {
@@ -179,7 +185,7 @@ describe("sortAccounts", () => {
 			expect(sortAccounts(metamask, rainbow)).toBeLessThan(0);
 		});
 
-		it("returns 0 for same wallet name (preserves provider order)", () => {
+		it("sorts by id when wallet names match", () => {
 			const account1 = createAccount(
 				"ethereum",
 				"MetaMask",
@@ -193,7 +199,7 @@ describe("sortAccounts", () => {
 				"0x742d35Cc6634C0532925a3b844Bc9e7595f8fEb2",
 			);
 
-			expect(sortAccounts(account1, account2)).toBe(0);
+			expect(sortAccounts(account1, account2)).toBeLessThan(0);
 		});
 	});
 

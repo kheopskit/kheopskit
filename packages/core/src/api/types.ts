@@ -125,8 +125,10 @@ export type PolkadotAccount = InjectedPolkadotAccount & {
 export type EthereumAccount = {
 	id: WalletAccountId;
 	platform: "ethereum";
-	client: WalletClient<CustomTransport, undefined, Account, undefined>; // let consumer knows chain is unknown
+	client: WalletClient<CustomTransport, undefined, Account, undefined>;
 	address: `0x${string}`;
+	/** Current chain ID the wallet is connected to. `undefined` while loading or after provider disconnect. */
+	chainId: number | undefined;
 	walletName: string;
 	walletId: string;
 	isWalletDefault: boolean;
@@ -156,6 +158,8 @@ export type CachedAccount = {
 	platform: WalletPlatform;
 	address: string;
 	name?: string;
+	/** Cached chain ID for Ethereum accounts. */
+	chainId?: number;
 	walletId: WalletId;
 	walletName: string;
 };

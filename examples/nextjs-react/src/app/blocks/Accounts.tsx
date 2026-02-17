@@ -33,6 +33,7 @@ export const Accounts = () => {
 						<TableHead>Wallet</TableHead>
 						<TableHead className="w-1/3">Name</TableHead>
 						<TableHead className="w-1/3">Address</TableHead>
+						<TableHead>Chain ID</TableHead>
 						<TableHead> </TableHead>
 					</TableRow>
 				</TableHeader>
@@ -59,6 +60,9 @@ const AccountRow: FC<{ account: WalletAccount }> = ({ account }) => {
 				{account.platform === "polkadot" ? account.name : null}
 			</TableCell>
 			<TableCell className="font-mono">{shortAddress}</TableCell>
+			<TableCell>
+				{account.platform === "ethereum" ? (account.chainId ?? "-") : "-"}
+			</TableCell>
 			<TableCell className="font-mono">
 				<SignButton account={account} />
 			</TableCell>

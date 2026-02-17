@@ -41,3 +41,11 @@ pnpm dev:tanstack  # Start TanStack playground
 pnpm dev:nextjs    # Start Next.js playground
 pnpm dev:vite      # Start Vite playground
 ```
+
+## Task Completion Quality Gate
+
+Before finishing any coding task, always run this full quality check sequence:
+
+```bash
+pnpm check --fix --error-on-warnings && pnpm typecheck && pnpm test
+```

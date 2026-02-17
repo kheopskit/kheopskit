@@ -123,6 +123,7 @@ export const hydrateAccount = (cached: CachedAccount): WalletAccount => {
 			id: cached.id as WalletAccountId,
 			platform: "ethereum",
 			address: cached.address as `0x${string}`,
+			chainId: cached.chainId,
 			walletId: cached.walletId,
 			walletName: cached.walletName,
 			isWalletDefault: false,
@@ -161,6 +162,7 @@ export const serializeAccount = (account: WalletAccount): CachedAccount => ({
 	platform: account.platform,
 	address: account.address,
 	name: "name" in account ? account.name : undefined,
+	chainId: account.platform === "ethereum" ? account.chainId : undefined,
 	walletId: account.walletId as WalletId,
 	walletName: account.walletName,
 });

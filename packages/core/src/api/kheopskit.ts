@@ -246,4 +246,10 @@ const statesEqual = (a: KheopskitState, b: KheopskitState): boolean =>
 		(w, i) =>
 			w.id === b.wallets[i]?.id && w.isConnected === b.wallets[i]?.isConnected,
 	) &&
-	a.accounts.every((acc, i) => acc.id === b.accounts[i]?.id);
+	a.accounts.every(
+		(acc, i) =>
+			acc.id === b.accounts[i]?.id &&
+			(acc.platform !== "ethereum" ||
+				(acc as { chainId?: number }).chainId ===
+					(b.accounts[i] as { chainId?: number })?.chainId),
+	);
