@@ -42,6 +42,9 @@ pnpm dev:nextjs    # Start Next.js playground
 pnpm dev:vite      # Start Vite playground
 ```
 
+When changing behavior or public API, add or update relevant tests in the same task.
+At minimum, include one happy-path test and one regression/edge-case test for the changed logic.
+
 ## Task Completion Quality Gate
 
 Before finishing any coding task, always run this full quality check sequence:

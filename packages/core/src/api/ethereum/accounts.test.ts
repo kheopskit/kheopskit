@@ -301,5 +301,81 @@ describe("Ethereum chain ID tracking", () => {
 			expect(accounts).toHaveLength(1);
 			expect(accounts[0]?.chainId).toBe(137);
 		});
+
+		it("updates chainId when appKit provider emits chainChanged", async () => {
+			const provider = createMockProvider();
+			(provider as unknown as { session: { topic: string } }).session = {
+				topic: "test-topic",
+			};
+			(provider as unknown as { off: typeof provider.removeListener }).off =
+				provider.removeListener;
+
+			provider.request.mockImplementation(async ({ method }) => {
+				if (method === "eth_chainId") return "0x1";
+				return null;
+			});
+
+			const wallet = createMockAppKitWallet(provider);
+			const { getEthereumAccounts$ } = await importAccounts();
+
+			const accounts$ = getEthereumAccounts$(of([wallet]));
+			const resultsPromise = firstValueFrom(accounts$.pipe(take(2), toArray()));
+
+			await new Promise((r) => setTimeout(r, 10));
+			provider._emit("chainChanged", "0x89");
+
+			const results = await resultsPromise;
+			expect(results).toHaveLength(2);
+			expect(results[0]?.[0]?.chainId).toBe(1);
+			expect(results[1]?.[0]?.chainId).toBe(137);
+		});
+
+		it("normalizes decimal chainId from provider request", async () => {
+			const provider = createMockProvider();
+			(provider as unknown as { session: { topic: string } }).session = {
+				topic: "test-topic",
+			};
+			(provider as unknown as { off: typeof provider.removeListener }).off =
+				provider.removeListener;
+
+			provider.request.mockImplementation(async ({ method }) => {
+				if (method === "eth_chainId") return "137";
+				return null;
+			});
+
+			const wallet = createMockAppKitWallet(provider);
+			const { getEthereumAccounts$ } = await importAccounts();
+
+			const accounts = await firstValueFrom(getEthereumAccounts$(of([wallet])));
+
+			expect(accounts).toHaveLength(1);
+			expect(accounts[0]?.chainId).toBe(137);
+		});
+
+		it("tears down appKit chainChanged listener on unsubscribe", async () => {
+			const provider = createMockProvider();
+			(provider as unknown as { session: { topic: string } }).session = {
+				topic: "test-topic",
+			};
+			(provider as unknown as { off: typeof provider.removeListener }).off =
+				provider.removeListener;
+
+			provider.request.mockImplementation(async ({ method }) => {
+				if (method === "eth_chainId") return "0x1";
+				return null;
+			});
+
+			const wallet = createMockAppKitWallet(provider);
+			const { getEthereumAccounts$ } = await importAccounts();
+
+			const sub = getEthereumAccounts$(of([wallet])).subscribe();
+			await new Promise((r) => setTimeout(r, 10));
+
+			expect(provider._listenerCount("chainChanged")).toBe(1);
+
+			sub.unsubscribe();
+
+			expect(provider._listenerCount("chainChanged")).toBe(0);
+		});
 	});
 });
