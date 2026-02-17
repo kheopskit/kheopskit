@@ -19,6 +19,7 @@ export const demoConfig: PlaygroundConfig = {
 	debug: true,
 	storageKey: "kheopskit",
 	hydrationGracePeriod: 500,
+	polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa", "ethereum"],
 };
 
 const getKheopskitConfig = (
