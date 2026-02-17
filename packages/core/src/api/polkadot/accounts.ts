@@ -17,6 +17,7 @@ import {
 import { getWalletAccountId } from "../../utils";
 import type {
 	PolkadotAccount,
+	PolkadotAccountType,
 	PolkadotAppKitWallet,
 	PolkadotInjectedWallet,
 	PolkadotWallet,
@@ -31,6 +32,7 @@ const getInjectedWalletAccounts$ = (
 		const getAccount = (account: InjectedPolkadotAccount): PolkadotAccount => ({
 			id: getWalletAccountId(wallet.id, account.address),
 			...account,
+			type: account.type ?? "sr25519",
 			platform: "polkadot",
 			walletName: wallet.name,
 			walletId: wallet.id,
@@ -118,6 +120,8 @@ const getAppKitAccounts$ = (wallet: PolkadotAppKitWallet) => {
 				polkadotSigner: getAppKitPolkadotSigner(wallet.appKit, acc.address),
 				genesisHash: null,
 				name: `${wallet.name} Polkadot`,
+				// WalletConnect (Reown AppKit) doesn't expose account key type;
+				// default to sr25519, which is the most common Polkadot key type.
 				type: "sr25519",
 			}),
 		),
@@ -126,8 +130,15 @@ const getAppKitAccounts$ = (wallet: PolkadotAppKitWallet) => {
 
 export const getPolkadotAccounts$ = (
 	polkadotWallets$: Observable<PolkadotWallet[]>,
+	polkadotAccountTypes: PolkadotAccountType[],
 ) =>
 	new Observable<PolkadotAccount[]>((subscriber) => {
+		if (polkadotAccountTypes.length === 0) {
+			console.warn(
+				"[kheopskit] config.polkadotAccountTypes is empty; all Polkadot accounts will be filtered out.",
+			);
+		}
+
 		const sub = polkadotWallets$
 			.pipe(
 				map((wallets) => wallets.filter((w) => w.isConnected)),
@@ -143,7 +154,11 @@ export const getPolkadotAccounts$ = (
 							])
 						: of([]),
 				),
-				map((accounts) => accounts.flat()),
+				map((accounts) =>
+					accounts
+						.flat()
+						.filter((account) => polkadotAccountTypes.includes(account.type)),
+				),
 				distinctUntilChanged(isSameAccountsList),
 			)
 			.subscribe(subscriber);

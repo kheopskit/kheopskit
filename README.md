@@ -73,6 +73,7 @@ const App = () => {
 const config = {
   platforms: ["polkadot", "ethereum"],
   autoReconnect: true,
+  polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa"],
 };
 
 const Root = () => (
@@ -95,6 +96,7 @@ import { getKheopskit$ } from "@kheopskit/core";
 const config = {
   platforms: ["polkadot", "ethereum"],
   autoReconnect: true,
+  polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa"],
 };
 const kheopskit$ = getKheopskit$(config);
 
@@ -102,6 +104,25 @@ kheopskit$.subscribe(({ wallets, accounts }) => {
   console.log("Wallets:", wallets);
   console.log("Accounts:", accounts);
 });
+```
+
+### Polkadot account type filtering
+
+Use `polkadotAccountTypes` to control which Polkadot account key types are exposed in `accounts`.
+
+- Supported values: `"sr25519"`, `"ed25519"`, `"ecdsa"`, `"ethereum"`
+- Default: `[`"sr25519"`, `"ed25519"`, `"ecdsa"`]`
+- `"ethereum"` is excluded by default and must be opted in explicitly
+- Empty list (`[]`) disables all Polkadot accounts and logs a warning in the console
+
+Example including Ethereum-style Polkadot accounts:
+
+```ts
+const config = {
+  platforms: ["polkadot"],
+  autoReconnect: true,
+  polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa", "ethereum"],
+};
 ```
 
 ### Server-Side Rendering (SSR)
@@ -120,7 +141,11 @@ When you pass `ssrCookies`:
 import { cookies } from "next/headers";
 import { App } from "./app";
 
-const config = { platforms: ["polkadot", "ethereum"], autoReconnect: true };
+const config = {
+  platforms: ["polkadot", "ethereum"],
+  autoReconnect: true,
+  polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa"],
+};
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
@@ -147,7 +172,11 @@ import { createServerFn, Meta, Scripts } from "@tanstack/start";
 import { getRequest } from "@tanstack/start/server";
 import { KheopskitProvider } from "@kheopskit/react";
 
-const config = { platforms: ["polkadot", "ethereum"], autoReconnect: true };
+const config = {
+  platforms: ["polkadot", "ethereum"],
+  autoReconnect: true,
+  polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa"],
+};
 
 const getSSRCookies = createServerFn({ method: "GET" }).handler(async () => {
   const request = getRequest();

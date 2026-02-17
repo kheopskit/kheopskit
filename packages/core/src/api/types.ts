@@ -17,6 +17,13 @@ import type { WalletId } from "../utils/WalletId";
 export type KheopskitConfig = {
 	autoReconnect: boolean;
 	platforms: WalletPlatform[];
+	/**
+	 * Allowed Polkadot account key types.
+	 * Accounts with other key types are filtered out from kheopskit state.
+	 *
+	 * @default ["sr25519", "ed25519", "ecdsa"]
+	 */
+	polkadotAccountTypes: PolkadotAccountType[];
 	walletConnect?: {
 		projectId: string;
 		metadata: Metadata;
@@ -115,7 +122,10 @@ export type Wallet = PolkadotWallet | EthereumWallet;
 
 export type WalletPlatform = Wallet["platform"];
 
-export type PolkadotAccount = InjectedPolkadotAccount & {
+export type PolkadotAccountType = "sr25519" | "ed25519" | "ecdsa" | "ethereum";
+
+export type PolkadotAccount = Omit<InjectedPolkadotAccount, "type"> & {
+	type: PolkadotAccountType;
 	id: WalletAccountId;
 	platform: "polkadot";
 	walletName: string;
@@ -160,6 +170,8 @@ export type CachedAccount = {
 	name?: string;
 	/** Cached chain ID for Ethereum accounts. */
 	chainId?: number;
+	/** Cached key type for Polkadot accounts. */
+	polkadotAccountType?: PolkadotAccountType;
 	walletId: WalletId;
 	walletName: string;
 };

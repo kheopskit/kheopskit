@@ -108,6 +108,7 @@ export const hydrateAccount = (cached: CachedAccount): WalletAccount => {
 		return {
 			id: cached.id as WalletAccountId,
 			platform: "polkadot",
+			type: cached.polkadotAccountType ?? "sr25519",
 			address: cached.address,
 			name: cached.name,
 			walletId: cached.walletId,
@@ -163,6 +164,8 @@ export const serializeAccount = (account: WalletAccount): CachedAccount => ({
 	address: account.address,
 	name: "name" in account ? account.name : undefined,
 	chainId: account.platform === "ethereum" ? account.chainId : undefined,
+	polkadotAccountType:
+		account.platform === "polkadot" ? account.type : undefined,
 	walletId: account.walletId as WalletId,
 	walletName: account.walletName,
 });

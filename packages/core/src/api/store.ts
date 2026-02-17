@@ -15,7 +15,14 @@ type KheopskitStoreData = {
 };
 
 type CompactWalletEntry = [WalletId, string, 0 | 1, 0 | 1];
-type CompactAccountEntry = [WalletId, string, string | null, number | null];
+type CompactPolkadotAccountType = 0 | 1 | 2 | 3;
+type CompactAccountEntry = [
+	WalletId,
+	string,
+	string | null,
+	number | null,
+	(CompactPolkadotAccountType | null)?,
+];
 
 type CompactStoreV1 = {
 	v: 1;
@@ -28,6 +35,40 @@ type CompactStoreV1 = {
 };
 
 const DEFAULT_SETTINGS: KheopskitStoreData = {};
+
+const toCompactPolkadotAccountType = (
+	type: CachedAccount["polkadotAccountType"],
+): CompactPolkadotAccountType | null => {
+	switch (type) {
+		case "sr25519":
+			return 0;
+		case "ed25519":
+			return 1;
+		case "ecdsa":
+			return 2;
+		case "ethereum":
+			return 3;
+		default:
+			return null;
+	}
+};
+
+const fromCompactPolkadotAccountType = (
+	type: CompactPolkadotAccountType | null | undefined,
+): CachedAccount["polkadotAccountType"] => {
+	switch (type) {
+		case 0:
+			return "sr25519";
+		case 1:
+			return "ed25519";
+		case 2:
+			return "ecdsa";
+		case 3:
+			return "ethereum";
+		default:
+			return undefined;
+	}
+};
 
 type CreateKheopskitStoreOptions = {
 	/**
@@ -164,6 +205,7 @@ const toCompactStore = (data: KheopskitStoreData): CompactStoreV1 => {
 			account.address,
 			account.name ?? null,
 			account.chainId ?? null,
+			toCompactPolkadotAccountType(account.polkadotAccountType),
 		],
 	);
 
@@ -192,7 +234,7 @@ const fromCompactStore = (data: CompactStoreV1): KheopskitStoreData => {
 	});
 
 	const accounts: CachedAccount[] = (data.a ?? []).map((item) => {
-		const [walletId, address, name, chainId] = item;
+		const [walletId, address, name, chainId, polkadotAccountType] = item;
 		const { platform } = parseWalletId(walletId);
 		return {
 			id: getWalletAccountId(walletId, address),
@@ -200,6 +242,10 @@ const fromCompactStore = (data: CompactStoreV1): KheopskitStoreData => {
 			address,
 			name: name ?? undefined,
 			chainId: chainId ?? undefined,
+			polkadotAccountType:
+				platform === "polkadot"
+					? fromCompactPolkadotAccountType(polkadotAccountType)
+					: undefined,
 			walletId,
 			walletName: walletNameMap.get(walletId) ?? walletId,
 		};

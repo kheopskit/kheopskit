@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { resolveConfig } from "./config";
 import type { KheopskitConfig } from "./types";
 
@@ -10,6 +10,7 @@ describe("resolveConfig", () => {
 			expect(result).toEqual({
 				autoReconnect: true,
 				platforms: ["polkadot"],
+				polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa"],
 				debug: false,
 				storageKey: "kheopskit",
 				hydrationGracePeriod: 500,
@@ -21,6 +22,11 @@ describe("resolveConfig", () => {
 
 			expect(result.autoReconnect).toBe(true);
 			expect(result.platforms).toEqual(["polkadot"]);
+			expect(result.polkadotAccountTypes).toEqual([
+				"sr25519",
+				"ed25519",
+				"ecdsa",
+			]);
 			expect(result.debug).toBe(false);
 			expect(result.storageKey).toBe("kheopskit");
 		});
@@ -40,7 +46,20 @@ describe("resolveConfig", () => {
 
 			expect(result.autoReconnect).toBe(true);
 			expect(result.platforms).toEqual(["ethereum"]);
+			expect(result.polkadotAccountTypes).toEqual([
+				"sr25519",
+				"ed25519",
+				"ecdsa",
+			]);
 			expect(result.debug).toBe(false);
+		});
+
+		it("overrides polkadotAccountTypes", () => {
+			const result = resolveConfig({
+				polkadotAccountTypes: ["ethereum"],
+			});
+
+			expect(result.polkadotAccountTypes).toEqual(["ethereum"]);
 		});
 
 		it("overrides debug", () => {
@@ -62,6 +81,7 @@ describe("resolveConfig", () => {
 			const result = resolveConfig({
 				autoReconnect: false,
 				platforms: ["ethereum"],
+				polkadotAccountTypes: ["ecdsa"],
 				debug: true,
 				storageKey: "my-custom-key",
 			});
@@ -69,6 +89,7 @@ describe("resolveConfig", () => {
 			expect(result).toEqual({
 				autoReconnect: false,
 				platforms: ["ethereum"],
+				polkadotAccountTypes: ["ecdsa"],
 				debug: true,
 				storageKey: "my-custom-key",
 				hydrationGracePeriod: 500,
@@ -92,6 +113,33 @@ describe("resolveConfig", () => {
 
 			expect(result1).not.toBe(result2);
 			expect(result1).toEqual(result2);
+		});
+	});
+
+	describe("validation", () => {
+		it("warns about unrecognized polkadotAccountTypes", () => {
+			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+			resolveConfig({
+				polkadotAccountTypes: ["sr25519", "typo" as never],
+			});
+
+			expect(warnSpy).toHaveBeenCalledWith(
+				expect.stringContaining("Unknown polkadotAccountTypes"),
+			);
+			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('"typo"'));
+			warnSpy.mockRestore();
+		});
+
+		it("does not warn for valid polkadotAccountTypes", () => {
+			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+			resolveConfig({
+				polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa", "ethereum"],
+			});
+
+			expect(warnSpy).not.toHaveBeenCalled();
+			warnSpy.mockRestore();
 		});
 	});
 });
