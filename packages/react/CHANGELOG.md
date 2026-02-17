@@ -1,5 +1,12 @@
 # @kheopskit/react
 
+## 2.0.0
+
+### Patch Changes
+
+- Updated dependencies [[`728c5e5`](https://github.com/kheopskit/kheopskit/commit/728c5e5dd09af5614a12667bdafaa189a4fe4ac7)]:
+  - @kheopskit/core@0.2.0
+
 ## 1.0.1
 
 ### Patch Changes
