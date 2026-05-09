@@ -74,10 +74,10 @@ const SignButton: FC<{ account: WalletAccount }> = ({ account }) => {
 	const handleClick = useCallback(async () => {
 		switch (account.platform) {
 			case "polkadot": {
-				const bytes = Binary.fromText(MESSAGE).asBytes();
+				const bytes = Binary.fromText(MESSAGE);
 				try {
 					const signature = await account.polkadotSigner.signBytes(bytes);
-					const hexSignature = Binary.fromBytes(signature).asHex();
+					const hexSignature = Binary.toHex(signature);
 					toast.success(`Signature: ${hexSignature}`);
 				} catch (err) {
 					toast.error(`Error: ${(err as Error).message}`);

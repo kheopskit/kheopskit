@@ -16,3 +16,5 @@ overrides:
   "@kheopskit/react": link:packages/react
 
 minimumReleaseAge: 4320
+minimumReleaseAgeExclude:
+  - hono

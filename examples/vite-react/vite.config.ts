@@ -11,4 +11,20 @@ export default defineConfig({
 	server: {
 		port: 3001,
 	},
+	build: {
+		rolldownOptions: {
+			output: {
+				// Prevent Rolldown from splitting viem across chunks,
+				// which creates circular dependencies that break class inheritance at runtime
+				codeSplitting: {
+					groups: [
+						{
+							name: "viem",
+							test: /node_modules\/viem\//,
+						},
+					],
+				},
+			},
+		},
+	},
 });

@@ -6,7 +6,7 @@ import {
 
 import type { TypedApi } from "polkadot-api";
 import { createClient } from "polkadot-api";
-import { getWsProvider } from "polkadot-api/ws-provider/web";
+import { getWsProvider } from "polkadot-api/ws";
 import { metadataCache } from "./metadataCache";
 
 const DESCRIPTORS = {
