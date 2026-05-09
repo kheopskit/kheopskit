@@ -1,10 +1,10 @@
 {
-	"$schema": "https://unpkg.com/knip@5/schema.json",
+	"$schema": "https://unpkg.com/knip@6/schema.json",
 	"ignore": [".papi/**"],
 	"ignoreDependencies": ["@kheopskit/core", "@kheopskit/react", "tslib"],
 	"workspaces": {
 		".": {
-			"entry": ["papi-whitelist.ts"]
+			"entry": [".papi/whitelist.ts"]
 		},
 		"packages/core": {
 			"ignore": [
