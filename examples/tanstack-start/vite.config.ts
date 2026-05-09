@@ -10,4 +10,20 @@ export default defineConfig({
 		// Handle lodash CommonJS module in SSR
 		noExternal: ["lodash"],
 	},
+	build: {
+		rolldownOptions: {
+			output: {
+				// Prevent Rolldown from splitting viem across chunks,
+				// which creates circular dependencies that break class inheritance at runtime
+				codeSplitting: {
+					groups: [
+						{
+							name: "viem",
+							test: /node_modules\/viem\//,
+						},
+					],
+				},
+			},
+		},
+	},
 });

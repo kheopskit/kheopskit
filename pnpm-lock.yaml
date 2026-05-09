@@ -7,11 +7,9 @@ settings:
 overrides:
   '@kheopskit/core': link:packages/core
   '@kheopskit/react': link:packages/react
-  axios@>=1.0.0 <1.15.0: '>=1.15.0'
-  postcss@<8.5.10: '>=8.5.10'
-  axios@>=1.0.0 <1.15.1: '>=1.15.1'
-  axios@>=1.0.0 <1.15.2: '>=1.15.2'
-  hono@<4.12.18: '>=4.12.18'
+  axios@>=1.0.0 <1.15.2: ^1.15.2
+  postcss@<8.5.10: ^8.5.10
+  hono@<4.12.18: ^4.12.18
 
 importers:
 
@@ -3175,7 +3173,7 @@ packages:
   axios-retry@4.5.0:
     resolution: {integrity: sha512-aR99oXhpEDGo0UuAlYcn2iGRds30k366Zfa05XWScR9QaQD4JYiP3/1Qt1u7YlefUOK+cn0CcwoL1oefavQUlQ==}
     peerDependencies:
-      axios: '>=1.15.2'
+      axios: ^1.15.2
 
   axios@1.16.0:
     resolution: {integrity: sha512-6hp5CwvTPlN2A31g5dxnwAX0orzM7pmCRDLnZSX772mv8WDqICwFjowHuPs04Mc8deIld1+ejhtaMn5vp6b+1w==}
@@ -4487,7 +4485,7 @@ packages:
     engines: {node: '>= 18'}
     peerDependencies:
       jiti: '>=1.21.0'
-      postcss: '>=8.5.10'
+      postcss: ^8.5.10
       tsx: ^4.8.1
       yaml: ^2.4.2
     peerDependenciesMeta:
@@ -5042,7 +5040,7 @@ packages:
     peerDependencies:
       '@microsoft/api-extractor': ^7.36.0
       '@swc/core': ^1
-      postcss: '>=8.5.10'
+      postcss: ^8.5.10
       typescript: '>=4.5.0'
     peerDependenciesMeta:
       '@microsoft/api-extractor':
