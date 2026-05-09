@@ -1,5 +1,18 @@
 # @kheopskit/react
 
+## 3.0.0
+
+### Major Changes
+
+- [#45](https://github.com/kheopskit/kheopskit/pull/45) [`6f42b72`](https://github.com/kheopskit/kheopskit/commit/6f42b72b2335acd7053b1811f5aa69eed28768f6) Thanks [@0xKheops](https://github.com/0xKheops)! - update to papi v2
+
+  BREAKING CHANGE: polkadot-api v1 is no longer supported. Consumers must upgrade to polkadot-api >= 2.0.0.
+
+### Patch Changes
+
+- Updated dependencies [[`6f42b72`](https://github.com/kheopskit/kheopskit/commit/6f42b72b2335acd7053b1811f5aa69eed28768f6)]:
+  - @kheopskit/core@1.0.0
+
 ## 2.0.0
 
 ### Patch Changes
