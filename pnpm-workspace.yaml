@@ -10,7 +10,7 @@ allowBuilds:
   esbuild: true
   keccak: false
   sharp: false
-  simple-git-hooks: false
+  simple-git-hooks: true
   utf-8-validate: false
 overrides:
   "@kheopskit/core": link:packages/core
