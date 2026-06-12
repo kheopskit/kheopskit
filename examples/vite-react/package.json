@@ -12,8 +12,8 @@
 		"typecheck": "tsc -b"
 	},
 	"dependencies": {
-		"@kheopskit/core": "link:../../packages/core",
-		"@kheopskit/react": "link:../../packages/react",
+		"@kheopskit/core": "workspace:*",
+		"@kheopskit/react": "workspace:*",
 		"@radix-ui/react-select": "^2.3.0",
 		"@radix-ui/react-slot": "^1.2.5",
 		"@reown/appkit": "^1.8.20",

@@ -49,8 +49,8 @@
 		"vitest": "^4.1.8"
 	},
 	"dependencies": {
-		"@kheopskit/core": "link:packages/core",
-		"@kheopskit/react": "link:packages/react",
+		"@kheopskit/core": "workspace:*",
+		"@kheopskit/react": "workspace:*",
 		"@polkadot-api/descriptors": "file:.papi/descriptors",
 		"polkadot-api": "^2.1.6"
 	},
