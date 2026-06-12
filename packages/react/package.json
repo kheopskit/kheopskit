@@ -41,11 +41,11 @@
 		"rxjs": ">=7.0.0"
 	},
 	"devDependencies": {
-		"@kheopskit/core": "workspace:*",
-		"@types/react": "^19.2.14",
+		"@kheopskit/core": "link:../core",
+		"@types/react": "^19.2.17",
 		"@types/react-dom": "^19.2.3",
-		"react": "^19.2.5",
-		"react-dom": "^19.2.5",
+		"react": "^19.2.7",
+		"react-dom": "^19.2.7",
 		"rxjs": "^7.8.2"
 	},
 	"tsup": {

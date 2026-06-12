@@ -39,17 +39,17 @@
 		"rxjs": ">=7.8.0"
 	},
 	"dependencies": {
-		"@reown/appkit": "^1.8.19",
+		"@reown/appkit": "^1.8.20",
 		"@walletconnect/types": "^2.23.9",
 		"@walletconnect/universal-provider": "^2.23.9",
 		"@walletconnect/utils": "^2.23.9",
 		"lodash-es": "^4.18.1",
 		"mipd": "^0.0.7",
-		"viem": "^2.48.8"
+		"viem": "^2.52.2"
 	},
 	"devDependencies": {
 		"@types/lodash-es": "^4.17.12",
-		"polkadot-api": "^2.1.2",
+		"polkadot-api": "^2.1.6",
 		"rxjs": "^7.8.2"
 	},
 	"tsup": {
