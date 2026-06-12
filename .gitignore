@@ -11,3 +11,7 @@ dist
 .turbo
 *.tsbuildinfo
 app.config.timestamp*.js
+
+# Playwright
+test-results
+playwright-report
