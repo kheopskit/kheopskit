@@ -1,5 +1,14 @@
 # @kheopskit/react
 
+## 3.0.1
+
+### Patch Changes
+
+- [`9197b88`](https://github.com/kheopskit/kheopskit/commit/9197b88b2a2e971fab1bf8ce0f0f5a685a6dd2d9) Thanks [@0xKheops](https://github.com/0xKheops)! - Update dependency ranges to latest versions: viem ^2.52.2, @reown/appkit ^1.8.20, polkadot-api ^2.1.6. No API changes.
+
+- Updated dependencies [[`9197b88`](https://github.com/kheopskit/kheopskit/commit/9197b88b2a2e971fab1bf8ce0f0f5a685a6dd2d9)]:
+  - @kheopskit/core@1.0.1
+
 ## 3.0.0
 
 ### Major Changes
