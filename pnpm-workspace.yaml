@@ -2,18 +2,22 @@ packages:
   - examples/*
   - packages/*
   - .
-ignoredBuiltDependencies:
-  - bufferutil
-  - keccak
-  - simple-git-hooks
-  - utf-8-validate
-onlyBuiltDependencies:
-  - "@biomejs/biome"
-  - "@tailwindcss/oxide"
-  - esbuild
+allowBuilds:
+  "@biomejs/biome": true
+  "@reown/appkit": false
+  "@tailwindcss/oxide": true
+  bufferutil: false
+  esbuild: true
+  keccak: false
+  sharp: false
+  simple-git-hooks: false
+  utf-8-validate: false
 overrides:
   "@kheopskit/core": link:packages/core
   "@kheopskit/react": link:packages/react
+  "axios@>=1.0.0 <1.15.2": ^1.15.2
+  "postcss@<8.5.10": ^8.5.10
+  "hono@<4.12.18": ^4.12.18
 
 minimumReleaseAge: 4320
 minimumReleaseAgeExclude:
