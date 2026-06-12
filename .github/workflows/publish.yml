@@ -36,6 +36,13 @@ jobs:
         run: |
           VERSION=$(jq -r .version ./package.json)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+      - name: Fail if release tag already exists
+        run: |
+          if git rev-parse "v${{ steps.get_version.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag v${{ steps.get_version.outputs.version }} already exists."
+            echo "The root package version was not bumped - include the root 'kheopskit' package in changesets."
+            exit 1
+          fi
       - name: Get PR Number from Commit Message
         id: pr_number
         run: |
