@@ -13,6 +13,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import type { Platforms } from "@/lib/config/playgroundConfig";
 import { AppBlock } from "./AppBlock";
 
 export const Wagmi = () => {
@@ -105,7 +106,7 @@ const Connectors = () => {
 };
 
 const ActiveAccount = () => {
-	const { accounts } = useWallets(); // kheopskit
+	const { accounts } = useWallets<Platforms>(); // kheopskit
 	const [accountId, setAccountId] = useState<string>();
 
 	const account = useMemo(

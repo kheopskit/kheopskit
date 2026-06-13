@@ -148,10 +148,11 @@ export const createKheopskitStore = (
 export type KheopskitStore = ReturnType<typeof createKheopskitStore>;
 
 /**
- * Cached default store instance.
- * Lazily initialized on first access to be SSR-safe.
+ * Cached default store instance, anchored on globalThis so it stays a single
+ * instance even if this module is duplicated across bundle chunks (e.g. CJS
+ * subpath entries). Lazily initialized on first access to be SSR-safe.
  */
-let _defaultStore: KheopskitStore | null = null;
+const DEFAULT_STORE_SYMBOL = Symbol.for("kheopskit.defaultStore");
 
 /**
  * Gets the default store, creating it on first access.
@@ -159,10 +160,11 @@ let _defaultStore: KheopskitStore | null = null;
  * Lazily initialized to avoid SSR issues with module-level code.
  */
 export const getDefaultStore = (): KheopskitStore => {
-	if (_defaultStore === null) {
-		_defaultStore = createKheopskitStore();
+	const g = globalThis as unknown as Record<symbol, KheopskitStore | undefined>;
+	if (!g[DEFAULT_STORE_SYMBOL]) {
+		g[DEFAULT_STORE_SYMBOL] = createKheopskitStore();
 	}
-	return _defaultStore;
+	return g[DEFAULT_STORE_SYMBOL];
 };
 
 /**

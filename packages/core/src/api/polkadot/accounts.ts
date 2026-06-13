@@ -15,13 +15,12 @@ import {
 	switchMap,
 } from "rxjs";
 import { getWalletAccountId } from "../../utils";
+import type { PolkadotAccountType, PolkadotAppKitWallet } from "../types";
 import type {
 	PolkadotAccount,
-	PolkadotAccountType,
-	PolkadotAppKitWallet,
 	PolkadotInjectedWallet,
 	PolkadotWallet,
-} from "../types";
+} from "./types";
 
 const getInjectedWalletAccounts$ = (
 	wallet: PolkadotInjectedWallet,

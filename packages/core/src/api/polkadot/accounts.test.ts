@@ -1,8 +1,9 @@
 import { firstValueFrom, of } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import type { WalletId } from "../../utils/WalletId";
-import type { PolkadotAccountType, PolkadotInjectedWallet } from "../types";
+import type { PolkadotAccountType } from "../types";
 import { getPolkadotAccounts$ } from "./accounts";
+import type { PolkadotInjectedWallet } from "./types";
 
 type ExtensionAccount = {
 	address: string;

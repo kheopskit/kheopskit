@@ -36,8 +36,18 @@ type AppKitWallets = {
 	solana?: SolanaAppKitWallet;
 };
 
-// once it exists, appKit object should never be recreated
-let cachedAppKit: Observable<AppKitWallets> | null = null;
+// Once it exists, the appKit object should never be recreated. Anchored on
+// globalThis so it stays a single instance even if this module is duplicated
+// across bundle chunks (e.g. CJS subpath entries).
+const APPKIT_SYMBOL = Symbol.for("kheopskit.cachedAppKit");
+type AppKitGlobal = Record<symbol, Observable<AppKitWallets> | undefined>;
+const getCachedAppKit = (): Observable<AppKitWallets> | undefined =>
+	(globalThis as unknown as AppKitGlobal)[APPKIT_SYMBOL];
+const setCachedAppKit = (
+	value: Observable<AppKitWallets> | undefined,
+): void => {
+	(globalThis as unknown as AppKitGlobal)[APPKIT_SYMBOL] = value;
+};
 
 /**
  * Clears the cached AppKit observable.
@@ -45,7 +55,7 @@ let cachedAppKit: Observable<AppKitWallets> | null = null;
  * Note: This does NOT destroy the appKit instance created by Reown.
  */
 export const resetAppKitCache = (): void => {
-	cachedAppKit = null;
+	setCachedAppKit(undefined);
 };
 
 export const getAppKitWallets$ = (
@@ -58,6 +68,7 @@ export const getAppKitWallets$ = (
 
 	const walletConnect = config.walletConnect;
 
+	let cachedAppKit = getCachedAppKit();
 	if (!cachedAppKit) {
 		// Use dynamic import to avoid loading @reown/appkit at module evaluation time
 		// This is critical for SSR and edge runtimes like Cloudflare Workers
@@ -183,6 +194,7 @@ export const getAppKitWallets$ = (
 			}),
 			shareReplay({ refCount: true, bufferSize: 1 }),
 		);
+		setCachedAppKit(cachedAppKit);
 	}
 
 	return cachedAppKit;

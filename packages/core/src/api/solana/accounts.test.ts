@@ -2,7 +2,8 @@ import { createSignableMessage } from "@solana/kit";
 import { firstValueFrom, of, take, toArray } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import type { WalletId } from "../../utils/WalletId";
-import type { SolanaAppKitWallet, SolanaInjectedWallet } from "../types";
+import type { SolanaAppKitWallet } from "../types";
+import type { SolanaInjectedWallet } from "./types";
 
 const ADDRESS_1 = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
 const ADDRESS_2 = "So11111111111111111111111111111111111111112";

@@ -1,4 +1,5 @@
 import {
+	acceptsCachedAccount,
 	createKheopskitStore,
 	getCachedIcon,
 	getKheopskit$,
@@ -73,12 +74,10 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 		return {
 			wallets: cached.wallets.map(hydrateWallet),
 			accounts: cached.accounts
-				.map(hydrateAccount)
-				.filter(
-					(account) =>
-						account.platform !== "polkadot" ||
-						resolvedConfig.polkadotAccountTypes.includes(account.type),
-				),
+				.filter((account) =>
+					acceptsCachedAccount(account, resolvedConfig.platforms),
+				)
+				.map(hydrateAccount),
 			config: resolvedConfig,
 			isHydrating: true,
 		};

@@ -1,113 +1,68 @@
 import { describe, expect, it, vi } from "vitest";
 import { resolveConfig } from "./config";
-import type { KheopskitConfig } from "./types";
+import { polkadot } from "./polkadot/plugin";
+import { solana } from "./solana/plugin";
 
 describe("resolveConfig", () => {
 	describe("default values", () => {
-		it("returns default config when no config provided", () => {
+		it("returns defaults (and warns) when no config is provided", () => {
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
 			const result = resolveConfig(undefined);
 
 			expect(result).toEqual({
 				autoReconnect: true,
-				platforms: ["polkadot"],
-				polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa"],
-				solanaChain: "solana:mainnet",
+				platforms: [],
 				debug: false,
 				storageKey: "kheopskit",
 				hydrationGracePeriod: 500,
 			});
+			expect(warn).toHaveBeenCalledWith(
+				expect.stringContaining("No platforms configured"),
+			);
+
+			warn.mockRestore();
 		});
 
-		it("returns default config when empty object provided", () => {
-			const result = resolveConfig({});
+		it("does not warn when platforms are provided", () => {
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-			expect(result.autoReconnect).toBe(true);
-			expect(result.platforms).toEqual(["polkadot"]);
-			expect(result.polkadotAccountTypes).toEqual([
-				"sr25519",
-				"ed25519",
-				"ecdsa",
-			]);
-			expect(result.debug).toBe(false);
-			expect(result.storageKey).toBe("kheopskit");
+			resolveConfig({ platforms: [polkadot()] });
+
+			expect(warn).not.toHaveBeenCalled();
+			warn.mockRestore();
 		});
 	});
 
 	describe("overriding defaults", () => {
-		it("overrides autoReconnect", () => {
-			const result = resolveConfig({ autoReconnect: false });
+		it("keeps the provided platform plugins", () => {
+			const plugin = polkadot();
+			const result = resolveConfig({ platforms: [plugin] });
+
+			expect(result.platforms).toEqual([plugin]);
+			expect(result.autoReconnect).toBe(true);
+			expect(result.debug).toBe(false);
+		});
+
+		it("overrides scalar fields", () => {
+			const result = resolveConfig({
+				platforms: [polkadot()],
+				autoReconnect: false,
+				debug: true,
+				storageKey: "my-custom-key",
+				hydrationGracePeriod: 0,
+			});
 
 			expect(result.autoReconnect).toBe(false);
-			expect(result.platforms).toEqual(["polkadot"]);
-			expect(result.debug).toBe(false);
-		});
-
-		it("overrides platforms", () => {
-			const result = resolveConfig({ platforms: ["ethereum"] });
-
-			expect(result.autoReconnect).toBe(true);
-			expect(result.platforms).toEqual(["ethereum"]);
-			expect(result.polkadotAccountTypes).toEqual([
-				"sr25519",
-				"ed25519",
-				"ecdsa",
-			]);
-			expect(result.debug).toBe(false);
-		});
-
-		it("overrides polkadotAccountTypes", () => {
-			const result = resolveConfig({
-				polkadotAccountTypes: ["ethereum"],
-			});
-
-			expect(result.polkadotAccountTypes).toEqual(["ethereum"]);
-		});
-
-		it("overrides debug", () => {
-			const result = resolveConfig({ debug: true });
-
-			expect(result.autoReconnect).toBe(true);
 			expect(result.debug).toBe(true);
-		});
-
-		it("supports multiple platforms", () => {
-			const result = resolveConfig({
-				platforms: ["polkadot", "ethereum"],
-			});
-
-			expect(result.platforms).toEqual(["polkadot", "ethereum"]);
-		});
-
-		it("overrides all values at once", () => {
-			const result = resolveConfig({
-				autoReconnect: false,
-				platforms: ["ethereum"],
-				polkadotAccountTypes: ["ecdsa"],
-				debug: true,
-				storageKey: "my-custom-key",
-			});
-
-			expect(result).toEqual({
-				autoReconnect: false,
-				platforms: ["ethereum"],
-				polkadotAccountTypes: ["ecdsa"],
-				solanaChain: "solana:mainnet",
-				debug: true,
-				storageKey: "my-custom-key",
-				hydrationGracePeriod: 500,
-			});
-		});
-
-		it("overrides solanaChain", () => {
-			const result = resolveConfig({ solanaChain: "solana:devnet" });
-
-			expect(result.solanaChain).toBe("solana:devnet");
+			expect(result.storageKey).toBe("my-custom-key");
+			expect(result.hydrationGracePeriod).toBe(0);
 		});
 	});
 
 	describe("immutability", () => {
 		it("does not mutate the input config", () => {
-			const input: Partial<KheopskitConfig> = { autoReconnect: false };
+			const input = { platforms: [polkadot()], autoReconnect: false };
 			const inputCopy = { ...input };
 
 			resolveConfig(input);
@@ -116,58 +71,52 @@ describe("resolveConfig", () => {
 		});
 
 		it("returns a new object each time", () => {
-			const result1 = resolveConfig({});
-			const result2 = resolveConfig({});
+			const result1 = resolveConfig({ platforms: [polkadot()] });
+			const result2 = resolveConfig({ platforms: [polkadot()] });
 
 			expect(result1).not.toBe(result2);
-			expect(result1).toEqual(result2);
 		});
 	});
+});
 
-	describe("validation", () => {
-		it("warns about unrecognized polkadotAccountTypes", () => {
-			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+describe("plugin option validation", () => {
+	it("warns about unknown polkadot accountTypes", () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-			resolveConfig({
-				polkadotAccountTypes: ["sr25519", "typo" as never],
-			});
+		polkadot({ accountTypes: ["sr25519", "typo" as never] });
 
-			expect(warnSpy).toHaveBeenCalledWith(
-				expect.stringContaining("Unknown polkadotAccountTypes"),
-			);
-			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('"typo"'));
-			warnSpy.mockRestore();
-		});
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining("Unknown polkadot accountTypes"),
+		);
+		warn.mockRestore();
+	});
 
-		it("does not warn for valid polkadotAccountTypes", () => {
-			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+	it("does not warn for valid polkadot accountTypes", () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-			resolveConfig({
-				polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa", "ethereum"],
-			});
+		polkadot({ accountTypes: ["sr25519", "ed25519", "ecdsa", "ethereum"] });
 
-			expect(warnSpy).not.toHaveBeenCalled();
-			warnSpy.mockRestore();
-		});
+		expect(warn).not.toHaveBeenCalled();
+		warn.mockRestore();
+	});
 
-		it("warns about unrecognized solanaChain", () => {
-			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+	it("warns about an unknown solana chain", () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-			resolveConfig({ solanaChain: "solana:nope" as never });
+		solana({ chain: "solana:nope" as never });
 
-			expect(warnSpy).toHaveBeenCalledWith(
-				expect.stringContaining("Unknown solanaChain"),
-			);
-			warnSpy.mockRestore();
-		});
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining("Unknown solana chain"),
+		);
+		warn.mockRestore();
+	});
 
-		it("does not warn for valid solanaChain", () => {
-			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+	it("does not warn for a valid solana chain", () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-			resolveConfig({ solanaChain: "solana:devnet" });
+		solana({ chain: "solana:devnet" });
 
-			expect(warnSpy).not.toHaveBeenCalled();
-			warnSpy.mockRestore();
-		});
+		expect(warn).not.toHaveBeenCalled();
+		warn.mockRestore();
 	});
 });

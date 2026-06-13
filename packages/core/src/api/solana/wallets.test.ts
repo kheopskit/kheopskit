@@ -1,7 +1,8 @@
 import { firstValueFrom } from "rxjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { KheopskitStore } from "../store";
-import type { KheopskitConfig, SolanaWallet } from "../types";
+import type { KheopskitConfig } from "../types";
+import type { SolanaWallet } from "./types";
 
 type Listener = (...args: unknown[]) => void;
 

@@ -1,7 +1,8 @@
 import { firstValueFrom, of, take, toArray } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import type { WalletId } from "../../utils/WalletId";
-import type { EthereumAppKitWallet, EthereumInjectedWallet } from "../types";
+import type { EthereumAppKitWallet } from "../types";
+import type { EthereumInjectedWallet } from "./types";
 
 // Valid Ethereum address for tests
 const MOCK_ADDRESS = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";

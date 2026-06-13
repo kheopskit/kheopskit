@@ -20,7 +20,7 @@
 		"access": "public"
 	},
 	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1",
+		"test": "vitest run --root=../.. packages/react",
 		"dev": "tsup --watch",
 		"build": "tsup",
 		"prepack": "tsup",

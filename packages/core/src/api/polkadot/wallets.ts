@@ -20,11 +20,8 @@ import {
 } from "../../utils/WalletId";
 import { getAppKitWallets$ } from "../appKit";
 import { store as defaultStore, type KheopskitStore } from "../store";
-import type {
-	KheopskitConfig,
-	PolkadotInjectedWallet,
-	PolkadotWallet,
-} from "../types";
+import type { KheopskitConfig } from "../types";
+import type { PolkadotInjectedWallet, PolkadotWallet } from "./types";
 
 const getInjectedWalletsIds = () =>
 	typeof window === "undefined"

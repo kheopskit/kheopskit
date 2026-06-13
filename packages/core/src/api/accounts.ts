@@ -1,48 +1,25 @@
 import { combineLatest, map, Observable, of, shareReplay } from "rxjs";
 import { sortAccounts } from "../utils/sortAccounts";
-import { getEthereumAccounts$ } from "./ethereum/accounts";
-import { getPolkadotAccounts$ } from "./polkadot/accounts";
-import { getSolanaAccounts$ } from "./solana/accounts";
-import type { KheopskitConfig, Wallet, WalletAccount } from "./types";
+import type { BaseWallet, BaseWalletAccount, KheopskitConfig } from "./types";
 
 export const getAccounts$ = (
 	config: KheopskitConfig,
-	wallets: Observable<Wallet[]>,
+	wallets: Observable<BaseWallet[]>,
 ) => {
-	return new Observable<WalletAccount[]>((subscriber) => {
-		// biome-ignore lint/suspicious/useIterableCallbackReturn: false positive
-		const sources = config.platforms.map<Observable<WalletAccount[]>>(
-			(platform) => {
-				switch (platform) {
-					case "polkadot":
-						return getPolkadotAccounts$(
-							wallets.pipe(
-								map((w) => w.filter((w) => w.platform === "polkadot")),
-							),
-							config.polkadotAccountTypes,
-						);
-					case "ethereum":
-						return getEthereumAccounts$(
-							wallets.pipe(
-								map((w) => w.filter((w) => w.platform === "ethereum")),
-							),
-						);
-					case "solana":
-						return getSolanaAccounts$(
-							wallets.pipe(
-								map((w) => w.filter((w) => w.platform === "solana")),
-							),
-							config.solanaChain,
-						);
-				}
-			},
+	return new Observable<BaseWalletAccount[]>((subscriber) => {
+		const sources = config.platforms.map((plugin) =>
+			plugin.getAccounts$(
+				wallets.pipe(
+					map((ws) => ws.filter((w) => w.platform === plugin.platform)),
+				),
+			),
 		);
 
 		const accounts$ = sources.length
 			? combineLatest(sources).pipe(
 					map((accounts) => accounts.flat().sort(sortAccounts)),
 				)
-			: of([]);
+			: of<BaseWalletAccount[]>([]);
 
 		const sub = accounts$.subscribe(subscriber);
 

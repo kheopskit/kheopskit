@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { Wallet } from "../api";
+import type { BaseWallet } from "../api/types";
 import { sortWallets } from "./sortWallets";
 
 const createWallet = (
 	name: string,
 	platform: "polkadot" | "ethereum",
-): Wallet =>
+): BaseWallet =>
 	({
 		name,
 		platform,
 		id: `${platform}:${name.toLowerCase()}`,
-	}) as Wallet;
+	}) as BaseWallet;
 
 describe("sortWallets", () => {
 	describe("platform sorting", () => {

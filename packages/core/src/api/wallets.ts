@@ -10,11 +10,8 @@ import {
 	take,
 } from "rxjs";
 import { sortWallets } from "../utils/sortWallets";
-import { getEthereumWallets$ } from "./ethereum/wallets";
-import { getPolkadotWallets$ } from "./polkadot/wallets";
-import { getSolanaWallets$ } from "./solana/wallets";
 import { store as defaultStore, type KheopskitStore } from "./store";
-import type { KheopskitConfig, Wallet } from "./types";
+import type { BaseWallet, KheopskitConfig, PlatformContext } from "./types";
 
 export const getWallets$ = (
 	config: KheopskitConfig,
@@ -27,19 +24,10 @@ export const getWallets$ = (
 		shareReplay({ bufferSize: 1, refCount: true }),
 	);
 
-	return new Observable<Wallet[]>((subscriber) => {
-		// biome-ignore lint/suspicious/useIterableCallbackReturn: false positive
-		const observables = config.platforms.map(
-			(platform): Observable<Wallet[]> => {
-				switch (platform) {
-					case "polkadot":
-						return getPolkadotWallets$(config, store);
-					case "ethereum":
-						return getEthereumWallets$(config, store);
-					case "solana":
-						return getSolanaWallets$(config, store);
-				}
-			},
+	return new Observable<BaseWallet[]>((subscriber) => {
+		const ctx: PlatformContext = { config, store };
+		const observables = config.platforms.map((plugin) =>
+			plugin.getWallets$(ctx),
 		);
 
 		const wallets$ = observables.length
@@ -47,7 +35,7 @@ export const getWallets$ = (
 					map((wallets) => wallets.flat().sort(sortWallets)),
 					// Note: No startWith([]) here - the hydration buffer handles initial state
 				)
-			: of([]);
+			: of<BaseWallet[]>([]);
 
 		// Track wallets being reconnected to avoid duplicate attempts
 		const reconnectingWallets = new Set<string>();

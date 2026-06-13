@@ -15,12 +15,9 @@ import {
 import { getWalletId, type WalletId } from "../../utils/WalletId";
 import { getAppKitWallets$ } from "../appKit";
 import { store as defaultStore, type KheopskitStore } from "../store";
-import type {
-	KheopskitConfig,
-	SolanaInjectedWallet,
-	SolanaWallet,
-} from "../types";
+import type { KheopskitConfig } from "../types";
 import { isSolanaChainId, type SolanaChainId } from "./chains";
+import type { SolanaInjectedWallet, SolanaWallet } from "./types";
 
 type ConnectApi = StandardConnectFeature["standard:connect"];
 type DisconnectApi = StandardDisconnectFeature["standard:disconnect"];

@@ -1,11 +1,8 @@
 "use client";
 
-import type {
-	EthereumAccount,
-	PolkadotAccount,
-	SolanaAccount,
-	WalletAccount,
-} from "@kheopskit/core";
+import type { EthereumAccount } from "@kheopskit/core/ethereum";
+import type { PolkadotAccount } from "@kheopskit/core/polkadot";
+import type { SolanaAccount } from "@kheopskit/core/solana";
 import { useWallets } from "@kheopskit/react";
 import { MultiAddress } from "@polkadot-api/descriptors";
 import {
@@ -41,6 +38,7 @@ import {
 	isSolanaNetwork,
 	VIEM_CHAINS_BY_ID,
 } from "@/lib/config/chains";
+import type { Platforms, WalletAccount } from "@/lib/config/playgroundConfig";
 import { getPolkadotApi, type PolkadotChainId } from "@/lib/getPolkadotApi";
 import { getSolanaRpc } from "@/lib/getSolanaRpc";
 import { AppBlock } from "./AppBlock";
@@ -68,7 +66,7 @@ const Content = () => {
 		[networkId],
 	);
 
-	const { accounts } = useWallets(); // kheopskit
+	const { accounts } = useWallets<Platforms>(); // kheopskit
 	const [accountId, setAccountId] = useState<string>();
 	const account = useMemo(
 		() => accounts.find((a) => a.id === accountId) ?? null,
@@ -424,21 +422,21 @@ const useDefaultNetworkId = () => {
 		if (!config.platforms?.length)
 			throw new Error("No platforms configured in KheopskitConfig");
 
-		if (config.platforms.includes("polkadot")) {
+		if (config.platforms.some((p) => p.platform === "polkadot")) {
 			const polkadotChains = APPKIT_CHAINS.filter(isPolkadotNetwork);
 			if (!polkadotChains.length)
 				throw new Error("No Polkadot chains configured in KheopskitConfig");
 			return polkadotChains[0].id;
 		}
 
-		if (config.platforms.includes("ethereum")) {
+		if (config.platforms.some((p) => p.platform === "ethereum")) {
 			const ethereumChains = APPKIT_CHAINS.filter(isEthereumNetwork);
 			if (!ethereumChains.length)
 				throw new Error("No Ethereum chains configured in KheopskitConfig");
 			if (ethereumChains.length === 1) return ethereumChains[0].id;
 		}
 
-		if (config.platforms.includes("solana")) {
+		if (config.platforms.some((p) => p.platform === "solana")) {
 			const solanaChains = APPKIT_CHAINS.filter(isSolanaNetwork);
 			if (solanaChains.length) return solanaChains[0].id;
 		}

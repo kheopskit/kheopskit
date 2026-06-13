@@ -101,6 +101,12 @@ importers:
       '@tanstack/react-query':
         specifier: 5.101.0
         version: 5.101.0(react@19.2.7)
+      '@wallet-standard/app':
+        specifier: ^1.1.1
+        version: 1.1.1
+      '@wallet-standard/base':
+        specifier: ^1.1.1
+        version: 1.1.1
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -110,6 +116,9 @@ importers:
       lucide-react:
         specifier: ^1.17.0
         version: 1.17.0(react@19.2.7)
+      mipd:
+        specifier: ^0.0.7
+        version: 0.0.7(typescript@6.0.3)
       next:
         specifier: ^16.2.7
         version: 16.2.7(@playwright/test@1.60.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -201,6 +210,12 @@ importers:
       '@tanstack/react-start':
         specifier: 1.168.25
         version: 1.168.25(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vite@8.0.16(@types/node@25.9.2)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))
+      '@wallet-standard/app':
+        specifier: ^1.1.1
+        version: 1.1.1
+      '@wallet-standard/base':
+        specifier: ^1.1.1
+        version: 1.1.1
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -210,6 +225,9 @@ importers:
       lucide-react:
         specifier: ^1.17.0
         version: 1.17.0(react@19.2.7)
+      mipd:
+        specifier: ^0.0.7
+        version: 0.0.7(typescript@6.0.3)
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -301,6 +319,12 @@ importers:
       '@tanstack/react-query':
         specifier: 5.101.0
         version: 5.101.0(react@19.2.7)
+      '@wallet-standard/app':
+        specifier: ^1.1.1
+        version: 1.1.1
+      '@wallet-standard/base':
+        specifier: ^1.1.1
+        version: 1.1.1
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -310,6 +334,9 @@ importers:
       lucide-react:
         specifier: ^1.17.0
         version: 1.17.0(react@19.2.7)
+      mipd:
+        specifier: ^0.0.7
+        version: 0.0.7(typescript@6.0.3)
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -371,15 +398,15 @@ importers:
 
   packages/core:
     dependencies:
+      '@noble/hashes':
+        specifier: ^1.8.0
+        version: 1.8.0
       '@reown/appkit':
         specifier: ^1.8.20
         version: 1.8.20(@types/react@19.2.17)(bufferutil@4.1.0)(db0@0.3.4)(ioredis@5.9.2)(react@19.2.7)(typescript@6.0.3)(use-sync-external-store@1.6.0(react@19.2.7))(utf-8-validate@5.0.10)(zod@4.4.3)
-      '@wallet-standard/app':
-        specifier: ^1.1.1
-        version: 1.1.1
-      '@wallet-standard/base':
-        specifier: ^1.1.1
-        version: 1.1.1
+      '@scure/base':
+        specifier: ^1.2.6
+        version: 1.2.6
       '@walletconnect/types':
         specifier: ^2.23.9
         version: 2.23.9(db0@0.3.4)(ioredis@5.9.2)
@@ -392,9 +419,6 @@ importers:
       lodash-es:
         specifier: ^4.18.1
         version: 4.18.1
-      mipd:
-        specifier: ^0.0.7
-        version: 0.0.7(typescript@6.0.3)
     devDependencies:
       '@solana/kit':
         specifier: ^6.9.0
@@ -405,9 +429,18 @@ importers:
       '@types/lodash-es':
         specifier: ^4.17.12
         version: 4.17.12
+      '@wallet-standard/app':
+        specifier: ^1.1.1
+        version: 1.1.1
+      '@wallet-standard/base':
+        specifier: ^1.1.1
+        version: 1.1.1
       '@wallet-standard/features':
         specifier: ^1.1.1
         version: 1.1.1
+      mipd:
+        specifier: ^0.0.7
+        version: 0.0.7(typescript@6.0.3)
       polkadot-api:
         specifier: ^2.1.6
         version: 2.1.6(bufferutil@4.1.0)(esbuild@0.27.7)(rxjs@7.8.2)(utf-8-validate@5.0.10)

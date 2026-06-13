@@ -11,17 +11,17 @@ import {
 } from "rxjs";
 import { getWalletAccountId } from "../../utils";
 import { getCachedObservable$ } from "../../utils/getCachedObservable";
-import type {
-	SolanaAccount,
-	SolanaAppKitWallet,
-	SolanaInjectedWallet,
-	SolanaWallet,
-} from "../types";
+import type { SolanaAppKitWallet } from "../types";
 import type { SolanaChainId } from "./chains";
 import {
 	createInjectedSolanaSigner,
 	createWalletConnectSolanaSigner,
 } from "./signer";
+import type {
+	SolanaAccount,
+	SolanaInjectedWallet,
+	SolanaWallet,
+} from "./types";
 
 type StandardEventsApi = StandardEventsFeature["standard:events"];
 

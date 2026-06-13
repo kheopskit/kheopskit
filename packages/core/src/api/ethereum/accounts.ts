@@ -17,12 +17,12 @@ import {
 } from "viem";
 import { getWalletAccountId } from "../../utils";
 import { getCachedObservable$ } from "../../utils/getCachedObservable";
+import type { EthereumAppKitWallet } from "../types";
 import type {
 	EthereumAccount,
-	EthereumAppKitWallet,
 	EthereumInjectedWallet,
 	EthereumWallet,
-} from "../types";
+} from "./types";
 
 const normalizeEvmChainId = (value: unknown): number | undefined => {
 	let raw = value;

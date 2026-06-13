@@ -22,31 +22,24 @@ import { getCachedIcon, setCachedIcons } from "../utils/iconCache";
 import { logObservable } from "../utils/logObservable";
 import { getAccounts$ } from "./accounts";
 import { resolveConfig } from "./config";
+import { acceptsCachedAccount } from "./platform";
 import { createKheopskitStore } from "./store";
-import type { KheopskitConfig, Wallet, WalletAccount } from "./types";
+import type {
+	KheopskitConfig,
+	KheopskitPlatform,
+	KheopskitState,
+} from "./types";
 import { getWallets$ } from "./wallets";
 
-export type { KheopskitConfig } from "./types";
+export type { KheopskitConfig, KheopskitState } from "./types";
 
-export type KheopskitState = {
-	wallets: Wallet[];
-	accounts: WalletAccount[];
-	config: KheopskitConfig;
-	/**
-	 * Whether the state is still being hydrated from cache.
-	 * During hydration, cached wallets/accounts may be displayed
-	 * before the actual wallet extensions have injected.
-	 *
-	 * Use this to show loading indicators or disable certain actions.
-	 */
-	isHydrating: boolean;
-};
-
-export const getKheopskit$ = (
-	config?: Partial<KheopskitConfig>,
+export const getKheopskit$ = <
+	const P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],
+>(
+	config?: Partial<KheopskitConfig<P>>,
 	ssrCookies?: string,
 	existingStore?: ReturnType<typeof createKheopskitStore>,
-) => {
+): Observable<KheopskitState<P>> => {
 	const kc = resolveConfig(config);
 	const store =
 		existingStore ??
@@ -77,12 +70,8 @@ export const getKheopskit$ = (
 		return wallet;
 	});
 	const cachedAccounts = cachedState.accounts
-		.map(hydrateAccount)
-		.filter(
-			(account) =>
-				account.platform !== "polkadot" ||
-				kc.polkadotAccountTypes.includes(account.type),
-		);
+		.filter((cached) => acceptsCachedAccount(cached, kc.platforms))
+		.map(hydrateAccount);
 
 	if (kc.debug && cachedWallets.length > 0) {
 		console.debug("[kheopskit] hydrating from cache:", {
@@ -235,7 +224,9 @@ export const getKheopskit$ = (
 		throttleTime(16, undefined, { leading: true, trailing: true }), // ~1 frame at 60fps
 		logObservable("kheopskit$", { enabled: kc.debug, printValue: true }),
 		shareReplay({ bufferSize: 1, refCount: true }),
-	);
+		// The runtime objects are the concrete per-plugin wallet/account types;
+		// recover the precise KheopskitState<P> the caller's plugins imply.
+	) as unknown as Observable<KheopskitState<P>>;
 };
 
 const arraysEqual = (a: string[], b: string[]) =>

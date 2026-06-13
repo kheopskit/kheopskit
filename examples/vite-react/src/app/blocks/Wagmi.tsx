@@ -10,11 +10,12 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { kheopskitConfig } from "@/lib/config/playgroundConfig";
+import { kheopskitConfig, type Platforms } from "@/lib/config/playgroundConfig";
 import { AppBlock } from "./AppBlock";
 
 export const Wagmi = () => {
-	if (!kheopskitConfig.platforms?.includes("ethereum")) return null;
+	if (!kheopskitConfig.platforms?.some((p) => p.platform === "ethereum"))
+		return null;
 
 	return (
 		<AppBlock
@@ -77,7 +78,7 @@ const Connectors = () => {
 };
 
 const ActiveAccount = () => {
-	const { accounts } = useWallets(); // kheopskit
+	const { accounts } = useWallets<Platforms>(); // kheopskit
 	const [accountId, setAccountId] = useState<string>();
 
 	const account = useMemo(

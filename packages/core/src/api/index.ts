@@ -8,5 +8,6 @@ export { getSafeLocalStorage } from "../utils/storage";
 export { resetAppKitCache } from "./appKit";
 export { DEFAULT_STORAGE_KEY, resolveConfig } from "./config";
 export * from "./kheopskit";
+export { acceptsCachedAccount } from "./platform";
 export { createKheopskitStore, getDefaultStore } from "./store";
 export * from "./types";

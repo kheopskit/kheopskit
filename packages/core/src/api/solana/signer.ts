@@ -20,8 +20,8 @@ import type {
 	Wallet as WalletStandardWallet,
 } from "@wallet-standard/base";
 import type UniversalProvider from "@walletconnect/universal-provider";
-import type { SolanaSigner } from "../types";
 import { getSolanaCaip2, type SolanaChainId } from "./chains";
+import type { SolanaSigner } from "./types";
 
 const SOLANA_SIGN_MESSAGE = "solana:signMessage";
 const SOLANA_SIGN_TRANSACTION = "solana:signTransaction";

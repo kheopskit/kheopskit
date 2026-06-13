@@ -1,4 +1,4 @@
-import type { WalletAccount, WalletPlatform } from "../api";
+import type { BaseWalletAccount, WalletPlatform } from "../api/types";
 
 const PLATFORM_ORDER: Record<WalletPlatform, number> = {
 	polkadot: 0,
@@ -7,13 +7,13 @@ const PLATFORM_ORDER: Record<WalletPlatform, number> = {
 };
 
 // Group accounts by wallet, surfacing Talisman first (case-insensitive).
-const byWalletName = (a1: WalletAccount, a2: WalletAccount) => {
+const byWalletName = (a1: BaseWalletAccount, a2: BaseWalletAccount) => {
 	if (a1.walletName.toLowerCase() === "talisman") return -1;
 	if (a2.walletName.toLowerCase() === "talisman") return 1;
 	return a1.walletName.localeCompare(a2.walletName);
 };
 
-export const sortAccounts = (a1: WalletAccount, a2: WalletAccount) => {
+export const sortAccounts = (a1: BaseWalletAccount, a2: BaseWalletAccount) => {
 	// Sort by platform first: polkadot, then ethereum, then solana
 	if (a1.platform !== a2.platform)
 		return PLATFORM_ORDER[a1.platform] - PLATFORM_ORDER[a2.platform];

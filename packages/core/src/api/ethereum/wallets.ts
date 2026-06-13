@@ -14,11 +14,8 @@ import type { EIP1193Provider } from "viem";
 import { getWalletId, type WalletId } from "../../utils/WalletId";
 import { getAppKitWallets$ } from "../appKit";
 import { store as defaultStore, type KheopskitStore } from "../store";
-import type {
-	EthereumInjectedWallet,
-	EthereumWallet,
-	KheopskitConfig,
-} from "../types";
+import type { KheopskitConfig } from "../types";
+import type { EthereumInjectedWallet, EthereumWallet } from "./types";
 
 /**
  * Observable that emits EIP-6963 provider details from injected wallets.

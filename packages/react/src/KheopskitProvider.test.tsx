@@ -1,5 +1,7 @@
 /// <reference types="@testing-library/jest-dom" />
 import type { KheopskitConfig } from "@kheopskit/core";
+import { ethereum } from "@kheopskit/core/ethereum";
+import { polkadot } from "@kheopskit/core/polkadot";
 import { render, screen } from "@testing-library/react";
 import { useContext } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -32,7 +34,7 @@ const WalletsConsumer = () => {
 			<span data-testid="hook-wallets">{state.wallets.length}</span>
 			<span data-testid="hook-accounts">{state.accounts.length}</span>
 			<span data-testid="hook-platforms">
-				{state.config.platforms.join(",")}
+				{state.config.platforms.map((p) => p.platform).join(",")}
 			</span>
 		</div>
 	);
@@ -40,6 +42,8 @@ const WalletsConsumer = () => {
 
 describe("KheopskitProvider", () => {
 	beforeEach(() => {
+		// resolveConfig warns when no platforms are configured; silence it.
+		vi.spyOn(console, "warn").mockImplementation(() => {});
 		localStorage.clear();
 		// Clear cookies
 		document.cookie.split(";").forEach((c) => {
@@ -89,22 +93,19 @@ describe("KheopskitProvider", () => {
 	});
 
 	describe("config prop combinations", () => {
-		it("uses default config when no config provided", () => {
+		it("defaults to no platforms when no config provided", () => {
 			render(
 				<KheopskitProvider>
 					<WalletsConsumer />
 				</KheopskitProvider>,
 			);
 
-			// Default platforms is ["polkadot"]
-			expect(screen.getByTestId("hook-platforms")).toHaveTextContent(
-				"polkadot",
-			);
+			expect(screen.getByTestId("hook-platforms").textContent).toBe("");
 		});
 
 		it("accepts custom config with polkadot platform", () => {
 			const config: Partial<KheopskitConfig> = {
-				platforms: ["polkadot"],
+				platforms: [polkadot()],
 				autoReconnect: false,
 			};
 
@@ -121,7 +122,7 @@ describe("KheopskitProvider", () => {
 
 		it("accepts custom config with ethereum platform", () => {
 			const config: Partial<KheopskitConfig> = {
-				platforms: ["ethereum"],
+				platforms: [ethereum()],
 			};
 
 			render(
@@ -137,7 +138,7 @@ describe("KheopskitProvider", () => {
 
 		it("accepts custom config with both platforms", () => {
 			const config: Partial<KheopskitConfig> = {
-				platforms: ["polkadot", "ethereum"],
+				platforms: [polkadot(), ethereum()],
 			};
 
 			render(
@@ -153,6 +154,7 @@ describe("KheopskitProvider", () => {
 
 		it("accepts config with autoReconnect true", () => {
 			const config: Partial<KheopskitConfig> = {
+				platforms: [polkadot()],
 				autoReconnect: true,
 			};
 
@@ -168,6 +170,7 @@ describe("KheopskitProvider", () => {
 
 		it("accepts config with autoReconnect false", () => {
 			const config: Partial<KheopskitConfig> = {
+				platforms: [polkadot()],
 				autoReconnect: false,
 			};
 
@@ -185,6 +188,7 @@ describe("KheopskitProvider", () => {
 				.spyOn(console, "debug")
 				.mockImplementation(() => {});
 			const config: Partial<KheopskitConfig> = {
+				platforms: [polkadot()],
 				debug: true,
 			};
 
@@ -246,7 +250,7 @@ describe("KheopskitProvider", () => {
 			expect(screen.getByTestId("hook-wallets")).toBeInTheDocument();
 		});
 
-		it("filters cached polkadot accounts by polkadotAccountTypes during SSR hydration", () => {
+		it("filters cached polkadot accounts by accountTypes during SSR hydration", () => {
 			// Compact cookie with wallet + ecdsa account (type index 2)
 			const compactCookie = {
 				v: 1,
@@ -268,7 +272,7 @@ describe("KheopskitProvider", () => {
 
 			render(
 				<KheopskitProvider
-					config={{ polkadotAccountTypes: ["sr25519"] }}
+					config={{ platforms: [polkadot({ accountTypes: ["sr25519"] })] }}
 					ssrCookies={ssrCookies}
 				>
 					<ContextConsumer />
@@ -285,7 +289,7 @@ describe("KheopskitProvider", () => {
 	describe("config + ssrCookies combinations", () => {
 		it("works with config and ssrCookies together", () => {
 			const config: Partial<KheopskitConfig> = {
-				platforms: ["polkadot", "ethereum"],
+				platforms: [polkadot(), ethereum()],
 				autoReconnect: true,
 			};
 			const cookieData = { autoReconnect: ["polkadot:talisman"] };
@@ -304,7 +308,7 @@ describe("KheopskitProvider", () => {
 
 		it("handles all config options with ssrCookies", () => {
 			const config: Partial<KheopskitConfig> = {
-				platforms: ["ethereum"],
+				platforms: [ethereum()],
 				autoReconnect: false,
 				debug: false,
 			};
@@ -357,7 +361,7 @@ describe("KheopskitProvider", () => {
 
 		it("returns state with config", () => {
 			render(
-				<KheopskitProvider config={{ platforms: ["polkadot"] }}>
+				<KheopskitProvider config={{ platforms: [polkadot()] }}>
 					<WalletsConsumer />
 				</KheopskitProvider>,
 			);
@@ -399,16 +403,20 @@ describe("KheopskitProvider type safety", () => {
 			{ children: <div />, config: {} },
 			{ children: <div />, ssrCookies: "" },
 			{ children: <div />, config: {}, ssrCookies: "" },
-			{ children: <div />, config: { platforms: ["polkadot"] } },
-			{ children: <div />, config: { platforms: ["ethereum"] } },
-			{ children: <div />, config: { platforms: ["polkadot", "ethereum"] } },
+			{ children: <div />, config: { platforms: [polkadot()] } },
+			{ children: <div />, config: { platforms: [ethereum()] } },
+			{ children: <div />, config: { platforms: [polkadot(), ethereum()] } },
 			{ children: <div />, config: { autoReconnect: true } },
 			{ children: <div />, config: { autoReconnect: false } },
 			{ children: <div />, config: { debug: true } },
 			{ children: <div />, config: { debug: false } },
 			{
 				children: <div />,
-				config: { platforms: ["polkadot"], autoReconnect: true, debug: false },
+				config: {
+					platforms: [polkadot()],
+					autoReconnect: true,
+					debug: false,
+				},
 				ssrCookies: "cookie=value",
 			},
 		];
