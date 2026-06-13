@@ -5,6 +5,7 @@ dist
 
 # Build outputs
 .next
+next-env.d.ts
 .vinxi
 .tanstack
 .output
