@@ -12,3 +12,4 @@ export type {
 	SolanaWallet,
 } from "./api/solana/types";
 export type { SolanaAppKitWallet } from "./api/types";
+export { isSolanaAddress } from "./utils/isSolanaAddress";

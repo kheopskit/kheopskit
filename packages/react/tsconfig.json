@@ -10,7 +10,8 @@
 			"@kheopskit/core": ["../core/src/index.ts"],
 			"@kheopskit/core/polkadot": ["../core/src/polkadot.ts"],
 			"@kheopskit/core/ethereum": ["../core/src/ethereum.ts"],
-			"@kheopskit/core/solana": ["../core/src/solana.ts"]
+			"@kheopskit/core/solana": ["../core/src/solana.ts"],
+			"@kheopskit/core/internal": ["../core/src/internal.ts"]
 		}
 	}
 }

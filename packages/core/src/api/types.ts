@@ -59,7 +59,11 @@ export type BaseWallet = {
 	icon: string;
 	isConnected: boolean;
 	connect: () => Promise<void>;
-	disconnect: () => void;
+	/**
+	 * Disconnect the wallet. Resolves once the underlying provider/extension
+	 * disconnect completes; rejects if it fails so callers can surface or retry.
+	 */
+	disconnect: () => Promise<void>;
 };
 
 /**
@@ -74,17 +78,20 @@ export type BaseWalletAccount = {
 	/** Friendly account name, when the wallet exposes one (e.g. Polkadot). */
 	name?: string;
 	walletName: string;
-	walletId: string;
+	walletId: WalletId;
 };
 
 /**
- * AppKit (WalletConnect) wallet handles. These reference only `@reown/appkit`
- * (a hard dependency) — no optional platform SDK — so they live in core and are
- * shared by every platform's wallet union.
+ * AppKit (WalletConnect) wallet handle for a given platform. References only
+ * `@reown/appkit` (a hard dependency) — no optional platform SDK — so it lives
+ * in core and is shared by every platform's wallet union.
+ *
+ * The per-platform aliases below (`PolkadotAppKitWallet`, … ) are kept so each
+ * platform entry point can re-export a concrete name.
  */
-export type PolkadotAppKitWallet = {
+export type AppKitWallet<P extends WalletPlatform = WalletPlatform> = {
 	id: WalletId;
-	platform: "polkadot";
+	platform: P;
 	type: "appKit";
 	/**
 	 * Raw Reown AppKit instance, exposed as an escape hatch for advanced use
@@ -96,42 +103,12 @@ export type PolkadotAppKitWallet = {
 	icon: string;
 	isConnected: boolean;
 	connect: () => Promise<void>;
-	disconnect: () => void;
+	disconnect: () => Promise<void>;
 };
 
-export type EthereumAppKitWallet = {
-	id: WalletId;
-	platform: "ethereum";
-	type: "appKit";
-	/**
-	 * Raw Reown AppKit instance, exposed as an escape hatch for advanced use
-	 * (custom modal control, reading providers directly). Most consumers should
-	 * use the wallet's `connect`/`disconnect` and the derived accounts instead.
-	 */
-	appKit: AppKitInstance;
-	name: string;
-	icon: string;
-	isConnected: boolean;
-	connect: () => Promise<void>;
-	disconnect: () => void;
-};
-
-export type SolanaAppKitWallet = {
-	id: WalletId;
-	platform: "solana";
-	type: "appKit";
-	/**
-	 * Raw Reown AppKit instance, exposed as an escape hatch for advanced use
-	 * (custom modal control, reading providers directly). Most consumers should
-	 * use the wallet's `connect`/`disconnect` and the derived accounts instead.
-	 */
-	appKit: AppKitInstance;
-	name: string;
-	icon: string;
-	isConnected: boolean;
-	connect: () => Promise<void>;
-	disconnect: () => void;
-};
+export type PolkadotAppKitWallet = AppKitWallet<"polkadot">;
+export type EthereumAppKitWallet = AppKitWallet<"ethereum">;
+export type SolanaAppKitWallet = AppKitWallet<"solana">;
 
 /**
  * Dapp metadata shown in the WalletConnect modal. Mirrors WalletConnect's

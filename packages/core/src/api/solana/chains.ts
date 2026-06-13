@@ -56,3 +56,18 @@ export const getSolanaCaip2 = (chain: SolanaChainId): string => {
 		);
 	return caip2;
 };
+
+const CAIP2_TO_SOLANA_CHAIN: Record<string, SolanaChainId> = Object.fromEntries(
+	Object.entries(SOLANA_CHAIN_TO_CAIP2).map(([chain, caip2]) => [
+		caip2,
+		chain as SolanaChainId,
+	]),
+);
+
+/**
+ * Maps a CAIP-2 chain id (as found in WalletConnect session namespaces) back to
+ * its {@link SolanaChainId}, or `undefined` if it isn't a recognised cluster.
+ */
+export const getSolanaChainIdFromCaip2 = (
+	caip2: string,
+): SolanaChainId | undefined => CAIP2_TO_SOLANA_CHAIN[caip2];

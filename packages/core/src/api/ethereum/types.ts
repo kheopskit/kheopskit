@@ -12,13 +12,18 @@ export type EthereumInjectedWallet = {
 	platform: "ethereum";
 	type: "injected";
 	id: WalletId;
-	providerId: string;
+	/**
+	 * Stable identifier of the underlying wallet source. For Ethereum this is the
+	 * EIP-6963 `rdns`. Named consistently across platforms (Solana: Wallet
+	 * Standard name; Polkadot: extension identifier).
+	 */
+	sourceId: string;
 	provider: EIP1193Provider;
 	name: string;
 	icon: string;
 	isConnected: boolean;
 	connect: () => Promise<void>;
-	disconnect: () => void;
+	disconnect: () => Promise<void>;
 };
 
 export type EthereumWallet = EthereumInjectedWallet | EthereumAppKitWallet;
@@ -31,5 +36,5 @@ export type EthereumAccount = {
 	/** Current chain ID the wallet is connected to. `undefined` while loading or after provider disconnect. */
 	chainId: number | undefined;
 	walletName: string;
-	walletId: string;
+	walletId: WalletId;
 };

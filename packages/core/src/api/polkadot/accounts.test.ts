@@ -32,7 +32,7 @@ const createMockInjectedWallet = (
 	id: "polkadot:test-wallet" as WalletId,
 	platform: "polkadot",
 	type: "injected",
-	extensionId: "test-wallet",
+	sourceId: "test-wallet",
 	extension: createMockExtension(accounts),
 	name: "Test Wallet",
 	icon: "data:image/svg+xml,...",

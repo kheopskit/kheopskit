@@ -4,7 +4,8 @@
 	"description": "",
 	"private": false,
 	"files": [
-		"dist"
+		"dist",
+		"README.md"
 	],
 	"main": "./dist/index.js",
 	"module": "./dist/index.mjs",

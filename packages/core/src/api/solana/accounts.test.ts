@@ -62,7 +62,7 @@ const createMockInjectedWallet = (
 	platform: "solana",
 	type: "injected",
 	id: "solana:Phantom" as WalletId,
-	walletStandardId: "Phantom",
+	sourceId: "Phantom",
 	wallet: standardWallet as unknown as SolanaInjectedWallet["wallet"],
 	chains: ["solana:mainnet", "solana:devnet"],
 	name: "Phantom",

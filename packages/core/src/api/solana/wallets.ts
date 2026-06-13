@@ -15,6 +15,7 @@ import {
 import { clearCachedObservablesByPrefix } from "../../utils/getCachedObservable";
 import { getWalletId, type WalletId } from "../../utils/WalletId";
 import { getAppKitWallets$ } from "../appKit";
+import { KheopskitError } from "../errors";
 import { store as defaultStore, type KheopskitStore } from "../store";
 import type { KheopskitConfig } from "../types";
 import { isSolanaChainId, type SolanaChainId } from "./chains";
@@ -73,13 +74,21 @@ const createSolanaInjectedWallets$ = (store: KheopskitStore) =>
 			walletId: WalletId,
 		) => {
 			if (enabledWalletIds$.value.has(walletId))
-				throw new Error(`Wallet ${walletId} already connected`);
+				throw new KheopskitError(
+					"WALLET_ALREADY_CONNECTED",
+					`wallet ${walletId} is already connected`,
+					{ walletId },
+				);
 
 			const feature = (wallet.features as Record<string, unknown>)[
 				"standard:connect"
 			] as ConnectApi | undefined;
 			if (!feature)
-				throw new Error(`Wallet ${walletId} does not support standard:connect`);
+				throw new KheopskitError(
+					"FEATURE_NOT_SUPPORTED",
+					`wallet ${walletId} does not support standard:connect`,
+					{ walletId },
+				);
 
 			await feature.connect();
 
@@ -90,15 +99,24 @@ const createSolanaInjectedWallets$ = (store: KheopskitStore) =>
 			store.addEnabledWalletId(walletId);
 		};
 
-		const disconnect = (wallet: WalletStandardWallet, walletId: WalletId) => {
+		const disconnect = async (
+			wallet: WalletStandardWallet,
+			walletId: WalletId,
+		) => {
 			if (!enabledWalletIds$.value.has(walletId))
-				throw new Error(`Wallet ${walletId} is not connected`);
+				throw new KheopskitError(
+					"WALLET_NOT_CONNECTED",
+					`wallet ${walletId} is not connected`,
+					{ walletId },
+				);
 
-			// standard:disconnect is an optional feature - never throw if missing
+			// standard:disconnect is an optional feature. Await it when present so a
+			// failed disconnect rejects the returned promise; if absent we still
+			// clear local state below.
 			const feature = (wallet.features as Record<string, unknown>)[
 				"standard:disconnect"
 			] as DisconnectApi | undefined;
-			void feature?.disconnect();
+			await feature?.disconnect();
 
 			const newSet = new Set(enabledWalletIds$.value);
 			newSet.delete(walletId);
@@ -121,7 +139,7 @@ const createSolanaInjectedWallets$ = (store: KheopskitStore) =>
 							platform: "solana",
 							type: "injected",
 							id: walletId,
-							walletStandardId: wallet.name,
+							sourceId: wallet.name,
 							wallet,
 							chains: getSolanaChains(wallet),
 							name: wallet.name,

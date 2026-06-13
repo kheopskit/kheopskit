@@ -163,7 +163,7 @@ describe("getSolanaWallets$", () => {
 		const original = { tag: "original" };
 		expect(getCachedObservable$(key, () => original)).toBe(original);
 
-		latest[0]?.disconnect();
+		await latest[0]?.disconnect();
 		await new Promise((r) => setTimeout(r, 10));
 
 		// Entry is gone, so the factory runs again and returns the fresh instance.

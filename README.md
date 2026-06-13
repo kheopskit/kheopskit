@@ -49,64 +49,59 @@ WalletConnect support (via Reown AppKit, across any platform) is also optional �
 
 ### With React
 
-1. Import the required packages.
-2. Wrap your app with `KheopskitProvider`.
-3. Use the `useWallets` hook to access wallets and accounts.
-
-Platforms are enabled by passing **plugins** (imported from their entry points) to `config.platforms`.
+Platforms are enabled by passing **plugins** (imported from their entry points) to `config.platforms`. Bind them once with `createKheopskit` to get a `KheopskitProvider` plus `useWallets` / `useAccounts` hooks already typed to those platforms — no generic to repeat.
 
 ```tsx
-import React from "react";
-import { KheopskitProvider, useWallets } from "@kheopskit/react";
+// kheopskit.ts
+import { createKheopskit } from "@kheopskit/react";
 import { polkadot } from "@kheopskit/core/polkadot";
 import { ethereum } from "@kheopskit/core/ethereum";
 
-const config = {
+export const { KheopskitProvider, useWallets, useAccounts } = createKheopskit({
   platforms: [polkadot(), ethereum()],
   autoReconnect: true,
-};
+});
+```
 
-const App = () => {
-  const { wallets, accounts } = useWallets();
+```tsx
+// app.tsx
+import { KheopskitProvider, useWallets } from "./kheopskit";
+
+const Wallets = () => {
+  const { wallets, accounts } = useWallets(); // platform-precise, no type argument
 
   return (
     <div>
       <h1>Wallets</h1>
       {wallets.map((wallet) => (
         <div key={wallet.id}>
-          <div>
-            [{wallet.platform}] {wallet.name}
-          </div>
+          [{wallet.platform}] {wallet.name}
           {wallet.isConnected ? (
-            <button onClick={wallet.disconnect}>Disconnect</button>
+            <button onClick={() => wallet.disconnect()}>Disconnect</button>
           ) : (
-            <button onClick={wallet.connect}>Connect</button>
+            <button onClick={() => wallet.connect()}>Connect</button>
           )}
         </div>
       ))}
 
       <h1>Accounts</h1>
       {accounts.map((account) => (
-        <div key={account.address}>
-          <p>
-            [{account.platform}] {account.name} - {account.address}
-          </p>
-        </div>
+        <p key={account.address}>
+          [{account.platform}] {account.name} - {account.address}
+        </p>
       ))}
     </div>
   );
 };
 
-const Root = () => (
-  <KheopskitProvider config={config}>
-    <App />
+export const App = () => (
+  <KheopskitProvider>
+    <Wallets />
   </KheopskitProvider>
 );
-
-export default Root;
 ```
 
-> **Precise account types**: `useWallets()` returns the SDK-free base shapes. To get platform-precise account types (e.g. `account.signer` on Solana, `account.client` on Ethereum), pass your platform tuple as a type argument: `useWallets<typeof config.platforms>()`.
+> **Prefer the component directly?** Use `<KheopskitProvider config={{ platforms }}>` and recover platform-precise account types (e.g. `account.signer` on Solana, `account.client` on Ethereum) with a type argument — `useWallets<typeof platforms>()`. React context can't be generic, so the bare `useWallets()` returns the SDK-free base shapes.
 
 ### With Vanilla JavaScript and RxJS
 

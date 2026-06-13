@@ -1,7 +1,6 @@
 import type { EthereumAccount } from "@kheopskit/core/ethereum";
 import type { PolkadotAccount } from "@kheopskit/core/polkadot";
 import type { SolanaAccount } from "@kheopskit/core/solana";
-import { useWallets } from "@kheopskit/react";
 import { MultiAddress } from "@polkadot-api/descriptors";
 import {
 	address,
@@ -36,7 +35,7 @@ import {
 	isSolanaNetwork,
 	VIEM_CHAINS_BY_ID,
 } from "@/lib/config/chains";
-import type { Platforms, WalletAccount } from "@/lib/config/playgroundConfig";
+import { useWallets, type WalletAccount } from "@/lib/config/playgroundConfig";
 import { getPolkadotApi, type PolkadotChainId } from "@/lib/getPolkadotApi";
 import { getSolanaRpc } from "@/lib/getSolanaRpc";
 import { AppBlock } from "./AppBlock";
@@ -64,7 +63,7 @@ const Content = () => {
 		[networkId],
 	);
 
-	const { accounts } = useWallets<Platforms>(); // kheopskit
+	const { accounts } = useWallets(); // kheopskit
 	const [accountId, setAccountId] = useState<string>();
 	const account = useMemo(
 		() => accounts.find((a) => a.id === accountId) ?? null,

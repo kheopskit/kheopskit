@@ -1,7 +1,7 @@
-import type { KheopskitConfig } from "@kheopskit/core";
 import { type EthereumAccount, ethereum } from "@kheopskit/core/ethereum";
 import { type PolkadotAccount, polkadot } from "@kheopskit/core/polkadot";
 import { type SolanaAccount, solana } from "@kheopskit/core/solana";
+import { type CreateKheopskitConfig, createKheopskit } from "@kheopskit/react";
 import type { AppKitNetwork } from "@reown/appkit/networks";
 import {
 	APPKIT_CHAINS,
@@ -45,7 +45,7 @@ const getNetworks = () => {
 
 const networks = getNetworks();
 
-export const kheopskitConfig: Partial<KheopskitConfig> = {
+export const kheopskitConfig = {
 	autoReconnect: true,
 	platforms,
 	debug: true,
@@ -64,4 +64,7 @@ export const kheopskitConfig: Partial<KheopskitConfig> = {
 					networks,
 				}
 			: undefined,
-};
+} satisfies CreateKheopskitConfig<Platforms>;
+
+export const { KheopskitProvider, useWallets, useAccounts } =
+	createKheopskit(kheopskitConfig);

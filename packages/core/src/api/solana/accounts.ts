@@ -11,7 +11,7 @@ import {
 import { getWalletAccountId } from "../../utils";
 import { getCachedObservable$ } from "../../utils/getCachedObservable";
 import type { SolanaAppKitWallet } from "../types";
-import type { SolanaChainId } from "./chains";
+import { getSolanaChainIdFromCaip2, type SolanaChainId } from "./chains";
 import {
 	createInjectedSolanaSigner,
 	createWalletConnectSolanaSigner,
@@ -84,22 +84,37 @@ const getAppKitAccounts$ = (
 				const session = provider.session;
 				if (!session) return [];
 
+				const solanaCaip10s = Object.values(session.namespaces)
+					.flatMap((namespace) => namespace.accounts ?? [])
+					.filter((account) => account.startsWith("solana:"));
+
 				const addresses = [
 					...new Set(
-						Object.values(session.namespaces)
-							.flatMap((namespace) => namespace.accounts ?? [])
-							.filter((account) => account.startsWith("solana:"))
+						solanaCaip10s
 							.map((account) => account.split(":")[2])
 							.filter((address): address is string => !!address),
 					),
 				];
+
+				// Clusters the session actually advertises ("solana:<chainRef>" from
+				// each CAIP-10 entry), mapped back to SolanaChainId. Falls back to the
+				// configured chain when none are recognised.
+				const advertisedChains = [
+					...new Set(
+						solanaCaip10s
+							.map((account) => account.split(":").slice(0, 2).join(":"))
+							.map(getSolanaChainIdFromCaip2)
+							.filter((c): c is SolanaChainId => !!c),
+					),
+				];
+				const chains = advertisedChains.length ? advertisedChains : [chain];
 
 				return addresses.map(
 					(accountAddress): SolanaAccount => ({
 						id: getWalletAccountId(wallet.id, accountAddress),
 						platform: "solana",
 						address: accountAddress,
-						chains: [chain],
+						chains,
 						signer: createWalletConnectSolanaSigner(
 							provider,
 							accountAddress,
@@ -161,5 +176,11 @@ export const getSolanaAccounts$ = (
 
 const isSameAccountsList = (a: SolanaAccount[], b: SolanaAccount[]) => {
 	if (a.length !== b.length) return false;
-	return a.every((account, i) => account.id === b[i]?.id);
+	return a.every((account, i) => {
+		const other = b[i];
+		if (!other || account.id !== other.id) return false;
+		// Re-emit when the advertised clusters change, not just on id changes.
+		if (account.chains.length !== other.chains.length) return false;
+		return account.chains.every((chain, j) => chain === other.chains[j]);
+	});
 };

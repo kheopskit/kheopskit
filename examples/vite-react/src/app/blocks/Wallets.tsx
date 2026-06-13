@@ -1,4 +1,3 @@
-import { useWallets } from "@kheopskit/react";
 import { Button } from "@/components/ui/button";
 import {
 	Table,
@@ -8,6 +7,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useWallets } from "@/lib/config/playgroundConfig";
 import { AppBlock } from "./AppBlock";
 
 export const Wallets = () => {

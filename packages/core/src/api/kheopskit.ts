@@ -253,10 +253,27 @@ const statesEqual = (a: KheopskitState, b: KheopskitState): boolean =>
 		(w, i) =>
 			w.id === b.wallets[i]?.id && w.isConnected === b.wallets[i]?.isConnected,
 	) &&
-	a.accounts.every(
-		(acc, i) =>
-			acc.id === b.accounts[i]?.id &&
-			(acc.platform !== "ethereum" ||
-				(acc as { chainId?: number }).chainId ===
-					(b.accounts[i] as { chainId?: number })?.chainId),
-	);
+	a.accounts.every((acc, i) => {
+		const other = b.accounts[i];
+		if (acc.id !== other?.id) return false;
+		// Compare platform-specific fields that can change without the account id
+		// changing, so the UI re-renders on e.g. an Ethereum chain switch.
+		switch (acc.platform) {
+			case "ethereum":
+				return (
+					(acc as { chainId?: number }).chainId ===
+					(other as { chainId?: number }).chainId
+				);
+			case "polkadot":
+				return (
+					(acc as { type?: string }).type === (other as { type?: string }).type
+				);
+			case "solana":
+				return arraysEqual(
+					(acc as { chains?: string[] }).chains ?? [],
+					(other as { chains?: string[] }).chains ?? [],
+				);
+			default:
+				return true;
+		}
+	});

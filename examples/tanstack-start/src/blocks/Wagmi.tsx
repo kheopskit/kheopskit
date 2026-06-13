@@ -1,4 +1,3 @@
-import { useWallets } from "@kheopskit/react";
 import { ClientOnly } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -11,7 +10,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import type { Platforms } from "@/lib/config/playgroundConfig";
+import { useWallets } from "@/lib/config/playgroundConfig";
 import { AppBlock } from "./AppBlock";
 
 export const Wagmi = () => {
@@ -96,7 +95,7 @@ const Connectors = () => (
 );
 
 const ActiveAccount = () => {
-	const { accounts } = useWallets<Platforms>(); // kheopskit
+	const { accounts } = useWallets(); // kheopskit
 	const [accountId, setAccountId] = useState<string>();
 
 	const account = useMemo(

@@ -50,7 +50,7 @@ const createMockInjectedWallet = (
 	platform: "ethereum",
 	type: "injected",
 	id: "ethereum:mock-wallet" as WalletId,
-	providerId: "mock-wallet",
+	sourceId: "mock-wallet",
 	provider: provider as unknown as EthereumInjectedWallet["provider"],
 	name: "Mock Wallet",
 	icon: "data:image/svg+xml,...",

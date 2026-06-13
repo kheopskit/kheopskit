@@ -10,13 +10,18 @@ export type PolkadotInjectedWallet = {
 	id: WalletId;
 	platform: "polkadot";
 	type: "injected";
-	extensionId: string;
+	/**
+	 * Stable identifier of the underlying wallet source. For Polkadot this is the
+	 * injected extension identifier. Named consistently across platforms
+	 * (Ethereum: EIP-6963 rdns; Solana: Wallet Standard name).
+	 */
+	sourceId: string;
 	extension: InjectedExtension | undefined;
 	name: string;
 	icon: string;
 	isConnected: boolean;
 	connect: () => Promise<void>;
-	disconnect: () => void;
+	disconnect: () => Promise<void>;
 };
 
 export type PolkadotWallet = PolkadotInjectedWallet | PolkadotAppKitWallet;
@@ -26,5 +31,5 @@ export type PolkadotAccount = Omit<InjectedPolkadotAccount, "type"> & {
 	id: WalletAccountId;
 	platform: "polkadot";
 	walletName: string;
-	walletId: string;
+	walletId: WalletId;
 };

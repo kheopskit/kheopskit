@@ -173,7 +173,7 @@ const getAppKitAccounts$ = (
 	)
 		return of([]);
 
-	return getCachedObservable$("accounts:appKit", () =>
+	return getCachedObservable$(`accounts:${wallet.id}`, () =>
 		new Observable<EthereumAccount[]>((subscriber) => {
 			const caipNetworkId$ = new ReplaySubject<string>(1);
 

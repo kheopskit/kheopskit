@@ -1,14 +1,16 @@
 import {
-	acceptsCachedAccount,
 	createKheopskitStore,
-	getCachedIcon,
 	getKheopskit$,
-	hydrateAccount,
-	hydrateWallet,
 	type KheopskitConfig,
 	type KheopskitState,
 	resolveConfig,
 } from "@kheopskit/core";
+import {
+	acceptsCachedAccount,
+	getCachedIcon,
+	hydrateAccount,
+	hydrateWallet,
+} from "@kheopskit/core/internal";
 import {
 	type FC,
 	type PropsWithChildren,

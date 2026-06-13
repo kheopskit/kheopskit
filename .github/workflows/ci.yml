@@ -22,6 +22,8 @@ jobs:
         run: pnpm check
       - name: Build packages
         run: pnpm build:packages
+      - name: Bundle isolation
+        run: pnpm check:isolation
       - name: Typecheck
         run: pnpm typecheck
       - name: Unit tests

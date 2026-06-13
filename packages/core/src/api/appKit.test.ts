@@ -40,3 +40,56 @@ describe("getAppKitWallets$ when @reown/appkit is unavailable", () => {
 		resetAppKitCache();
 	});
 });
+
+describe("getAppKitWallets$ disconnect", () => {
+	afterEach(() => {
+		vi.resetModules();
+		vi.restoreAllMocks();
+		vi.unmock("@reown/appkit/core");
+	});
+
+	it("clears cached account observables and awaits the underlying disconnect", async () => {
+		vi.resetModules();
+		const disconnect = vi.fn(() => Promise.resolve());
+		const fakeAppKit = {
+			chainNamespaces: ["solana"],
+			subscribeProviders: (cb: (p: Record<string, unknown>) => void) => {
+				cb({ solana: {} });
+				return () => {};
+			},
+			getWalletInfo: () => ({ name: "WC", icon: "icon" }),
+			open: vi.fn(() => Promise.resolve()),
+			disconnect,
+		};
+		vi.doMock("@reown/appkit/core", () => ({
+			createAppKit: () => fakeAppKit,
+		}));
+
+		const { getAppKitWallets$, resetAppKitCache } = await import("./appKit");
+		const { getCachedObservable$, clearAllCachedObservables } = await import(
+			"../utils/getCachedObservable"
+		);
+		resetAppKitCache();
+		clearAllCachedObservables();
+
+		const wallets = await firstValueFrom(
+			getAppKitWallets$(walletConnectConfig),
+		);
+		const solana = wallets.solana;
+		expect(solana?.isConnected).toBe(true);
+
+		// Seed a cached account observable as the accounts layer would.
+		const key = "accounts:solana:walletconnect:solana:mainnet";
+		const original = { tag: "original" };
+		expect(getCachedObservable$(key, () => original)).toBe(original);
+
+		await solana?.disconnect();
+
+		expect(disconnect).toHaveBeenCalledTimes(1);
+		// Entry is gone, so the factory runs again and returns the fresh instance.
+		const fresh = { tag: "fresh" };
+		expect(getCachedObservable$(key, () => fresh)).toBe(fresh);
+
+		resetAppKitCache();
+	});
+});

@@ -19,6 +19,7 @@ import type {
 	WalletAccount,
 	Wallet as WalletStandardWallet,
 } from "@wallet-standard/base";
+import { KheopskitError } from "../errors";
 import type { WalletConnectProvider } from "../types";
 import { getSolanaCaip2, type SolanaChainId } from "./chains";
 import type { SolanaSigner } from "./types";
@@ -41,8 +42,9 @@ type SignedTransactions = Awaited<
 const requireFeature = <T>(wallet: WalletStandardWallet, name: string): T => {
 	const feature = (wallet.features as Record<string, unknown>)[name];
 	if (!feature)
-		throw new Error(
-			`[kheopskit] wallet "${wallet.name}" does not support ${name}`,
+		throw new KheopskitError(
+			"FEATURE_NOT_SUPPORTED",
+			`wallet "${wallet.name}" does not support ${name}`,
 		);
 	return feature as T;
 };
@@ -133,13 +135,16 @@ export const createWalletConnectSolanaSigner = (
 	chain: SolanaChainId,
 ): SolanaSigner => {
 	const signerAddress = address(accountAddress);
-	const chainId = getSolanaCaip2(chain);
 
 	const request = <T>(method: string, params: unknown): Promise<T> => {
-		if (!provider.session) throw new Error("No session found");
+		if (!provider.session)
+			throw new KheopskitError("NO_SESSION", "No session found");
+		// Resolved lazily (not at signer construction) so building a signer for a
+		// cluster without a CAIP-2 id (e.g. localnet) doesn't throw until a request
+		// is actually attempted.
 		return provider.client.request<T>({
 			topic: provider.session.topic,
-			chainId,
+			chainId: getSolanaCaip2(chain),
 			request: { method, params },
 		});
 	};

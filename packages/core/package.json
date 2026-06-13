@@ -32,6 +32,11 @@
 			"import": "./dist/solana.mjs",
 			"require": "./dist/solana.js"
 		},
+		"./internal": {
+			"types": "./dist/internal.d.ts",
+			"import": "./dist/internal.mjs",
+			"require": "./dist/internal.js"
+		},
 		"./package.json": "./package.json"
 	},
 	"publishConfig": {
@@ -108,7 +113,8 @@
 			"src/index.ts",
 			"src/polkadot.ts",
 			"src/ethereum.ts",
-			"src/solana.ts"
+			"src/solana.ts",
+			"src/internal.ts"
 		],
 		"tsconfig": "tsconfig.build.json",
 		"splitting": true,

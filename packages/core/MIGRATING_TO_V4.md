@@ -18,7 +18,10 @@ installs and bundles only what it actually uses.
 | SDK install | bundled in core | optional peer deps — install per platform |
 | WalletConnect | `@reown/appkit` bundled | optional peer dep — install only if you use it |
 | Platform types | from `@kheopskit/core` | from `@kheopskit/core/<platform>` |
-| Precise React types | `useWallets()` | `useWallets<typeof platforms>()` |
+| Precise React types | `useWallets()` | `createKheopskit({ platforms })` (recommended) or `useWallets<typeof platforms>()` |
+| `wallet.disconnect()` | `() => void` | `() => Promise<void>` (awaitable, rejects on failure) |
+| Injected source id | `providerId` / `walletStandardId` / `extensionId` | unified `wallet.sourceId` |
+| Thrown errors | `Error` with ad-hoc message | `KheopskitError` with stable `.code` |
 | `account.isWalletDefault` | present (Ethereum/Solana) | **removed** |
 
 ---
@@ -48,7 +51,8 @@ its bundle.
 ## 2. Platforms are plugins
 
 Import a factory from each platform's entry point and pass instances to
-`config.platforms`. `platforms` is now **required** (no default).
+`config.platforms`. `platforms` is **required in the type** — if you omit it at
+runtime, kheopskit warns and yields no wallets/accounts, so always pass it.
 
 ```diff
   import { getKheopskit$ } from "@kheopskit/core";
@@ -87,9 +91,40 @@ WalletConnect/AppKit types remain on the root `@kheopskit/core`.
 
 ## 4. React: recover precise account types
 
-React context can't be generic, so `useWallets()` returns the SDK-free base
-shapes. Pass your platform tuple to get platform-precise types
-(`account.signer` on Solana, `account.client` on Ethereum, …):
+React context can't be generic, so the bare `useWallets()` returns the SDK-free
+base shapes. v4 adds two ways to get platform-precise types (`account.signer` on
+Solana, `account.client` on Ethereum, …).
+
+### Recommended: `createKheopskit` (bind the tuple once)
+
+`createKheopskit({ platforms })` returns a `KheopskitProvider` and hooks already
+typed to your platforms — no generic to repeat, one source of truth:
+
+```ts
+// kheopskit.ts
+import { createKheopskit } from "@kheopskit/react";
+import { polkadot } from "@kheopskit/core/polkadot";
+import { ethereum } from "@kheopskit/core/ethereum";
+import { solana } from "@kheopskit/core/solana";
+
+export const { KheopskitProvider, useWallets, useAccounts } = createKheopskit({
+  platforms: [polkadot(), ethereum(), solana()],
+  autoReconnect: true,
+});
+```
+
+```tsx
+// anywhere — accounts/wallets are already platform-precise
+import { useWallets, useAccounts } from "./kheopskit";
+
+const { wallets } = useWallets();
+const accounts = useAccounts(); // account.signer / account.client are typed
+```
+
+### Manual: type argument on `useWallets`
+
+If you keep the plain `<KheopskitProvider config={...}>`, pass the tuple as a
+type argument where you read SDK fields:
 
 ```diff
 - const { accounts } = useWallets();
@@ -133,6 +168,80 @@ The unused, never-persisted `isWalletDefault` field was removed from
 `EthereumAccount` and `SolanaAccount`. If you relied on "first account",
 compute it from array position yourself (`accounts[0]`).
 
+## 7. `disconnect()` is now async
+
+Every wallet's `disconnect` returns `Promise<void>` (matching `connect`). It
+resolves once the underlying provider/extension disconnect completes and
+**rejects if it fails**, so you can await and handle it:
+
+```diff
+- wallet.disconnect();
++ await wallet.disconnect();
+```
+
+Fire-and-forget (`onClick={() => wallet.disconnect()}`) still works; you just
+gain the ability to await and catch failures.
+
+## 8. Unified `sourceId` on injected wallets
+
+The per-platform identifier fields are unified to **`sourceId`** so you can read
+the underlying wallet source the same way everywhere:
+
+```diff
+- ethereumWallet.providerId      // EIP-6963 rdns
+- solanaWallet.walletStandardId  // Wallet Standard name
+- polkadotWallet.extensionId     // extension identifier
++ wallet.sourceId
+```
+
+The value is unchanged per platform (rdns / Wallet Standard name / extension id).
+
+## 9. Typed errors
+
+Wallet operations now throw a `KheopskitError` with a stable `code` instead of
+an ad-hoc `Error`, so you can branch on failures:
+
+```ts
+import { KheopskitError } from "@kheopskit/core";
+
+try {
+  await wallet.connect();
+} catch (error) {
+  if (error instanceof KheopskitError && error.code === "WALLET_ALREADY_CONNECTED") {
+    // ignore
+  } else throw error;
+}
+```
+
+Codes: `WALLET_ALREADY_CONNECTED`, `WALLET_NOT_CONNECTED`,
+`FEATURE_NOT_SUPPORTED`, `NO_SESSION`, `NO_PROVIDER`.
+
+## 10. Signing per platform
+
+Each platform exposes its native signing primitive — there is no single
+cross-platform signer, by design (the SDKs differ). Guard access behind
+`!isHydrating`:
+
+| Platform | Signing surface |
+|----------|-----------------|
+| Ethereum | `account.client` — a viem `WalletClient` (switch chains via the client) |
+| Solana | `account.signer` (bound to the configured cluster) and `account.getSigner(chain)` for another cluster |
+| Polkadot | `account.polkadotSigner` — a polkadot-api signer |
+
+## 11. New public exports
+
+v4 widens the public surface so you can name what you use:
+
+- From `@kheopskit/core`: `WalletId`, `getWalletId`, `parseWalletId`,
+  `WalletAccountId`, `getWalletAccountId`, `KheopskitError`,
+  `KheopskitErrorCode`, `isValidAddress`.
+- From the platform entries: `isEthereumAddress` (`/ethereum`), `isSs58Address`
+  (`/polkadot`), `isSolanaAddress` (`/solana`).
+
+Internal plumbing (hydration/cache/icon helpers) moved to
+`@kheopskit/core/internal` and is **not** semver-stable — don't import it in
+app code.
+
 ---
 
 ## Upgrade checklist
@@ -142,6 +251,9 @@ compute it from array position yourself (`accounts[0]`).
 - [ ] Replace `platforms: [...strings]` with plugin factories from the subpath entries.
 - [ ] Move `polkadotAccountTypes` / `solanaChain` into `polkadot({ accountTypes })` / `solana({ chain })`.
 - [ ] Update platform-type imports to the subpath entries.
-- [ ] Switch `useWallets()` → `useWallets<typeof platforms>()` where you read SDK fields.
+- [ ] Adopt `createKheopskit({ platforms })` (recommended) or switch `useWallets()` → `useWallets<typeof platforms>()` where you read SDK fields.
+- [ ] `await wallet.disconnect()` where you want to handle disconnect failures.
+- [ ] Rename `providerId` / `walletStandardId` / `extensionId` reads to `wallet.sourceId`.
+- [ ] Catch `KheopskitError` (branch on `.code`) instead of matching error message strings.
 - [ ] Remove any use of `account.isWalletDefault`.
 - [ ] Run `tsc` — remaining type errors point at anything missed.

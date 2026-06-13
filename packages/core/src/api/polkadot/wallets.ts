@@ -19,6 +19,7 @@ import {
 	type WalletId,
 } from "../../utils/WalletId";
 import { getAppKitWallets$ } from "../appKit";
+import { KheopskitError } from "../errors";
 import { store as defaultStore, type KheopskitStore } from "../store";
 import type { KheopskitConfig } from "../types";
 import type { PolkadotInjectedWallet, PolkadotWallet } from "./types";
@@ -68,7 +69,11 @@ const createPolkadotInjectedWallets$ = (store: KheopskitStore) =>
 
 		const connect = async (walletId: WalletId) => {
 			if (enabledExtensions$.value.has(walletId))
-				throw new Error(`Extension ${walletId} already connected`);
+				throw new KheopskitError(
+					"WALLET_ALREADY_CONNECTED",
+					`wallet ${walletId} is already connected`,
+					{ walletId },
+				);
 			const { identifier } = parseWalletId(walletId);
 			const extension = await connectInjectedExtension(identifier);
 
@@ -79,9 +84,13 @@ const createPolkadotInjectedWallets$ = (store: KheopskitStore) =>
 			store.addEnabledWalletId(walletId);
 		};
 
-		const disconnect = (walletId: WalletId) => {
+		const disconnect = async (walletId: WalletId) => {
 			if (!enabledExtensions$.value.has(walletId))
-				throw new Error(`Extension ${walletId} is not connected`);
+				throw new KheopskitError(
+					"WALLET_NOT_CONNECTED",
+					`wallet ${walletId} is not connected`,
+					{ walletId },
+				);
 
 			const newMap = new Map(enabledExtensions$.value);
 			newMap.delete(walletId);
@@ -106,7 +115,7 @@ const createPolkadotInjectedWallets$ = (store: KheopskitStore) =>
 							platform: "polkadot",
 							name: extInfo?.name ?? identifier,
 							icon: extInfo?.icon ?? "",
-							extensionId: identifier,
+							sourceId: identifier,
 							extension,
 							isConnected: !!extension,
 							connect: () => connect(id),

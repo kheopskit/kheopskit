@@ -14,6 +14,7 @@ import {
 } from "rxjs";
 import { getWalletAccountId } from "../../utils";
 import { getCachedObservable$ } from "../../utils/getCachedObservable";
+import { KheopskitError } from "../errors";
 import type {
 	AppKitInstance,
 	PolkadotAccountType,
@@ -58,13 +59,15 @@ const getInjectedWalletAccounts$ = (
 
 const getAppKitPolkadotSigner = (appKit: AppKitInstance, address: string) => {
 	const provider = appKit.getProvider("polkadot");
-	if (!provider) throw new Error("No provider found");
-	if (!provider.session) throw new Error("No session found");
+	if (!provider) throw new KheopskitError("NO_PROVIDER", "No provider found");
+	if (!provider.session)
+		throw new KheopskitError("NO_SESSION", "No session found");
 
 	return getPolkadotSignerFromPjs(
 		address,
 		(transactionPayload) => {
-			if (!provider.session) throw new Error("No session found");
+			if (!provider.session)
+				throw new KheopskitError("NO_SESSION", "No session found");
 
 			return provider.client.request({
 				topic: provider.session.topic,
@@ -79,7 +82,8 @@ const getAppKitPolkadotSigner = (appKit: AppKitInstance, address: string) => {
 			});
 		},
 		async ({ address, data }) => {
-			if (!provider.session) throw new Error("No session found");
+			if (!provider.session)
+				throw new KheopskitError("NO_SESSION", "No session found");
 			const networks = appKit.getCaipNetworks("polkadot");
 			const chainId = networks[0]?.caipNetworkId;
 			if (!chainId) throw new Error("No chainId found");

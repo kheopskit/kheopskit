@@ -1,4 +1,3 @@
-import { useWallets } from "@kheopskit/react";
 import { createSignableMessage, getBase58Decoder } from "@solana/kit";
 import { Binary } from "polkadot-api";
 import { type FC, useCallback, useMemo } from "react";
@@ -12,12 +11,12 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
-import type { Platforms, WalletAccount } from "@/lib/config/playgroundConfig";
+import { useWallets, type WalletAccount } from "@/lib/config/playgroundConfig";
 import { shortenAddress } from "@/lib/shortenAddress";
 import { AppBlock } from "./AppBlock";
 
 export const Accounts = () => {
-	const { accounts } = useWallets<Platforms>();
+	const { accounts } = useWallets();
 
 	return (
 		<AppBlock

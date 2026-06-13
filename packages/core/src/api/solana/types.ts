@@ -22,7 +22,12 @@ export type SolanaInjectedWallet = {
 	platform: "solana";
 	type: "injected";
 	id: WalletId;
-	walletStandardId: string;
+	/**
+	 * Stable identifier of the underlying wallet source. For Solana this is the
+	 * Wallet Standard wallet name. Named consistently across platforms (Ethereum:
+	 * EIP-6963 rdns; Polkadot: extension identifier).
+	 */
+	sourceId: string;
 	/** Raw Wallet Standard wallet, exposed as an escape hatch. */
 	wallet: WalletStandardWallet;
 	/** Solana clusters advertised by the wallet. */
@@ -31,7 +36,7 @@ export type SolanaInjectedWallet = {
 	icon: string;
 	isConnected: boolean;
 	connect: () => Promise<void>;
-	disconnect: () => void;
+	disconnect: () => Promise<void>;
 };
 
 export type SolanaWallet = SolanaInjectedWallet | SolanaAppKitWallet;
@@ -48,5 +53,5 @@ export type SolanaAccount = {
 	/** Returns a signer bound to an arbitrary cluster. */
 	getSigner: (chain: SolanaChainId) => SolanaSigner;
 	walletName: string;
-	walletId: string;
+	walletId: WalletId;
 };

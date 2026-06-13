@@ -25,6 +25,7 @@
 		"sync-peer-deps": "node scripts/sync-peer-deps.mjs",
 		"changeset-release-pr": "changeset version && pnpm sync-peer-deps && pnpm install && pnpm build:packages",
 		"check": "pnpm biome check .",
+		"check:isolation": "node scripts/check-bundle-isolation.mjs",
 		"typecheck": "pnpm -r --parallel typecheck",
 		"knip": "knip"
 	},
