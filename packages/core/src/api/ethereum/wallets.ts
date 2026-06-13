@@ -11,6 +11,7 @@ import {
 	shareReplay,
 } from "rxjs";
 import type { EIP1193Provider } from "viem";
+import { clearCachedObservable } from "../../utils/getCachedObservable";
 import { getWalletId, type WalletId } from "../../utils/WalletId";
 import { getAppKitWallets$ } from "../appKit";
 import { store as defaultStore, type KheopskitStore } from "../store";
@@ -76,6 +77,10 @@ const createEthereumInjectedWallets$ = (store: KheopskitStore) =>
 			enabledWalletIds$.next(newSet);
 
 			store.removeEnabledWalletId(walletId);
+
+			// Drop the cached account observable so a later reconnect rebuilds it
+			// against the current provider, not a stale closure.
+			clearCachedObservable(`accounts:${walletId}`);
 		};
 
 		const sub = combineLatest([providersDetails$, enabledWalletIds$])
@@ -115,7 +120,7 @@ export const getEthereumWallets$ = (
 	return new Observable<EthereumWallet[]>((subscriber) => {
 		const subscription = combineLatest([
 			createEthereumInjectedWallets$(store),
-			getAppKitWallets$(config)?.pipe(map((w) => w.ethereum)),
+			getAppKitWallets$(config).pipe(map((w) => w.ethereum)),
 		])
 			.pipe(
 				map(([injectedWallets, appKitWallet]) =>

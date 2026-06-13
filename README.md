@@ -81,7 +81,7 @@ const App = () => {
       {accounts.map((account) => (
         <div key={account.address}>
           <p>
-            [{wallet.platform}] {account.name} (account.) - {account.address}
+            [{account.platform}] {account.name} - {account.address}
           </p>
         </div>
       ))}

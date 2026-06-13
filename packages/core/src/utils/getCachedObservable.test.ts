@@ -1,6 +1,9 @@
 import { type Observable, of } from "rxjs";
 import { describe, expect, it } from "vitest";
-import { getCachedObservable$ } from "./getCachedObservable";
+import {
+	clearCachedObservablesByPrefix,
+	getCachedObservable$,
+} from "./getCachedObservable";
 
 // Access the module's private cache by re-importing between tests
 // Since we can't clear the cache, we'll use unique keys for each test
@@ -73,6 +76,32 @@ describe("getCachedObservable$", () => {
 
 			await new Promise((resolve) => setTimeout(resolve, 0));
 			expect(results).toEqual([42, 42]);
+		});
+	});
+
+	describe("clearCachedObservablesByPrefix", () => {
+		it("clears only entries whose key matches the prefix", () => {
+			const created = new Set<string>();
+			const factory = (tag: string) => () => {
+				created.add(tag);
+				return of(tag);
+			};
+
+			getCachedObservable$("prefixtest:wallet-a:mainnet", factory("a1"));
+			getCachedObservable$("prefixtest:wallet-a:devnet", factory("a2"));
+			getCachedObservable$("prefixtest:wallet-b:mainnet", factory("b1"));
+			created.clear();
+
+			clearCachedObservablesByPrefix("prefixtest:wallet-a:");
+
+			// Cleared entries re-run their factory; the retained one does not.
+			getCachedObservable$("prefixtest:wallet-a:mainnet", factory("a1"));
+			getCachedObservable$("prefixtest:wallet-a:devnet", factory("a2"));
+			getCachedObservable$("prefixtest:wallet-b:mainnet", factory("b1"));
+
+			expect(created.has("a1")).toBe(true);
+			expect(created.has("a2")).toBe(true);
+			expect(created.has("b1")).toBe(false);
 		});
 	});
 

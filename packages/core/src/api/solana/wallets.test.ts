@@ -138,4 +138,38 @@ describe("getSolanaWallets$", () => {
 
 		sub.unsubscribe();
 	});
+
+	it("clears cached account observables when a wallet disconnects", async () => {
+		const standardWallet = createMockStandardWallet("Phantom");
+		mockState.wallets = [standardWallet];
+		const { getSolanaWallets$ } = await importWallets();
+		const { getCachedObservable$, clearAllCachedObservables } = await import(
+			"../../utils/getCachedObservable"
+		);
+		clearAllCachedObservables();
+
+		let latest: SolanaWallet[] = [];
+		const sub = getSolanaWallets$(config, mockStore).subscribe((w) => {
+			latest = w;
+		});
+		await new Promise((r) => setTimeout(r, 10));
+
+		await latest[0]?.connect();
+		await new Promise((r) => setTimeout(r, 10));
+
+		// Seed a cached account observable as the accounts layer would (any value
+		// works — the cache is identity-based).
+		const key = "accounts:solana:Phantom:solana:mainnet";
+		const original = { tag: "original" };
+		expect(getCachedObservable$(key, () => original)).toBe(original);
+
+		latest[0]?.disconnect();
+		await new Promise((r) => setTimeout(r, 10));
+
+		// Entry is gone, so the factory runs again and returns the fresh instance.
+		const fresh = { tag: "fresh" };
+		expect(getCachedObservable$(key, () => fresh)).toBe(fresh);
+
+		sub.unsubscribe();
+	});
 });

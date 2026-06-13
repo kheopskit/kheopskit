@@ -1,6 +1,7 @@
 export {
 	clearAllCachedObservables,
 	clearCachedObservable,
+	clearCachedObservablesByPrefix,
 } from "../utils/getCachedObservable";
 export { hydrateAccount, hydrateWallet } from "../utils/hydrateState";
 export { getCachedIcon } from "../utils/iconCache";

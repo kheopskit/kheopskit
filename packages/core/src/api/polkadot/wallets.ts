@@ -130,7 +130,7 @@ export const getPolkadotWallets$ = (
 	return new Observable<PolkadotWallet[]>((subscriber) => {
 		const subscription = combineLatest([
 			createPolkadotInjectedWallets$(store),
-			getAppKitWallets$(config)?.pipe(map((w) => w.polkadot)),
+			getAppKitWallets$(config).pipe(map((w) => w.polkadot)),
 		])
 			.pipe(
 				map(([injectedWallets, appKitWallet]) =>

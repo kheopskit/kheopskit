@@ -12,6 +12,7 @@ import {
 	Observable,
 	shareReplay,
 } from "rxjs";
+import { clearCachedObservablesByPrefix } from "../../utils/getCachedObservable";
 import { getWalletId, type WalletId } from "../../utils/WalletId";
 import { getAppKitWallets$ } from "../appKit";
 import { store as defaultStore, type KheopskitStore } from "../store";
@@ -104,6 +105,10 @@ const createSolanaInjectedWallets$ = (store: KheopskitStore) =>
 			enabledWalletIds$.next(newSet);
 
 			store.removeEnabledWalletId(walletId);
+
+			// Drop cached account observables for this wallet so a later reconnect
+			// rebuilds them against the current wallet handle, not a stale closure.
+			clearCachedObservablesByPrefix(`accounts:${walletId}:`);
 		};
 
 		const sub = combineLatest([walletStandardWallets$, enabledWalletIds$])
@@ -143,7 +148,7 @@ export const getSolanaWallets$ = (
 	return new Observable<SolanaWallet[]>((subscriber) => {
 		const subscription = combineLatest([
 			createSolanaInjectedWallets$(store),
-			getAppKitWallets$(config)?.pipe(map((w) => w.solana)),
+			getAppKitWallets$(config).pipe(map((w) => w.solana)),
 		])
 			.pipe(
 				map(([injectedWallets, appKitWallet]) =>

@@ -132,10 +132,20 @@ export const getKheopskit$ = <
 			},
 		);
 
+		// Share the buffered streams so the main and persistence subscriptions
+		// below reuse a single hydration pipeline (timers, isHydrating state)
+		// instead of running the buffering twice.
+		const sharedWallets$ = bufferedWallets$.pipe(
+			shareReplay({ bufferSize: 1, refCount: true }),
+		);
+		const sharedAccounts$ = bufferedAccounts$.pipe(
+			shareReplay({ bufferSize: 1, refCount: true }),
+		);
+
 		// Combine buffered wallets and accounts
 		const subscription = combineLatest({
-			wallets: bufferedWallets$,
-			accounts: bufferedAccounts$,
+			wallets: sharedWallets$,
+			accounts: sharedAccounts$,
 		})
 			.pipe(
 				map(({ wallets, accounts }) => {
@@ -160,8 +170,8 @@ export const getKheopskit$ = <
 
 		// Persist state snapshot when hydration completes and state stabilizes
 		const persistSub = combineLatest({
-			wallets: bufferedWallets$,
-			accounts: bufferedAccounts$,
+			wallets: sharedWallets$,
+			accounts: sharedAccounts$,
 		})
 			.pipe(
 				// Wait for hydration to complete

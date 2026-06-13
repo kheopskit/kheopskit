@@ -15,6 +15,7 @@ import {
 	switchMap,
 } from "rxjs";
 import { getWalletAccountId } from "../../utils";
+import { getCachedObservable$ } from "../../utils/getCachedObservable";
 import type { PolkadotAccountType, PolkadotAppKitWallet } from "../types";
 import type {
 	PolkadotAccount,
@@ -96,41 +97,64 @@ const getAppKitPolkadotSigner = (appKit: AppKit, address: string) => {
 	);
 };
 
-const getAppKitAccounts$ = (wallet: PolkadotAppKitWallet) => {
+const getAppKitAccounts$ = (
+	wallet: PolkadotAppKitWallet,
+): Observable<PolkadotAccount[]> => {
 	const provider = wallet.appKit.getProvider<UniversalProvider>("polkadot");
 
 	if (!wallet.isConnected || !provider?.session) return of([]);
 
-	// AppKit's getAccount("polkadot").allAccounts is always empty because AppKit
-	// has no native polkadot adapter; the WalletConnect session is the source of
-	// truth. Accounts are CAIP-10 strings ("polkadot:<chainRef>:<address>"), one
-	// entry per chain, so dedupe to unique addresses.
-	const addresses = [
-		...new Set(
-			Object.values(provider.session.namespaces)
-				.flatMap((namespace) => namespace.accounts ?? [])
-				.filter((account) => account.startsWith("polkadot:"))
-				.map((account) => account.split(":")[2])
-				.filter((address): address is string => !!address),
-		),
-	];
+	return getCachedObservable$(`accounts:${wallet.id}`, () =>
+		new Observable<PolkadotAccount[]>((subscriber) => {
+			// AppKit's getAccount("polkadot").allAccounts is always empty because
+			// AppKit has no native polkadot adapter; the WalletConnect session is the
+			// source of truth. Accounts are CAIP-10 strings
+			// ("polkadot:<chainRef>:<address>"), one entry per chain, so dedupe to
+			// unique addresses.
+			const buildAccounts = (): PolkadotAccount[] => {
+				const session = provider.session;
+				if (!session) return [];
 
-	return of(
-		addresses.map(
-			(address): PolkadotAccount => ({
-				id: getWalletAccountId(wallet.id, address),
-				platform: "polkadot",
-				walletName: wallet.name,
-				walletId: wallet.id,
-				address,
-				polkadotSigner: getAppKitPolkadotSigner(wallet.appKit, address),
-				genesisHash: null,
-				name: `${wallet.name} Polkadot`,
-				// WalletConnect (Reown AppKit) doesn't expose account key type;
-				// default to sr25519, which is the most common Polkadot key type.
-				type: "sr25519",
-			}),
-		),
+				const addresses = [
+					...new Set(
+						Object.values(session.namespaces)
+							.flatMap((namespace) => namespace.accounts ?? [])
+							.filter((account) => account.startsWith("polkadot:"))
+							.map((account) => account.split(":")[2])
+							.filter((address): address is string => !!address),
+					),
+				];
+
+				return addresses.map(
+					(address): PolkadotAccount => ({
+						id: getWalletAccountId(wallet.id, address),
+						platform: "polkadot",
+						walletName: wallet.name,
+						walletId: wallet.id,
+						address,
+						polkadotSigner: getAppKitPolkadotSigner(wallet.appKit, address),
+						genesisHash: null,
+						name: `${wallet.name} Polkadot`,
+						// WalletConnect (Reown AppKit) doesn't expose account key type;
+						// default to sr25519, which is the most common Polkadot key type.
+						type: "sr25519",
+					}),
+				);
+			};
+
+			subscriber.next(buildAccounts());
+
+			// Re-derive when the WalletConnect session's accounts change, mirroring
+			// the injected extension's subscribe and the Solana AppKit path.
+			const reemit = () => subscriber.next(buildAccounts());
+			provider.on("session_update", reemit);
+			provider.on("accountsChanged", reemit);
+
+			return () => {
+				provider.off("session_update", reemit);
+				provider.off("accountsChanged", reemit);
+			};
+		}).pipe(shareReplay({ refCount: true, bufferSize: 1 })),
 	);
 };
 

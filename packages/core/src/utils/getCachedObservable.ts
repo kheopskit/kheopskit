@@ -36,6 +36,20 @@ export const clearCachedObservable = (key: string): void => {
 };
 
 /**
+ * Clears all cached observables whose key starts with `prefix`.
+ *
+ * Used to drop a wallet's account observables when it disconnects, so a later
+ * reconnect rebuilds them against the current wallet handle instead of a stale
+ * closure — and to keep the cache from growing unbounded across connect cycles.
+ */
+export const clearCachedObservablesByPrefix = (prefix: string): void => {
+	const cache = getCache();
+	for (const key of cache.keys()) {
+		if (key.startsWith(prefix)) cache.delete(key);
+	}
+};
+
+/**
  * Clears all cached observables.
  * Use when resetting the entire kheopskit state.
  */
