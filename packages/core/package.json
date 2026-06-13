@@ -20,7 +20,7 @@
 		"access": "public"
 	},
 	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1",
+		"test": "vitest run --root=../.. packages/core",
 		"dev": "tsup --watch",
 		"build": "tsup",
 		"prepack": "tsup",
@@ -35,7 +35,7 @@
 	},
 	"license": "ISC",
 	"peerDependencies": {
-		"@solana/kit": ">=2.0.0",
+		"@solana/kit": ">=6.0.0",
 		"polkadot-api": ">=2.0.0",
 		"rxjs": ">=7.8.0"
 	},

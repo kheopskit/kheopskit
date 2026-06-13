@@ -76,9 +76,25 @@ const createMockAppKitWallet = (
 	namespaces: Record<string, { accounts: string[] }>,
 	overrides: Partial<SolanaAppKitWallet> = {},
 ): SolanaAppKitWallet => {
+	const listeners = new Map<string, Set<ChangeListener>>();
 	const provider = {
 		session: { topic: "test-topic", namespaces },
 		client: { request: vi.fn() },
+		on: vi.fn((event: string, cb: ChangeListener) => {
+			let set = listeners.get(event);
+			if (!set) {
+				set = new Set();
+				listeners.set(event, set);
+			}
+			set.add(cb);
+		}),
+		off: vi.fn((event: string, cb: ChangeListener) => {
+			listeners.get(event)?.delete(cb);
+		}),
+		// test helper
+		_emit: (event: string, props?: unknown) => {
+			for (const cb of listeners.get(event) ?? []) cb(props);
+		},
 	};
 
 	return {
@@ -252,6 +268,36 @@ describe("getSolanaAccounts$", () => {
 				[ADDRESS_1, ADDRESS_2].sort(),
 			);
 			expect(accounts.every((a) => a.platform === "solana")).toBe(true);
+		});
+
+		it("re-derives accounts when the WalletConnect session updates", async () => {
+			const namespaces = {
+				solana: {
+					accounts: [`solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:${ADDRESS_1}`],
+				},
+			};
+			const wallet = createMockAppKitWallet(namespaces);
+			const { getSolanaAccounts$ } = await importAccounts();
+
+			const accounts$ = getSolanaAccounts$(of([wallet]), "solana:mainnet");
+			const resultsPromise = firstValueFrom(accounts$.pipe(take(2), toArray()));
+
+			await new Promise((r) => setTimeout(r, 10));
+
+			const provider = (
+				wallet.appKit.getProvider as unknown as () => {
+					session: { namespaces: { solana: { accounts: string[] } } };
+					_emit: (event: string, props?: unknown) => void;
+				}
+			)();
+			provider.session.namespaces.solana.accounts.push(
+				`solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:${ADDRESS_2}`,
+			);
+			provider._emit("session_update");
+
+			const results = await resultsPromise;
+			expect(results[0]).toHaveLength(1);
+			expect(results[1]).toHaveLength(2);
 		});
 
 		it("returns no accounts when the provider has no session", async () => {

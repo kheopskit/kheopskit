@@ -76,39 +76,59 @@ const getAppKitAccounts$ = (
 
 	if (!wallet.isConnected || !provider?.session) return of([]);
 
-	// AppKit has no native solana adapter, so getAccount("solana").allAccounts is
-	// always empty; the WalletConnect session is the source of truth. Accounts are
-	// CAIP-10 strings ("solana:<chainRef>:<address>"), one entry per chain, so
-	// dedupe to unique addresses.
-	const addresses = [
-		...new Set(
-			Object.values(provider.session.namespaces)
-				.flatMap((namespace) => namespace.accounts ?? [])
-				.filter((account) => account.startsWith("solana:"))
-				.map((account) => account.split(":")[2])
-				.filter((address): address is string => !!address),
-		),
-	];
+	return getCachedObservable$(`accounts:${wallet.id}:${chain}`, () =>
+		new Observable<SolanaAccount[]>((subscriber) => {
+			// AppKit has no native solana adapter, so getAccount("solana").allAccounts
+			// is always empty; the WalletConnect session is the source of truth.
+			// Accounts are CAIP-10 strings ("solana:<chainRef>:<address>"), one entry
+			// per chain, so dedupe to unique addresses.
+			const buildAccounts = (): SolanaAccount[] => {
+				const session = provider.session;
+				if (!session) return [];
 
-	return of(
-		addresses.map(
-			(accountAddress, i): SolanaAccount => ({
-				id: getWalletAccountId(wallet.id, accountAddress),
-				platform: "solana",
-				address: accountAddress,
-				chains: [chain],
-				signer: createWalletConnectSolanaSigner(
-					provider,
-					accountAddress,
-					chain,
-				),
-				getSigner: (c) =>
-					createWalletConnectSolanaSigner(provider, accountAddress, c),
-				walletName: wallet.name,
-				walletId: wallet.id,
-				isWalletDefault: i === 0,
-			}),
-		),
+				const addresses = [
+					...new Set(
+						Object.values(session.namespaces)
+							.flatMap((namespace) => namespace.accounts ?? [])
+							.filter((account) => account.startsWith("solana:"))
+							.map((account) => account.split(":")[2])
+							.filter((address): address is string => !!address),
+					),
+				];
+
+				return addresses.map(
+					(accountAddress, i): SolanaAccount => ({
+						id: getWalletAccountId(wallet.id, accountAddress),
+						platform: "solana",
+						address: accountAddress,
+						chains: [chain],
+						signer: createWalletConnectSolanaSigner(
+							provider,
+							accountAddress,
+							chain,
+						),
+						getSigner: (c) =>
+							createWalletConnectSolanaSigner(provider, accountAddress, c),
+						walletName: wallet.name,
+						walletId: wallet.id,
+						isWalletDefault: i === 0,
+					}),
+				);
+			};
+
+			subscriber.next(buildAccounts());
+
+			// Re-derive when the WalletConnect session's accounts change, mirroring
+			// the injected wallet's standard:events "change" subscription.
+			const reemit = () => subscriber.next(buildAccounts());
+			provider.on("session_update", reemit);
+			provider.on("accountsChanged", reemit);
+
+			return () => {
+				provider.off("session_update", reemit);
+				provider.off("accountsChanged", reemit);
+			};
+		}).pipe(shareReplay({ refCount: true, bufferSize: 1 })),
 	);
 };
 

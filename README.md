@@ -4,16 +4,16 @@ Kheopskit is a library designed to simplify the development of Polkadot DApps. I
 
 - List all installed wallets and connect/disconnect them.
 - List all accounts from those wallets.
-- Support both Polkadot and Ethereum wallets.
+- Support Polkadot, Ethereum, and Solana wallets.
 - Handle identical accounts injected by multiple wallets.
 
 Try it on the [interactive playground](https://Kheopskit.pages.dev/)
 
 ## Features
 
-- **Multi-wallet support**: Easily interact with both Polkadot and Ethereum wallets.
+- **Multi-wallet support**: Easily interact with Polkadot, Ethereum, and Solana wallets.
 - **Account management**: Manage accounts from all connected wallets in a single list.
-- **Modern tech stack**: Designed for use with polkadot-api (PAPI) and viem.
+- **Modern tech stack**: Designed for use with polkadot-api (PAPI), viem, and @solana/kit.
 
 ---
 
@@ -23,6 +23,12 @@ Install the required packages using `pnpm`:
 
 ```bash
 pnpm add @kheopskit/core @kheopskit/react
+```
+
+`@kheopskit/core` declares `polkadot-api`, `@solana/kit`, and `rxjs` as peer dependencies. Install the ones matching the platforms you target — e.g. add `@solana/kit` when using the `solana` platform:
+
+```bash
+pnpm add @solana/kit
 ```
 
 ---
@@ -124,6 +130,30 @@ const config = {
   polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa", "ethereum"],
 };
 ```
+
+### Solana
+
+Add `"solana"` to `platforms` to surface Solana wallets. Injected wallets are discovered via the [Wallet Standard](https://github.com/anza-xyz/wallet-standard); WalletConnect is supported through Reown AppKit.
+
+Each Solana account exposes a signer built on [`@solana/kit`](https://www.npmjs.com/package/@solana/kit)'s signer interfaces, so it plugs directly into kit's transaction pipeline (e.g. `signAndSendTransactionMessageWithSigners`):
+
+```ts
+const config = {
+  platforms: ["solana"],
+  autoReconnect: true,
+  // Cluster the account signers target. Default: "solana:mainnet"
+  solanaChain: "solana:mainnet",
+};
+
+// account.signer is bound to config.solanaChain
+const [signed] = await account.signer.modifyAndSignMessages([message]);
+
+// account.getSigner(chain) returns a signer bound to another cluster
+const devnetSigner = account.getSigner("solana:devnet");
+```
+
+- Supported `solanaChain` values: `"solana:mainnet"`, `"solana:devnet"`, `"solana:testnet"`, `"solana:localnet"`
+- `"solana:localnet"` cannot be used over WalletConnect (no canonical CAIP-2 id)
 
 ### Server-Side Rendering (SSR)
 
