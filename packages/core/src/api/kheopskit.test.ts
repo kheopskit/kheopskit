@@ -106,7 +106,7 @@ describe("getKheopskit$ cached account filtering", () => {
 		expect(state.accounts).toHaveLength(1);
 		const account = state.accounts[0];
 		expect(account?.platform).toBe("polkadot");
-		if (!account || account.platform !== "polkadot") {
+		if (account?.platform !== "polkadot") {
 			throw new Error("expected polkadot account");
 		}
 		expect(account.type).toBe("ed25519");

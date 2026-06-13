@@ -87,7 +87,7 @@ const ActiveAccount = () => {
 
 	const handleClick = async () => {
 		const account = accounts.find((a) => a.id === accountId);
-		if (!account || account.platform !== "ethereum") return;
+		if (account?.platform !== "ethereum") return;
 
 		try {
 			const signature = await account.client.signMessage({
