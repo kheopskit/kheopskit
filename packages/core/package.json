@@ -4,7 +4,9 @@
 	"description": "",
 	"private": false,
 	"files": [
-		"dist"
+		"dist",
+		"README.md",
+		"MIGRATING_TO_V4.md"
 	],
 	"main": "./dist/index.js",
 	"module": "./dist/index.mjs",

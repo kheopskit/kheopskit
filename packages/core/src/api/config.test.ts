@@ -60,6 +60,24 @@ describe("resolveConfig", () => {
 		});
 	});
 
+	describe("legacy platforms guard", () => {
+		it("throws on v3-style string platform names", () => {
+			expect(() =>
+				resolveConfig({ platforms: ["polkadot", "ethereum"] as never }),
+			).toThrow(/plugin instances/);
+		});
+
+		it("throws on plugin-like objects missing getWallets$", () => {
+			expect(() =>
+				resolveConfig({ platforms: [{ platform: "polkadot" } as never] }),
+			).toThrow(/MIGRATING_TO_V4\.md/);
+		});
+
+		it("accepts valid plugin instances", () => {
+			expect(() => resolveConfig({ platforms: [polkadot()] })).not.toThrow();
+		});
+	});
+
 	describe("immutability", () => {
 		it("does not mutate the input config", () => {
 			const input = { platforms: [polkadot()], autoReconnect: false };
