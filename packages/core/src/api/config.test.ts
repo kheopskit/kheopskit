@@ -11,6 +11,7 @@ describe("resolveConfig", () => {
 				autoReconnect: true,
 				platforms: ["polkadot"],
 				polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa"],
+				solanaChain: "solana:mainnet",
 				debug: false,
 				storageKey: "kheopskit",
 				hydrationGracePeriod: 500,
@@ -90,10 +91,17 @@ describe("resolveConfig", () => {
 				autoReconnect: false,
 				platforms: ["ethereum"],
 				polkadotAccountTypes: ["ecdsa"],
+				solanaChain: "solana:mainnet",
 				debug: true,
 				storageKey: "my-custom-key",
 				hydrationGracePeriod: 500,
 			});
+		});
+
+		it("overrides solanaChain", () => {
+			const result = resolveConfig({ solanaChain: "solana:devnet" });
+
+			expect(result.solanaChain).toBe("solana:devnet");
 		});
 	});
 
@@ -137,6 +145,26 @@ describe("resolveConfig", () => {
 			resolveConfig({
 				polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa", "ethereum"],
 			});
+
+			expect(warnSpy).not.toHaveBeenCalled();
+			warnSpy.mockRestore();
+		});
+
+		it("warns about unrecognized solanaChain", () => {
+			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+			resolveConfig({ solanaChain: "solana:nope" as never });
+
+			expect(warnSpy).toHaveBeenCalledWith(
+				expect.stringContaining("Unknown solanaChain"),
+			);
+			warnSpy.mockRestore();
+		});
+
+		it("does not warn for valid solanaChain", () => {
+			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+			resolveConfig({ solanaChain: "solana:devnet" });
 
 			expect(warnSpy).not.toHaveBeenCalled();
 			warnSpy.mockRestore();

@@ -5,6 +5,8 @@ import type {
 	EthereumInjectedWallet,
 	PolkadotAccount,
 	PolkadotInjectedWallet,
+	SolanaAccount,
+	SolanaInjectedWallet,
 	Wallet,
 	WalletAccount,
 } from "../api/types";
@@ -93,6 +95,22 @@ export const hydrateWallet = (cached: CachedWallet): Wallet => {
 		} satisfies EthereumInjectedWallet;
 	}
 
+	if (platform === "solana") {
+		return {
+			id: cached.id,
+			platform: "solana",
+			type: "injected",
+			walletStandardId: identifier,
+			wallet: {} as never, // Placeholder - will be replaced by real wallet
+			chains: [],
+			name: cached.name,
+			icon,
+			isConnected: cached.isConnected,
+			connect: throwPending,
+			disconnect: throwPending,
+		} satisfies SolanaInjectedWallet;
+	}
+
 	// Should never happen if CachedWallet is properly typed
 	throw new Error(`Unknown platform: ${platform}`);
 };
@@ -130,6 +148,25 @@ export const hydrateAccount = (cached: CachedAccount): WalletAccount => {
 			isWalletDefault: false,
 			client: {} as never, // Placeholder
 		} satisfies EthereumAccount;
+	}
+
+	if (cached.platform === "solana") {
+		const throwPending = () => {
+			throw new Error(
+				`Account ${cached.id} is still loading. Wait for isHydrating to be false before signing.`,
+			);
+		};
+		return {
+			id: cached.id as WalletAccountId,
+			platform: "solana",
+			address: cached.address,
+			chains: [],
+			signer: {} as never, // Placeholder - will be replaced by real account
+			getSigner: throwPending as never,
+			walletId: cached.walletId,
+			walletName: cached.walletName,
+			isWalletDefault: false,
+		} satisfies SolanaAccount;
 	}
 
 	throw new Error(`Unknown platform: ${cached.platform}`);

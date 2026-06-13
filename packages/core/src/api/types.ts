@@ -1,5 +1,11 @@
 import type { AppKit, ThemeMode, ThemeVariables } from "@reown/appkit/core";
 import type { AppKitNetwork } from "@reown/appkit/networks";
+import type {
+	MessageModifyingSigner,
+	TransactionModifyingSigner,
+	TransactionSendingSigner,
+} from "@solana/kit";
+import type { Wallet as WalletStandardWallet } from "@wallet-standard/base";
 import type { Metadata } from "@walletconnect/universal-provider";
 import type {
 	InjectedExtension,
@@ -13,6 +19,7 @@ import type {
 } from "viem";
 import type { WalletAccountId } from "../utils";
 import type { WalletId } from "../utils/WalletId";
+import type { SolanaChainId } from "./solana/chains";
 
 export type KheopskitConfig = {
 	autoReconnect: boolean;
@@ -24,6 +31,15 @@ export type KheopskitConfig = {
 	 * @default ["sr25519", "ed25519", "ecdsa"]
 	 */
 	polkadotAccountTypes: PolkadotAccountType[];
+	/**
+	 * Solana cluster that account signers target.
+	 *
+	 * Each Solana account exposes a `signer` pre-bound to this chain, plus a
+	 * `getSigner(chain)` factory for dapps that need to target another cluster.
+	 *
+	 * @default "solana:mainnet"
+	 */
+	solanaChain: SolanaChainId;
 	walletConnect?: {
 		projectId: string;
 		metadata: Metadata;
@@ -118,7 +134,46 @@ export type EthereumAppKitWallet = {
 
 export type EthereumWallet = EthereumInjectedWallet | EthereumAppKitWallet;
 
-export type Wallet = PolkadotWallet | EthereumWallet;
+/**
+ * Unified signing interface for Solana accounts, expressed with @solana/kit
+ * signer interfaces so it plugs directly into kit's transaction pipeline
+ * (e.g. `signAndSendTransactionMessageWithSigners`).
+ */
+export type SolanaSigner = MessageModifyingSigner &
+	TransactionModifyingSigner &
+	TransactionSendingSigner;
+
+export type SolanaInjectedWallet = {
+	platform: "solana";
+	type: "injected";
+	id: WalletId;
+	walletStandardId: string;
+	/** Raw Wallet Standard wallet, exposed as an escape hatch. */
+	wallet: WalletStandardWallet;
+	/** Solana clusters advertised by the wallet. */
+	chains: SolanaChainId[];
+	name: string;
+	icon: string;
+	isConnected: boolean;
+	connect: () => Promise<void>;
+	disconnect: () => void;
+};
+
+export type SolanaAppKitWallet = {
+	platform: "solana";
+	type: "appKit";
+	id: WalletId;
+	appKit: AppKit;
+	name: string;
+	icon: string;
+	isConnected: boolean;
+	connect: () => Promise<void>;
+	disconnect: () => void;
+};
+
+export type SolanaWallet = SolanaInjectedWallet | SolanaAppKitWallet;
+
+export type Wallet = PolkadotWallet | EthereumWallet | SolanaWallet;
 
 export type WalletPlatform = Wallet["platform"];
 
@@ -144,7 +199,23 @@ export type EthereumAccount = {
 	isWalletDefault: boolean;
 };
 
-export type WalletAccount = PolkadotAccount | EthereumAccount;
+export type SolanaAccount = {
+	id: WalletAccountId;
+	platform: "solana";
+	/** Base58-encoded address. */
+	address: string;
+	/** Solana clusters advertised by the wallet for this account. */
+	chains: SolanaChainId[];
+	/** Signer bound to `config.solanaChain`. */
+	signer: SolanaSigner;
+	/** Returns a signer bound to an arbitrary cluster. */
+	getSigner: (chain: SolanaChainId) => SolanaSigner;
+	walletName: string;
+	walletId: string;
+	isWalletDefault: boolean;
+};
+
+export type WalletAccount = PolkadotAccount | EthereumAccount | SolanaAccount;
 
 /**
  * Serializable wallet data for SSR hydration cache.
@@ -175,3 +246,5 @@ export type CachedAccount = {
 	walletId: WalletId;
 	walletName: string;
 };
+
+export type { SolanaChainId };

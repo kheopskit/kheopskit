@@ -1,3 +1,4 @@
+import { DEFAULT_SOLANA_CHAIN, isSolanaChainId } from "./solana/chains";
 import type { KheopskitConfig } from "./types";
 
 /**
@@ -11,6 +12,7 @@ const DEFAULT_CONFIG: KheopskitConfig = {
 	autoReconnect: true,
 	platforms: ["polkadot"],
 	polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa"],
+	solanaChain: DEFAULT_SOLANA_CHAIN,
 	debug: false,
 	storageKey: DEFAULT_STORAGE_KEY,
 	hydrationGracePeriod: 500,
@@ -34,6 +36,12 @@ export const resolveConfig = (
 	if (invalid.length > 0) {
 		console.warn(
 			`[kheopskit] Unknown polkadotAccountTypes: ${JSON.stringify(invalid)}. Valid values: "sr25519", "ed25519", "ecdsa", "ethereum".`,
+		);
+	}
+
+	if (!isSolanaChainId(resolved.solanaChain)) {
+		console.warn(
+			`[kheopskit] Unknown solanaChain: ${JSON.stringify(resolved.solanaChain)}. Valid values: "solana:mainnet", "solana:devnet", "solana:testnet", "solana:localnet".`,
 		);
 	}
 

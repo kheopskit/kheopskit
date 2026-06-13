@@ -1,5 +1,6 @@
 import type { WalletAccount } from "@kheopskit/core";
 import { useWallets } from "@kheopskit/react";
+import { createSignableMessage, getBase58Decoder } from "@solana/kit";
 import { Binary } from "polkadot-api";
 import { type FC, useCallback, useMemo } from "react";
 import { toast } from "sonner";
@@ -91,6 +92,23 @@ const SignButton: FC<{ account: WalletAccount }> = ({ account }) => {
 						message: MESSAGE,
 						account: account.address,
 					});
+					toast.success(`Signature: ${signature}`);
+				} catch (err) {
+					toast.error(`Error: ${(err as Error).message}`);
+				}
+				break;
+			}
+
+			case "solana": {
+				try {
+					const [signed] = await account.signer.modifyAndSignMessages([
+						createSignableMessage(MESSAGE),
+					]);
+					// the signer adds exactly one signature (for this account)
+					const [signatureBytes] = Object.values(signed?.signatures ?? {});
+					const signature = signatureBytes
+						? getBase58Decoder().decode(signatureBytes)
+						: "";
 					toast.success(`Signature: ${signature}`);
 				} catch (err) {
 					toast.error(`Error: ${(err as Error).message}`);

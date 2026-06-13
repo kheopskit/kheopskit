@@ -14,6 +14,7 @@ import type {
 	EthereumAppKitWallet,
 	KheopskitConfig,
 	PolkadotAppKitWallet,
+	SolanaAppKitWallet,
 } from "./types";
 
 /**
@@ -32,6 +33,7 @@ const WALLET_CONNECT_ICON =
 type AppKitWallets = {
 	polkadot?: PolkadotAppKitWallet;
 	ethereum?: EthereumAppKitWallet;
+	solana?: SolanaAppKitWallet;
 };
 
 // once it exists, appKit object should never be recreated
@@ -71,6 +73,11 @@ export const getAppKitWallets$ = (
 						universalProviderConfigOverride: {
 							methods: {
 								polkadot: ["polkadot_signTransaction", "polkadot_signMessage"],
+								solana: [
+									"solana_signTransaction",
+									"solana_signMessage",
+									"solana_signAndSendTransaction",
+								],
 							},
 						},
 						allWallets: "HIDE",
@@ -81,12 +88,14 @@ export const getAppKitWallets$ = (
 					const status$ = new BehaviorSubject({
 						isPolkadotConnected: false,
 						isEthereumConnected: false,
+						isSolanaConnected: false,
 					});
 
 					const unsubProviders = appKit.subscribeProviders((providers) => {
 						status$.next({
 							isPolkadotConnected: !!providers.polkadot,
 							isEthereumConnected: !!providers.eip155,
+							isSolanaConnected: !!providers.solana,
 						});
 					});
 
@@ -138,9 +147,32 @@ export const getAppKitWallets$ = (
 							)
 						: of(undefined);
 
+					const solanaWallet$ = appKit.chainNamespaces.includes("solana")
+						? status$.pipe(
+								map((s) => s.isSolanaConnected),
+								distinctUntilChanged(),
+								map((isConnected): SolanaAppKitWallet => {
+									const walletInfo = appKit.getWalletInfo();
+
+									return {
+										id: getWalletId("solana", "walletconnect"),
+										platform: "solana",
+										type: "appKit",
+										appKit,
+										name: walletInfo?.name ?? "WalletConnect",
+										icon: walletInfo?.icon ?? WALLET_CONNECT_ICON,
+										connect: () => appKit.open(),
+										disconnect: () => appKit.disconnect(),
+										isConnected,
+									};
+								}),
+							)
+						: of(undefined);
+
 					const sub = combineLatest({
 						polkadot: polkadotWallet$,
 						ethereum: ethereumWallet$,
+						solana: solanaWallet$,
 					}).subscribe(subscriber);
 
 					return () => {

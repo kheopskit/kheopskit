@@ -1,5 +1,9 @@
 import type { CaipNetwork } from "@reown/appkit/core";
-import { type AppKitNetwork, defineChain } from "@reown/appkit/networks";
+import {
+	type AppKitNetwork,
+	defineChain,
+	solana,
+} from "@reown/appkit/networks";
 import * as viemChains from "viem/chains";
 import type { PolkadotChainId } from "../getPolkadotApi";
 
@@ -85,6 +89,7 @@ export const APPKIT_CHAINS: [AppKitNetwork, ...AppKitNetwork[]] = [
 	viemChainToWalletConnectChain(viemChains.moonbaseAlpha),
 	viemChainToWalletConnectChain(viemChains.mainnet),
 	viemChainToWalletConnectChain(viemChains.westendAssetHub),
+	solana,
 ];
 
 export const VIEM_CHAINS_BY_ID: Record<number, viemChains.Chain> =
@@ -106,4 +111,9 @@ export const isPolkadotNetwork = (network: AppKitNetwork): boolean => {
 export const isEthereumNetwork = (network: AppKitNetwork): boolean => {
 	const n = network as CaipNetwork;
 	return n.chainNamespace === "eip155";
+};
+
+export const isSolanaNetwork = (network: AppKitNetwork): boolean => {
+	const n = network as CaipNetwork;
+	return n.chainNamespace === "solana";
 };

@@ -12,6 +12,7 @@ import {
 import { sortWallets } from "../utils/sortWallets";
 import { getEthereumWallets$ } from "./ethereum/wallets";
 import { getPolkadotWallets$ } from "./polkadot/wallets";
+import { getSolanaWallets$ } from "./solana/wallets";
 import { store as defaultStore, type KheopskitStore } from "./store";
 import type { KheopskitConfig, Wallet } from "./types";
 
@@ -35,6 +36,8 @@ export const getWallets$ = (
 						return getPolkadotWallets$(config, store);
 					case "ethereum":
 						return getEthereumWallets$(config, store);
+					case "solana":
+						return getSolanaWallets$(config, store);
 				}
 			},
 		);

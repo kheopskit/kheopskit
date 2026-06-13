@@ -1,6 +1,11 @@
 import type { KheopskitConfig } from "@kheopskit/core";
 import type { AppKitNetwork } from "@reown/appkit/networks";
-import { APPKIT_CHAINS, isEthereumNetwork, isPolkadotNetwork } from "./chains";
+import {
+	APPKIT_CHAINS,
+	isEthereumNetwork,
+	isPolkadotNetwork,
+	isSolanaNetwork,
+} from "./chains";
 
 type Prettify<T> = {
 	[K in keyof T]: T[K];
@@ -14,12 +19,13 @@ export type PlaygroundConfig = Prettify<
 
 export const demoConfig: PlaygroundConfig = {
 	autoReconnect: true,
-	platforms: ["polkadot", "ethereum"],
+	platforms: ["polkadot", "ethereum", "solana"],
 	walletConnect: !!import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID,
 	debug: true,
 	storageKey: "kheopskit",
 	hydrationGracePeriod: 500,
 	polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa", "ethereum"],
+	solanaChain: "solana:mainnet",
 };
 
 const getKheopskitConfig = (
@@ -53,6 +59,9 @@ const getNetworks = (platforms: KheopskitConfig["platforms"]) => {
 			: []),
 		...(platforms.includes("ethereum")
 			? APPKIT_CHAINS.filter(isEthereumNetwork)
+			: []),
+		...(platforms.includes("solana")
+			? APPKIT_CHAINS.filter(isSolanaNetwork)
 			: []),
 	];
 
