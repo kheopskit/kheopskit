@@ -12,7 +12,9 @@ export type KheopskitErrorCode =
 	/** No active WalletConnect session for the requested operation. */
 	| "NO_SESSION"
 	/** No provider available for the requested namespace. */
-	| "NO_PROVIDER";
+	| "NO_PROVIDER"
+	/** The requested chain cannot be used for this operation (e.g. a Solana cluster with no CAIP-2 id over WalletConnect). */
+	| "UNSUPPORTED_CHAIN";
 
 /**
  * Error thrown by kheopskit wallet/account operations. Carries a stable

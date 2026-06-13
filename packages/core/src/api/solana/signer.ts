@@ -152,6 +152,9 @@ export const createWalletConnectSolanaSigner = (
 	return {
 		address: signerAddress,
 		modifyAndSignMessages: async (messages) => {
+			// @solana/kit naming is the inverse of the value direction here: a
+			// Decoder turns bytes -> string (so `toBase58` produces a base58 string),
+			// an Encoder turns string -> bytes (so `fromBase58` parses one).
 			const toBase58 = getBase58Decoder();
 			const fromBase58 = getBase58Encoder();
 			return Promise.all(

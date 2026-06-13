@@ -1,6 +1,5 @@
 import {
 	combineLatest,
-	distinct,
 	filter,
 	map,
 	mergeMap,
@@ -37,8 +36,12 @@ export const getWallets$ = (
 				)
 			: of<BaseWallet[]>([]);
 
-		// Track wallets being reconnected to avoid duplicate attempts
+		// Track wallets currently reconnecting (avoid duplicate concurrent attempts)
+		// and those already reconnected (so we don't fight a later manual disconnect).
+		// A failed attempt is left out of `reconnected`, so it can retry when the
+		// wallet next re-emits (e.g. a late-injecting extension).
 		const reconnectingWallets = new Set<string>();
+		const reconnectedWallets = new Set<string>();
 
 		const subAutoReconnect = combineLatest([wallets$, autoReconnectWalletIds$])
 			.pipe(
@@ -46,16 +49,20 @@ export const getWallets$ = (
 				mergeMap(([wallets, walletIds]) =>
 					wallets.filter((wallet) => walletIds?.includes(wallet.id)),
 				),
-				distinct((w) => w.id),
 			)
 			.subscribe(async (wallet) => {
-				if (wallet.isConnected || reconnectingWallets.has(wallet.id)) {
+				if (
+					wallet.isConnected ||
+					reconnectingWallets.has(wallet.id) ||
+					reconnectedWallets.has(wallet.id)
+				) {
 					return;
 				}
 
 				reconnectingWallets.add(wallet.id);
 				try {
 					await wallet.connect();
+					reconnectedWallets.add(wallet.id);
 				} catch (err) {
 					console.error("Failed to reconnect wallet %s", wallet.id, { err });
 				} finally {

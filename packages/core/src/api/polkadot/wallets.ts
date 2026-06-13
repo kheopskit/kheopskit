@@ -38,22 +38,24 @@ const createWalletIdsPoller$ = () => {
 		// Poll at shorter intervals initially, then slow down
 		const intervals = [100, 200, 300, 500];
 		let index = 0;
+		let timer: ReturnType<typeof setTimeout> | undefined;
 
 		const poll = () => {
 			subscriber.next(getInjectedWalletsIds());
 			if (index < intervals.length) {
 				const delay = intervals[index++];
-				setTimeout(poll, delay);
+				timer = setTimeout(poll, delay);
 			}
 		};
 
 		// Start polling after first immediate emission
 		if (intervals.length > 0) {
-			setTimeout(poll, intervals[index++] ?? 100);
+			timer = setTimeout(poll, intervals[index++] ?? 100);
 		}
 
 		return () => {
-			// Cleanup handled by setTimeout naturally expiring
+			// Cancel any pending poll so it can't fire after unsubscribe.
+			if (timer !== undefined) clearTimeout(timer);
 		};
 	}).pipe(
 		distinctUntilChanged<WalletId[]>(isEqual),

@@ -86,7 +86,11 @@ const getAppKitPolkadotSigner = (appKit: AppKitInstance, address: string) => {
 				throw new KheopskitError("NO_SESSION", "No session found");
 			const networks = appKit.getCaipNetworks("polkadot");
 			const chainId = networks[0]?.caipNetworkId;
-			if (!chainId) throw new Error("No chainId found");
+			if (!chainId)
+				throw new KheopskitError(
+					"NO_SESSION",
+					"No CAIP network available for polkadot",
+				);
 
 			return provider.client.request({
 				topic: provider.session.topic,

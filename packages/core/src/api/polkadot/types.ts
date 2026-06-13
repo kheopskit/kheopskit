@@ -26,6 +26,15 @@ export type PolkadotInjectedWallet = {
 
 export type PolkadotWallet = PolkadotInjectedWallet | PolkadotAppKitWallet;
 
+/**
+ * A Polkadot account. Inherits the fields of polkadot-api's
+ * `InjectedPolkadotAccount` — notably the signing surface **`polkadotSigner`**
+ * (a `PolkadotSigner`) — and narrows `type` to {@link PolkadotAccountType}.
+ *
+ * Per-platform signing surfaces differ: Ethereum exposes `client` (viem),
+ * Solana `signer`/`getSigner(chain)`. `polkadotSigner` is absent while
+ * `state.isHydrating` is `true`.
+ */
 export type PolkadotAccount = Omit<InjectedPolkadotAccount, "type"> & {
 	type: PolkadotAccountType;
 	id: WalletAccountId;

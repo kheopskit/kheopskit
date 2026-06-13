@@ -70,6 +70,16 @@ export const resetAppKitCache = (): void => {
 	setCachedAppKit(undefined);
 };
 
+/**
+ * Observable of AppKit (WalletConnect) wallets for the given config.
+ *
+ * @remarks
+ * The AppKit instance is a process-wide singleton (Reown AppKit itself cannot
+ * be instantiated twice). The **first** call with a `walletConnect` config wins;
+ * later calls with a *different* `walletConnect` config reuse that first
+ * instance. Call {@link resetAppKitCache} before re-initialising if the
+ * WalletConnect config must change.
+ */
 export const getAppKitWallets$ = (
 	config: KheopskitConfig,
 ): Observable<AppKitWallets> => {

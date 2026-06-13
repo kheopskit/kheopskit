@@ -22,6 +22,15 @@ import { KheopskitContext } from "./context";
 import { createStore } from "./createStore";
 
 export type KheopskitProviderProps = PropsWithChildren & {
+	/**
+	 * Kheopskit configuration.
+	 *
+	 * @remarks
+	 * Must be a **referentially stable** value — define it once (module scope, a
+	 * `useMemo`, or via {@link createKheopskit}) and pass the same reference. A
+	 * new object literal on every render (`config={{ platforms: [...] }}` inline)
+	 * recreates the underlying store and re-subscribes each render.
+	 */
 	config?: Partial<KheopskitConfig>;
 	/**
 	 * Cookie string for SSR hydration.

@@ -25,7 +25,9 @@ export type CreateKheopskitConfig<P extends readonly KheopskitPlatform[]> =
  * const { accounts } = useWallets(); // accounts are platform-precise, no generic
  * ```
  */
-export const createKheopskit = <const P extends readonly KheopskitPlatform[]>(
+export const createKheopskit = <
+	const P extends readonly [KheopskitPlatform, ...KheopskitPlatform[]],
+>(
 	config: CreateKheopskitConfig<P>,
 ) => {
 	const Provider: FC<PropsWithChildren<{ ssrCookies?: string }>> = ({

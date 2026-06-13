@@ -1,3 +1,5 @@
+import { KheopskitError } from "../errors";
+
 /**
  * Wallet Standard chain identifiers for Solana clusters.
  *
@@ -51,8 +53,9 @@ export const getSolanaCaip2 = (chain: SolanaChainId): string => {
 		chain
 	];
 	if (!caip2)
-		throw new Error(
-			`[kheopskit] Solana chain "${chain}" cannot be used over WalletConnect (no CAIP-2 id).`,
+		throw new KheopskitError(
+			"UNSUPPORTED_CHAIN",
+			`Solana chain "${chain}" cannot be used over WalletConnect (no CAIP-2 id).`,
 		);
 	return caip2;
 };

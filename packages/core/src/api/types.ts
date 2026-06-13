@@ -233,8 +233,10 @@ export type KheopskitConfig<
  * SDK-typed fields the platform types advertise (e.g. `account.signer` /
  * `getSigner` on Solana, `account.client` on Ethereum, `wallet.provider` /
  * `extension`) are **absent at runtime even though the types claim them**, and
- * placeholder wallets throw if `connect`/`disconnect` is called. Do not access
- * those fields until `isHydrating` is `false`.
+ * placeholder wallets throw if `connect`/`disconnect` is called. This applies
+ * equally to the platform-specific *plain-data* fields (Ethereum `chainId`,
+ * Solana `chains`, Polkadot `type`): they too are populated only once the live
+ * account loads. Do not access any of these until `isHydrating` is `false`.
  */
 export type KheopskitState<
 	P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],
