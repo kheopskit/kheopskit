@@ -1,6 +1,8 @@
 import { createSolanaRpc } from "@solana/kit";
 
-const RPC_URL = "https://api.mainnet-beta.solana.com";
+// The official api.mainnet-beta.solana.com endpoint returns 403 to browser
+// origins; use a CORS-enabled public mainnet RPC instead.
+const RPC_URL = "https://solana-rpc.publicnode.com";
 
 let cached: ReturnType<typeof createSolanaRpc> | null = null;
 

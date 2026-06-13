@@ -12,7 +12,8 @@ import { wagmiConfig } from "@/lib/wagmi";
 // Hardcoded config - IMPORTANT: dynamic config (from localStorage) causes SSR hydration mismatch
 const kheopskitConfig: Partial<KheopskitConfig> = {
 	autoReconnect: true,
-	platforms: ["polkadot", "ethereum"],
+	platforms: ["polkadot", "ethereum", "solana"],
+	solanaChain: "solana:mainnet",
 	walletConnect: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID
 		? {
 				projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID,
