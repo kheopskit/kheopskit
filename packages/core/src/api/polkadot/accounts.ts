@@ -98,26 +98,33 @@ const getAppKitPolkadotSigner = (appKit: AppKit, address: string) => {
 };
 
 const getAppKitAccounts$ = (wallet: PolkadotAppKitWallet) => {
-	const account = wallet.appKit.getAccount("polkadot");
 	const provider = wallet.appKit.getProvider<UniversalProvider>("polkadot");
 
-	if (
-		!wallet.isConnected ||
-		!wallet.appKit ||
-		!account?.allAccounts.length ||
-		!provider?.session
-	)
-		return of([]);
+	if (!wallet.isConnected || !provider?.session) return of([]);
+
+	// AppKit's getAccount("polkadot").allAccounts is always empty because AppKit
+	// has no native polkadot adapter; the WalletConnect session is the source of
+	// truth. Accounts are CAIP-10 strings ("polkadot:<chainRef>:<address>"), one
+	// entry per chain, so dedupe to unique addresses.
+	const addresses = [
+		...new Set(
+			Object.values(provider.session.namespaces)
+				.flatMap((namespace) => namespace.accounts ?? [])
+				.filter((account) => account.startsWith("polkadot:"))
+				.map((account) => account.split(":")[2])
+				.filter((address): address is string => !!address),
+		),
+	];
 
 	return of(
-		account.allAccounts.map(
-			(acc): PolkadotAccount => ({
-				id: getWalletAccountId(wallet.id, acc.address),
+		addresses.map(
+			(address): PolkadotAccount => ({
+				id: getWalletAccountId(wallet.id, address),
 				platform: "polkadot",
 				walletName: wallet.name,
 				walletId: wallet.id,
-				address: acc.address,
-				polkadotSigner: getAppKitPolkadotSigner(wallet.appKit, acc.address),
+				address,
+				polkadotSigner: getAppKitPolkadotSigner(wallet.appKit, address),
 				genesisHash: null,
 				name: `${wallet.name} Polkadot`,
 				// WalletConnect (Reown AppKit) doesn't expose account key type;
