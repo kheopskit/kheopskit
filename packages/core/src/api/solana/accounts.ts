@@ -1,5 +1,4 @@
 import type { StandardEventsFeature } from "@wallet-standard/features";
-import type UniversalProvider from "@walletconnect/universal-provider";
 import {
 	combineLatest,
 	distinctUntilChanged,
@@ -71,7 +70,7 @@ const getAppKitAccounts$ = (
 	wallet: SolanaAppKitWallet,
 	chain: SolanaChainId,
 ): Observable<SolanaAccount[]> => {
-	const provider = wallet.appKit.getProvider<UniversalProvider>("solana");
+	const provider = wallet.appKit.getProvider("solana");
 
 	if (!wallet.isConnected || !provider?.session) return of([]);
 

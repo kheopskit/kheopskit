@@ -1,4 +1,3 @@
-import type UniversalProvider from "@walletconnect/universal-provider";
 import {
 	combineLatest,
 	distinctUntilChanged,
@@ -164,7 +163,7 @@ const getAppKitAccounts$ = (
 	wallet: EthereumAppKitWallet,
 ): Observable<EthereumAccount[]> => {
 	const account = wallet.appKit.getAccount("eip155");
-	const provider = wallet.appKit.getProvider<UniversalProvider>("eip155");
+	const provider = wallet.appKit.getProvider("eip155");
 
 	if (
 		!wallet.isConnected ||
@@ -195,7 +194,7 @@ const getAppKitAccounts$ = (
 						const chainId = normalizeEvmChainId(caipNetworkId);
 						const transport = custom(
 							wrapWalletConnectProvider(
-								provider as EIP1193Provider,
+								provider as unknown as EIP1193Provider,
 								// biome-ignore lint/style/noNonNullAssertion: legacy
 								provider.session!.topic,
 								caipNetworkId,

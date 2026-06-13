@@ -33,7 +33,13 @@ Each platform lives behind its own entry point and brings its own (optional) pee
 | Ethereum | `@kheopskit/core/ethereum` | `pnpm add viem mipd` |
 | Solana | `@kheopskit/core/solana` | `pnpm add @solana/kit @wallet-standard/app @wallet-standard/base` |
 
-`rxjs` is always required. A Polkadot-only dapp never imports the Ethereum or Solana entry points, so neither their code nor their SDKs are pulled into your bundle.
+WalletConnect support (via Reown AppKit, across any platform) is also optional — install it only if you pass `config.walletConnect`:
+
+| Feature | Install |
+|---------|---------|
+| WalletConnect | `pnpm add @reown/appkit` |
+
+`rxjs` is always required. Everything else is an optional peer dependency: a Polkadot-only dapp that doesn't use WalletConnect installs neither the Ethereum/Solana SDKs nor `@reown/appkit`, and none of their code is pulled into your bundle. If `config.walletConnect` is set but `@reown/appkit` isn't installed, WalletConnect is disabled with a console error while injected wallets keep working.
 
 ---
 

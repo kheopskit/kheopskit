@@ -1,12 +1,46 @@
-import type { AppKit, ThemeMode, ThemeVariables } from "@reown/appkit/core";
-import type { AppKitNetwork } from "@reown/appkit/networks";
-import type { Metadata } from "@walletconnect/universal-provider";
 import type { Observable } from "rxjs";
 import type { WalletAccountId } from "../utils";
 import type { WalletId } from "../utils/WalletId";
 import type { KheopskitStore } from "./store";
 
 export type WalletPlatform = "polkadot" | "ethereum" | "solana";
+
+/**
+ * Minimal structural view of a WalletConnect `UniversalProvider` — the subset
+ * kheopskit reads. Declared locally so core never depends on
+ * `@walletconnect/universal-provider`. The concrete instance comes from
+ * `@reown/appkit` at runtime.
+ */
+export type WalletConnectProvider = {
+	session?: {
+		topic: string;
+		namespaces: Record<string, { accounts?: string[] }>;
+	};
+	client: {
+		request<T = unknown>(args: {
+			topic: string;
+			chainId: string;
+			request: { method: string; params: unknown };
+		}): Promise<T>;
+	};
+	request(args: { method: string; params?: unknown }): Promise<unknown>;
+	on(event: string, listener: (...args: unknown[]) => void): void;
+	off(event: string, listener: (...args: unknown[]) => void): void;
+};
+
+/**
+ * Minimal structural view of the Reown AppKit instance — the subset kheopskit's
+ * account factories use. Exposed as the `appKit` escape hatch on AppKit wallets;
+ * cast it to `@reown/appkit`'s `AppKit` type for the full API. Declared locally
+ * so core never depends on `@reown/appkit`'s types (it's an optional peer).
+ */
+export type AppKitInstance = {
+	getProvider<T = WalletConnectProvider>(namespace: string): T | undefined;
+	getAccount(
+		namespace: string,
+	): { allAccounts: { address: string }[] } | undefined;
+	getCaipNetworks(namespace: string): { caipNetworkId?: string }[];
+};
 
 export type WalletType = "injected" | "appKit";
 
@@ -57,7 +91,7 @@ export type PolkadotAppKitWallet = {
 	 * (custom modal control, reading providers directly). Most consumers should
 	 * use the wallet's `connect`/`disconnect` and the derived accounts instead.
 	 */
-	appKit: AppKit;
+	appKit: AppKitInstance;
 	name: string;
 	icon: string;
 	isConnected: boolean;
@@ -74,7 +108,7 @@ export type EthereumAppKitWallet = {
 	 * (custom modal control, reading providers directly). Most consumers should
 	 * use the wallet's `connect`/`disconnect` and the derived accounts instead.
 	 */
-	appKit: AppKit;
+	appKit: AppKitInstance;
 	name: string;
 	icon: string;
 	isConnected: boolean;
@@ -91,7 +125,7 @@ export type SolanaAppKitWallet = {
 	 * (custom modal control, reading providers directly). Most consumers should
 	 * use the wallet's `connect`/`disconnect` and the derived accounts instead.
 	 */
-	appKit: AppKit;
+	appKit: AppKitInstance;
 	name: string;
 	icon: string;
 	isConnected: boolean;
@@ -99,18 +133,33 @@ export type SolanaAppKitWallet = {
 	disconnect: () => void;
 };
 
+/**
+ * Dapp metadata shown in the WalletConnect modal. Mirrors WalletConnect's
+ * `Metadata`, declared locally so core doesn't depend on
+ * `@walletconnect/universal-provider`.
+ */
+export type WalletConnectMetadata = {
+	name: string;
+	description: string;
+	url: string;
+	icons: string[];
+};
+
 export type WalletConnectConfig = {
 	projectId: string;
-	metadata: Metadata;
+	metadata: WalletConnectMetadata;
 	/** Defaults to wss://relay.walletconnect.com */
 	relayUrl?: string;
 	/**
-	 * list of CAIP-13 ids of polkadot-sdk chains
-	 * see https://docs.reown.com/advanced/multichain/polkadot/dapp-integration-guide#walletconnect-code%2Fcomponent-setup
+	 * Networks AppKit should enable. Pass `AppKitNetwork[]` from
+	 * `@reown/appkit/networks` (see
+	 * https://docs.reown.com/advanced/multichain/polkadot/dapp-integration-guide#walletconnect-code%2Fcomponent-setup).
+	 * Loosely typed (`unknown`) so core doesn't depend on `@reown/appkit`'s
+	 * types — the value is forwarded to AppKit as-is.
 	 */
-	networks: [AppKitNetwork, ...AppKitNetwork[]];
-	themeMode?: ThemeMode;
-	themeVariables?: ThemeVariables;
+	networks: [unknown, ...unknown[]];
+	themeMode?: "light" | "dark";
+	themeVariables?: Record<string, string | number>;
 };
 
 /**

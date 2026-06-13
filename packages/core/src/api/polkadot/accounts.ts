@@ -1,5 +1,3 @@
-import type { AppKit } from "@reown/appkit/core";
-import type UniversalProvider from "@walletconnect/universal-provider";
 import {
 	getPolkadotSignerFromPjs,
 	type InjectedExtension,
@@ -16,7 +14,11 @@ import {
 } from "rxjs";
 import { getWalletAccountId } from "../../utils";
 import { getCachedObservable$ } from "../../utils/getCachedObservable";
-import type { PolkadotAccountType, PolkadotAppKitWallet } from "../types";
+import type {
+	AppKitInstance,
+	PolkadotAccountType,
+	PolkadotAppKitWallet,
+} from "../types";
 import type {
 	PolkadotAccount,
 	PolkadotInjectedWallet,
@@ -54,8 +56,8 @@ const getInjectedWalletAccounts$ = (
 	});
 };
 
-const getAppKitPolkadotSigner = (appKit: AppKit, address: string) => {
-	const provider = appKit.getProvider<UniversalProvider>("polkadot");
+const getAppKitPolkadotSigner = (appKit: AppKitInstance, address: string) => {
+	const provider = appKit.getProvider("polkadot");
 	if (!provider) throw new Error("No provider found");
 	if (!provider.session) throw new Error("No session found");
 
@@ -100,7 +102,7 @@ const getAppKitPolkadotSigner = (appKit: AppKit, address: string) => {
 const getAppKitAccounts$ = (
 	wallet: PolkadotAppKitWallet,
 ): Observable<PolkadotAccount[]> => {
-	const provider = wallet.appKit.getProvider<UniversalProvider>("polkadot");
+	const provider = wallet.appKit.getProvider("polkadot");
 
 	if (!wallet.isConnected || !provider?.session) return of([]);
 

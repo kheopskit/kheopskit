@@ -11,6 +11,7 @@ import {
 } from "rxjs";
 import { getWalletId } from "../utils/WalletId";
 import type {
+	AppKitInstance,
 	EthereumAppKitWallet,
 	KheopskitConfig,
 	PolkadotAppKitWallet,
@@ -23,8 +24,18 @@ import type {
  * The AppKit library uses Lit for web components which requires document.
  */
 const loadAppKit = async () => {
-	const { createAppKit } = await import("@reown/appkit/core");
-	return createAppKit;
+	try {
+		const { createAppKit } = await import("@reown/appkit/core");
+		return createAppKit;
+	} catch (cause) {
+		console.error(
+			"[kheopskit] WalletConnect is configured but @reown/appkit could not be loaded. " +
+				"Install it with `pnpm add @reown/appkit` (or remove config.walletConnect). " +
+				"WalletConnect wallets are disabled; injected wallets still work.",
+			cause,
+		);
+		return null;
+	}
 };
 
 const WALLET_CONNECT_ICON =
@@ -74,13 +85,17 @@ export const getAppKitWallets$ = (
 		// This is critical for SSR and edge runtimes like Cloudflare Workers
 		cachedAppKit = from(loadAppKit()).pipe(
 			switchMap((createAppKit) => {
+				// @reown/appkit missing (optional peer dep) — degrade gracefully.
+				if (!createAppKit) return of<AppKitWallets>({});
 				return new Observable<AppKitWallets>((subscriber) => {
 					const appKit = createAppKit({
 						projectId: walletConnect.projectId,
 						metadata: walletConnect.metadata,
-						networks: walletConnect.networks,
+						// Loosely typed in WalletConnectConfig to keep @reown/appkit's
+						// types out of core; forwarded to AppKit verbatim.
+						networks: walletConnect.networks as never,
 						themeMode: walletConnect.themeMode,
-						themeVariables: walletConnect.themeVariables,
+						themeVariables: walletConnect.themeVariables as never,
 						universalProviderConfigOverride: {
 							methods: {
 								polkadot: ["polkadot_signTransaction", "polkadot_signMessage"],
@@ -95,6 +110,9 @@ export const getAppKitWallets$ = (
 						debug: config.debug,
 						allowUnsupportedChain: true,
 					});
+
+					// Exposed on wallets as the (decoupled) AppKitInstance escape hatch.
+					const appKitInstance = appKit as unknown as AppKitInstance;
 
 					const status$ = new BehaviorSubject({
 						isPolkadotConnected: false,
@@ -121,7 +139,7 @@ export const getAppKitWallets$ = (
 										id: getWalletId("polkadot", "walletconnect"),
 										platform: "polkadot",
 										type: "appKit",
-										appKit,
+										appKit: appKitInstance,
 										name: walletInfo?.name ?? "WalletConnect",
 										icon: walletInfo?.icon ?? WALLET_CONNECT_ICON,
 										connect: async () => {
@@ -147,7 +165,7 @@ export const getAppKitWallets$ = (
 										id: getWalletId("ethereum", "walletconnect"),
 										platform: "ethereum",
 										type: "appKit",
-										appKit,
+										appKit: appKitInstance,
 										name: walletInfo?.name ?? "WalletConnect",
 										icon: walletInfo?.icon ?? WALLET_CONNECT_ICON,
 										connect: () => appKit.open(),
@@ -169,7 +187,7 @@ export const getAppKitWallets$ = (
 										id: getWalletId("solana", "walletconnect"),
 										platform: "solana",
 										type: "appKit",
-										appKit,
+										appKit: appKitInstance,
 										name: walletInfo?.name ?? "WalletConnect",
 										icon: walletInfo?.icon ?? WALLET_CONNECT_ICON,
 										connect: () => appKit.open(),

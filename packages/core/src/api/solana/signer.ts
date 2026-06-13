@@ -19,7 +19,7 @@ import type {
 	WalletAccount,
 	Wallet as WalletStandardWallet,
 } from "@wallet-standard/base";
-import type UniversalProvider from "@walletconnect/universal-provider";
+import type { WalletConnectProvider } from "../types";
 import { getSolanaCaip2, type SolanaChainId } from "./chains";
 import type { SolanaSigner } from "./types";
 
@@ -128,7 +128,7 @@ export const createInjectedSolanaSigner = (
  * Solana spec.
  */
 export const createWalletConnectSolanaSigner = (
-	provider: UniversalProvider,
+	provider: WalletConnectProvider,
 	accountAddress: string,
 	chain: SolanaChainId,
 ): SolanaSigner => {
