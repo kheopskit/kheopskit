@@ -18,7 +18,7 @@
 		"test:e2e": "pnpm build:packages && pnpm build:examples && playwright test -c e2e",
 		"test:e2e:run": "playwright test -c e2e",
 		"format": "pnpm biome format --write .",
-		"postinstall": "pnpm papi",
+		"postinstall": "pnpm papi && (simple-git-hooks || true)",
 		"clean": "pnpm -F @kheopskit/core -F @kheopskit/react -F vite-react clean && rm -rf ./.papi/descriptors/dist && rm -rf node_modules",
 		"bump": "pnpm changeset version",
 		"publish": "pnpm publish -r --no-git-checks --access public --tag latest",
