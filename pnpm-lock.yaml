@@ -395,9 +395,6 @@ importers:
       mipd:
         specifier: ^0.0.7
         version: 0.0.7(typescript@6.0.3)
-      viem:
-        specifier: ^2.52.2
-        version: 2.52.2(bufferutil@4.1.0)(typescript@6.0.3)(utf-8-validate@5.0.10)(zod@4.4.3)
     devDependencies:
       '@solana/kit':
         specifier: ^6.9.0
@@ -417,6 +414,9 @@ importers:
       rxjs:
         specifier: ^7.8.2
         version: 7.8.2
+      viem:
+        specifier: ^2.52.2
+        version: 2.52.2(bufferutil@4.1.0)(typescript@6.0.3)(utf-8-validate@5.0.10)(zod@4.4.3)
 
   packages/react:
     dependencies:

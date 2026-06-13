@@ -37,7 +37,19 @@
 	"peerDependencies": {
 		"@solana/kit": ">=6.0.0",
 		"polkadot-api": ">=2.0.0",
-		"rxjs": ">=7.8.0"
+		"rxjs": ">=7.8.0",
+		"viem": ">=2.0.0"
+	},
+	"peerDependenciesMeta": {
+		"@solana/kit": {
+			"optional": true
+		},
+		"polkadot-api": {
+			"optional": true
+		},
+		"viem": {
+			"optional": true
+		}
 	},
 	"dependencies": {
 		"@reown/appkit": "^1.8.20",
@@ -47,8 +59,7 @@
 		"@walletconnect/universal-provider": "^2.23.9",
 		"@walletconnect/utils": "^2.23.9",
 		"lodash-es": "^4.18.1",
-		"mipd": "^0.0.7",
-		"viem": "^2.52.2"
+		"mipd": "^0.0.7"
 	},
 	"devDependencies": {
 		"@solana/kit": "^6.9.0",
@@ -56,7 +67,8 @@
 		"@types/lodash-es": "^4.17.12",
 		"@wallet-standard/features": "^1.1.1",
 		"polkadot-api": "^2.1.6",
-		"rxjs": "^7.8.2"
+		"rxjs": "^7.8.2",
+		"viem": "^2.52.2"
 	},
 	"tsup": {
 		"entry": [
