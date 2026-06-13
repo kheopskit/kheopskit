@@ -121,7 +121,7 @@ export const getAppKitWallets$ = (
 										id: getWalletId("polkadot", "walletconnect"),
 										platform: "polkadot",
 										type: "appKit",
-										appKit, // todo maybe we dont want to expose the appKit instance
+										appKit,
 										name: walletInfo?.name ?? "WalletConnect",
 										icon: walletInfo?.icon ?? WALLET_CONNECT_ICON,
 										connect: async () => {

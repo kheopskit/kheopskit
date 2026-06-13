@@ -137,7 +137,6 @@ describe("getSolanaAccounts$", () => {
 			expect(accounts).toHaveLength(1);
 			expect(accounts[0]?.platform).toBe("solana");
 			expect(accounts[0]?.address).toBe(ADDRESS_1);
-			expect(accounts[0]?.isWalletDefault).toBe(true);
 			expect(typeof accounts[0]?.signer.modifyAndSignMessages).toBe("function");
 			expect(typeof accounts[0]?.getSigner).toBe("function");
 		});

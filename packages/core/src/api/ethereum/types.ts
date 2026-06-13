@@ -32,5 +32,4 @@ export type EthereumAccount = {
 	chainId: number | undefined;
 	walletName: string;
 	walletId: string;
-	isWalletDefault: boolean;
 };

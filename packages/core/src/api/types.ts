@@ -52,6 +52,11 @@ export type PolkadotAppKitWallet = {
 	id: WalletId;
 	platform: "polkadot";
 	type: "appKit";
+	/**
+	 * Raw Reown AppKit instance, exposed as an escape hatch for advanced use
+	 * (custom modal control, reading providers directly). Most consumers should
+	 * use the wallet's `connect`/`disconnect` and the derived accounts instead.
+	 */
 	appKit: AppKit;
 	name: string;
 	icon: string;
@@ -64,6 +69,11 @@ export type EthereumAppKitWallet = {
 	id: WalletId;
 	platform: "ethereum";
 	type: "appKit";
+	/**
+	 * Raw Reown AppKit instance, exposed as an escape hatch for advanced use
+	 * (custom modal control, reading providers directly). Most consumers should
+	 * use the wallet's `connect`/`disconnect` and the derived accounts instead.
+	 */
 	appKit: AppKit;
 	name: string;
 	icon: string;
@@ -76,6 +86,11 @@ export type SolanaAppKitWallet = {
 	id: WalletId;
 	platform: "solana";
 	type: "appKit";
+	/**
+	 * Raw Reown AppKit instance, exposed as an escape hatch for advanced use
+	 * (custom modal control, reading providers directly). Most consumers should
+	 * use the wallet's `connect`/`disconnect` and the derived accounts instead.
+	 */
 	appKit: AppKit;
 	name: string;
 	icon: string;
@@ -182,6 +197,19 @@ export type KheopskitConfig<
 	hydrationGracePeriod: number;
 };
 
+/**
+ * The current kheopskit state.
+ *
+ * @remarks
+ * While {@link KheopskitState.isHydrating} is `true`, `wallets` and `accounts`
+ * may contain cached placeholders restored from storage. These carry only the
+ * SDK-free {@link BaseWallet} / {@link BaseWalletAccount} fields — the
+ * SDK-typed fields the platform types advertise (e.g. `account.signer` /
+ * `getSigner` on Solana, `account.client` on Ethereum, `wallet.provider` /
+ * `extension`) are **absent at runtime even though the types claim them**, and
+ * placeholder wallets throw if `connect`/`disconnect` is called. Do not access
+ * those fields until `isHydrating` is `false`.
+ */
 export type KheopskitState<
 	P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],
 > = {
@@ -190,8 +218,11 @@ export type KheopskitState<
 	config: KheopskitConfig<P>;
 	/**
 	 * Whether the state is still being hydrated from cache.
-	 * During hydration, cached wallets/accounts may be displayed
-	 * before the actual wallet extensions have injected.
+	 *
+	 * During hydration, cached wallets/accounts may be displayed before the
+	 * actual wallet extensions have injected. See the type-level remarks: while
+	 * this is `true`, SDK-typed fields (signer/client/provider/extension) are not
+	 * present at runtime — guard all access behind `!isHydrating`.
 	 */
 	isHydrating: boolean;
 };

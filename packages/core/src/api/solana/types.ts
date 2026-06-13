@@ -49,5 +49,4 @@ export type SolanaAccount = {
 	getSigner: (chain: SolanaChainId) => SolanaSigner;
 	walletName: string;
 	walletId: string;
-	isWalletDefault: boolean;
 };

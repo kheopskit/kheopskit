@@ -68,7 +68,6 @@ const getInjectedWalletAccounts$ = (
 
 			const getAccount = (
 				address: string,
-				i: number,
 				chainId: number | undefined,
 			): EthereumAccount => {
 				const client = createWalletClient({
@@ -84,7 +83,6 @@ const getInjectedWalletAccounts$ = (
 					chainId,
 					walletName: wallet.name,
 					walletId: wallet.id,
-					isWalletDefault: i === 0,
 				};
 			};
 
@@ -123,7 +121,7 @@ const getInjectedWalletAccounts$ = (
 			const sub = combineLatest([addresses$, chainId$])
 				.pipe(
 					map(([addresses, chainId]) =>
-						addresses.map((addr, i) => getAccount(addr, i, chainId)),
+						addresses.map((addr) => getAccount(addr, chainId)),
 					),
 				)
 				.subscribe(subscriber);
@@ -206,7 +204,7 @@ const getAppKitAccounts$ = (
 						return { transport, chainId };
 					}),
 					map(({ transport, chainId }) =>
-						account.allAccounts.map((acc, i): EthereumAccount => {
+						account.allAccounts.map((acc): EthereumAccount => {
 							const client = createWalletClient({
 								account: acc.address as `0x${string}`,
 								transport,
@@ -220,7 +218,6 @@ const getAppKitAccounts$ = (
 								address: acc.address as `0x${string}`,
 								client,
 								chainId,
-								isWalletDefault: i === 0,
 							};
 						}),
 					),

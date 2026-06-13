@@ -37,7 +37,7 @@ const getInjectedWalletAccounts$ = (
 
 			const buildAccounts = (): SolanaAccount[] =>
 				standardWallet.accounts.map(
-					(account, i): SolanaAccount => ({
+					(account): SolanaAccount => ({
 						id: getWalletAccountId(wallet.id, account.address),
 						platform: "solana",
 						address: account.address,
@@ -47,7 +47,6 @@ const getInjectedWalletAccounts$ = (
 							createInjectedSolanaSigner(standardWallet, account, c),
 						walletName: wallet.name,
 						walletId: wallet.id,
-						isWalletDefault: i === 0,
 					}),
 				);
 
@@ -97,7 +96,7 @@ const getAppKitAccounts$ = (
 				];
 
 				return addresses.map(
-					(accountAddress, i): SolanaAccount => ({
+					(accountAddress): SolanaAccount => ({
 						id: getWalletAccountId(wallet.id, accountAddress),
 						platform: "solana",
 						address: accountAddress,
@@ -111,7 +110,6 @@ const getAppKitAccounts$ = (
 							createWalletConnectSolanaSigner(provider, accountAddress, c),
 						walletName: wallet.name,
 						walletId: wallet.id,
-						isWalletDefault: i === 0,
 					}),
 				);
 			};
