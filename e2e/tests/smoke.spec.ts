@@ -20,7 +20,7 @@ test("renders the playground without console errors", async ({ page }) => {
 	).toBeVisible();
 });
 
-test("discovers both mock wallets", async ({ page }) => {
+test("discovers the mock wallets", async ({ page }) => {
 	await page.goto("/");
 
 	const walletsTable = page
@@ -40,4 +40,11 @@ test("discovers both mock wallets", async ({ page }) => {
 	await expect(dotRow).toBeVisible();
 	await expect(dotRow).toContainText("polkadot");
 	await expect(dotRow.getByRole("button", { name: "Connect" })).toBeVisible();
+
+	const solRow = walletsTable.getByRole("row", {
+		name: /Mock Solana Wallet/,
+	});
+	await expect(solRow).toBeVisible();
+	await expect(solRow).toContainText("solana");
+	await expect(solRow.getByRole("button", { name: "Connect" })).toBeVisible();
 });
