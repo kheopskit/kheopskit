@@ -10,6 +10,8 @@ import {
 	getCachedIcon,
 	hydrateAccount,
 	hydrateWallet,
+	sortAccounts,
+	sortWallets,
 } from "@kheopskit/core/internal";
 import {
 	type FC,
@@ -83,12 +85,13 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 		}
 		const cached = kheopskitStore.getCachedState();
 		return {
-			wallets: cached.wallets.map(hydrateWallet),
+			wallets: cached.wallets.map(hydrateWallet).sort(sortWallets),
 			accounts: cached.accounts
 				.filter((account) =>
 					acceptsCachedAccount(account, resolvedConfig.platforms),
 				)
-				.map(hydrateAccount),
+				.map(hydrateAccount)
+				.sort(sortAccounts),
 			config: resolvedConfig,
 			isHydrating: true,
 		};
@@ -108,16 +111,20 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 	const initialValue = useMemo<KheopskitState>(() => {
 		const cached = kheopskitStore.getCachedState();
 		return {
-			wallets: cached.wallets.map(hydrateWallet).map((wallet) => {
-				if (wallet.icon) return wallet;
-				const cachedIcon = getCachedIcon(wallet.id);
-				return cachedIcon ? { ...wallet, icon: cachedIcon } : wallet;
-			}),
+			wallets: cached.wallets
+				.map(hydrateWallet)
+				.map((wallet) => {
+					if (wallet.icon) return wallet;
+					const cachedIcon = getCachedIcon(wallet.id);
+					return cachedIcon ? { ...wallet, icon: cachedIcon } : wallet;
+				})
+				.sort(sortWallets),
 			accounts: cached.accounts
 				.filter((account) =>
 					acceptsCachedAccount(account, resolvedConfig.platforms),
 				)
-				.map(hydrateAccount),
+				.map(hydrateAccount)
+				.sort(sortAccounts),
 			config: resolvedConfig,
 			isHydrating: true,
 		};

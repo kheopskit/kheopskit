@@ -45,25 +45,27 @@ const getNetworks = () => {
 
 const networks = getNetworks();
 
+const walletConnect =
+	import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID && networks
+		? {
+				projectId: import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID,
+				metadata: {
+					name: "Kheopskit Demo",
+					description: "Kheopskit Demo",
+					url: window.location.origin,
+					icons: [],
+				},
+				networks,
+			}
+		: undefined;
+
 export const kheopskitConfig = {
 	autoReconnect: true,
 	platforms,
 	debug: true,
 	storageKey: "kheopskit",
 	hydrationGracePeriod: 500,
-	walletConnect:
-		import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID && networks
-			? {
-					projectId: import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID,
-					metadata: {
-						name: "Kheopskit Demo",
-						description: "Kheopskit Demo",
-						url: window.location.origin,
-						icons: [],
-					},
-					networks,
-				}
-			: undefined,
+	walletConnect,
 } satisfies CreateKheopskitConfig<Platforms>;
 
 export const { KheopskitProvider, useWallets, useAccounts } =

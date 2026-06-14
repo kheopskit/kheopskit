@@ -20,6 +20,8 @@ import {
 } from "../utils/hydrateState";
 import { getCachedIcon, setCachedIcons } from "../utils/iconCache";
 import { logObservable } from "../utils/logObservable";
+import { sortAccounts } from "../utils/sortAccounts";
+import { sortWallets } from "../utils/sortWallets";
 import { getAccounts$ } from "./accounts";
 import { resolveConfig } from "./config";
 import { acceptsCachedAccount } from "./platform";
@@ -158,10 +160,14 @@ export const getKheopskit$ = <
 							walletsTotal: wallets.items.length,
 						});
 					}
+					// Sort on every emission with the same comparators used for the
+					// cached initial snapshot. The hydration buffers append cached-only
+					// items after live ones (and reconnects land out of order), so
+					// without this the list visibly reorders as wallets come back.
 					return {
 						config: kc,
-						wallets: wallets.items,
-						accounts: accounts.items,
+						wallets: [...wallets.items].sort(sortWallets),
+						accounts: [...accounts.items].sort(sortAccounts),
 						isHydrating: wallets.isHydrating || accounts.isHydrating,
 					};
 				}),

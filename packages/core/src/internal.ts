@@ -17,4 +17,6 @@ export {
 	serializeWallet,
 } from "./utils/hydrateState";
 export { getCachedIcon, setCachedIcons } from "./utils/iconCache";
+export { sortAccounts } from "./utils/sortAccounts";
+export { sortWallets } from "./utils/sortWallets";
 export { getSafeLocalStorage } from "./utils/storage";

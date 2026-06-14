@@ -1,5 +1,7 @@
 /// <reference types="@testing-library/jest-dom" />
+import { ethereum } from "@kheopskit/core/ethereum";
 import { polkadot } from "@kheopskit/core/polkadot";
+import { solana } from "@kheopskit/core/solana";
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -31,6 +33,9 @@ const WalletsConsumer = () => {
 			<span data-testid="accounts-count">{accounts.length}</span>
 			<span data-testid="wallet-names">
 				{wallets.map((w) => w.name).join(",")}
+			</span>
+			<span data-testid="account-order">
+				{accounts.map((a) => `${a.platform}:${a.walletName}`).join(",")}
 			</span>
 		</div>
 	);
@@ -131,5 +136,55 @@ describe("KheopskitProvider hydration (no flash on SPA reload)", () => {
 
 		expect(screen.getByTestId("wallets-count")).toHaveTextContent("0");
 		expect(screen.getByTestId("accounts-count")).toHaveTextContent("0");
+	});
+
+	it("paints cached accounts in sorted order, regardless of how they were stored", () => {
+		// Stored out of order (solana, ethereum, polkadot). The first paint must
+		// already be in the canonical sortAccounts order so the list does not
+		// reorder once the live observable emits (which is also sorted).
+		localStorage.setItem(
+			STORAGE_KEY,
+			JSON.stringify({
+				cachedWallets: [],
+				cachedAccounts: [
+					{
+						id: "solana:mock:So11111111111111111111111111111111111111112",
+						platform: "solana",
+						address: "So11111111111111111111111111111111111111112",
+						walletId: "solana:mock",
+						walletName: "Zeta",
+					},
+					{
+						id: "ethereum:mock:0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+						platform: "ethereum",
+						address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+						chainId: 1,
+						walletId: "ethereum:mock",
+						walletName: "Beta",
+					},
+					{
+						id: "polkadot:talisman:5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+						platform: "polkadot",
+						address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+						polkadotAccountType: "sr25519",
+						walletId: "polkadot:talisman",
+						walletName: "Talisman",
+					},
+				],
+			}),
+		);
+
+		render(
+			<KheopskitProvider
+				config={{ platforms: [polkadot(), ethereum(), solana()] }}
+			>
+				<WalletsConsumer />
+			</KheopskitProvider>,
+		);
+
+		// Canonical order: polkadot, then ethereum, then solana.
+		expect(screen.getByTestId("account-order")).toHaveTextContent(
+			"polkadot:Talisman,ethereum:Beta,solana:Zeta",
+		);
 	});
 });
