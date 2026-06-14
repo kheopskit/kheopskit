@@ -1,6 +1,5 @@
 {
 	"$schema": "./node_modules/knip/schema.json",
-	"ignore": [".papi/**"],
 	"ignoreDependencies": ["@kheopskit/core", "@kheopskit/react", "tslib"],
 	"workspaces": {
 		".": {
@@ -22,9 +21,8 @@
 			"ignoreDependencies": ["@types/react-dom", "react-dom"]
 		},
 		"examples/vite-react": {
-			"entry": ["src/main.tsx", "src/styles.css"],
+			"entry": ["src/styles.css"],
 			"ignore": [
-				"src/vite-env.d.ts",
 				"src/components/ui/**",
 				"src/lib/config/chains.ts",
 				"src/lib/config/playgroundConfig.ts",
