@@ -48,12 +48,16 @@ describe("getAppKitWallets$ disconnect", () => {
 		vi.unmock("@reown/appkit/core");
 	});
 
-	it("clears cached account observables and awaits the underlying disconnect", async () => {
+	it("awaits the underlying disconnect and drops cached accounts when the status flips to disconnected", async () => {
 		vi.resetModules();
 		const disconnect = vi.fn(() => Promise.resolve());
+		// Capture the providers callback so the test can drive connect/disconnect
+		// transitions, mirroring how AppKit reports them via subscribeProviders.
+		let emitProviders: (p: Record<string, unknown>) => void = () => {};
 		const fakeAppKit = {
 			chainNamespaces: ["solana"],
 			subscribeProviders: (cb: (p: Record<string, unknown>) => void) => {
+				emitProviders = cb;
 				cb({ solana: {} });
 				return () => {};
 			},
@@ -72,24 +76,40 @@ describe("getAppKitWallets$ disconnect", () => {
 		resetAppKitCache();
 		clearAllCachedObservables();
 
-		const wallets = await firstValueFrom(
-			getAppKitWallets$(walletConnectConfig),
+		const emissions: Array<{
+			solana?: { isConnected: boolean; disconnect: () => Promise<void> };
+		}> = [];
+		const sub = getAppKitWallets$(walletConnectConfig).subscribe((w) =>
+			emissions.push(w),
 		);
-		const solana = wallets.solana;
-		expect(solana?.isConnected).toBe(true);
+		// Keep the stream subscribed so the status pipeline (and its disconnect
+		// cache-clearing) stays alive while we drive transitions.
+		await vi.waitFor(() =>
+			expect(emissions.at(-1)?.solana?.isConnected).toBe(true),
+		);
+
+		const solana = emissions.at(-1)?.solana;
 
 		// Seed a cached account observable as the accounts layer would.
 		const key = "accounts:solana:walletconnect:solana:mainnet";
 		const original = { tag: "original" };
 		expect(getCachedObservable$(key, () => original)).toBe(original);
 
+		// disconnect() awaits the underlying AppKit disconnect.
 		await solana?.disconnect();
-
 		expect(disconnect).toHaveBeenCalledTimes(1);
-		// Entry is gone, so the factory runs again and returns the fresh instance.
+		// Cache is still present until the provider status actually flips.
+		expect(getCachedObservable$(key, () => ({ tag: "stale" }))).toBe(original);
+
+		// The provider going away flips the status to disconnected, which drops the
+		// cached account observables — this also covers external disconnects, where
+		// disconnect() is never called.
+		emitProviders({});
+
 		const fresh = { tag: "fresh" };
 		expect(getCachedObservable$(key, () => fresh)).toBe(fresh);
 
+		sub.unsubscribe();
 		resetAppKitCache();
 	});
 });

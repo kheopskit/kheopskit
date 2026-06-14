@@ -16,8 +16,7 @@
 				"src/utils/sleep.ts",
 				"src/utils/throwAfter.ts",
 				"src/utils/storage.ts"
-			],
-			"ignoreDependencies": ["@walletconnect/types", "@walletconnect/utils"]
+			]
 		},
 		"packages/react": {
 			"ignoreDependencies": ["@types/react-dom", "react-dom"]

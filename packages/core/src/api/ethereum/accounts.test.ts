@@ -331,6 +331,48 @@ describe("Ethereum chain ID tracking", () => {
 			expect(results[1]?.[0]?.chainId).toBe(137);
 		});
 
+		it("updates accounts when appKit provider emits accountsChanged", async () => {
+			const provider = createMockProvider();
+			(provider as unknown as { session: { topic: string } }).session = {
+				topic: "test-topic",
+			};
+			(provider as unknown as { off: typeof provider.removeListener }).off =
+				provider.removeListener;
+
+			provider.request.mockImplementation(async ({ method }) => {
+				if (method === "eth_chainId") return "0x1";
+				return null;
+			});
+
+			// AppKit's account snapshot is read live on each change, so drive it
+			// through a mutable list the mock returns by reference.
+			const SECOND_ADDRESS = "0x1111111111111111111111111111111111111111";
+			let allAccounts = [{ address: MOCK_ADDRESS }];
+			const wallet = createMockAppKitWallet(provider, {
+				appKit: {
+					getAccount: vi.fn(() => ({ allAccounts })),
+					getProvider: vi.fn(() => provider),
+				} as unknown as EthereumAppKitWallet["appKit"],
+			});
+
+			const { getEthereumAccounts$ } = await importAccounts();
+
+			const accounts$ = getEthereumAccounts$(of([wallet]));
+			const resultsPromise = firstValueFrom(accounts$.pipe(take(2), toArray()));
+
+			await new Promise((r) => setTimeout(r, 10));
+
+			// Wallet authorizes a second account, then notifies via accountsChanged.
+			allAccounts = [{ address: MOCK_ADDRESS }, { address: SECOND_ADDRESS }];
+			provider._emit("accountsChanged", [MOCK_ADDRESS, SECOND_ADDRESS]);
+
+			const results = await resultsPromise;
+			expect(results).toHaveLength(2);
+			expect(results[0]).toHaveLength(1);
+			expect(results[1]).toHaveLength(2);
+			expect(results[1]?.[1]?.address).toBe(SECOND_ADDRESS);
+		});
+
 		it("normalizes decimal chainId from provider request", async () => {
 			const provider = createMockProvider();
 			(provider as unknown as { session: { topic: string } }).session = {
@@ -353,7 +395,7 @@ describe("Ethereum chain ID tracking", () => {
 			expect(accounts[0]?.chainId).toBe(137);
 		});
 
-		it("tears down appKit chainChanged listener on unsubscribe", async () => {
+		it("tears down appKit chain/account listeners on unsubscribe", async () => {
 			const provider = createMockProvider();
 			(provider as unknown as { session: { topic: string } }).session = {
 				topic: "test-topic",
@@ -373,10 +415,14 @@ describe("Ethereum chain ID tracking", () => {
 			await new Promise((r) => setTimeout(r, 10));
 
 			expect(provider._listenerCount("chainChanged")).toBe(1);
+			expect(provider._listenerCount("accountsChanged")).toBe(1);
+			expect(provider._listenerCount("session_update")).toBe(1);
 
 			sub.unsubscribe();
 
 			expect(provider._listenerCount("chainChanged")).toBe(0);
+			expect(provider._listenerCount("accountsChanged")).toBe(0);
+			expect(provider._listenerCount("session_update")).toBe(0);
 		});
 	});
 });

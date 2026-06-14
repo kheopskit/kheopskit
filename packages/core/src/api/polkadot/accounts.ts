@@ -114,7 +114,7 @@ const getAppKitAccounts$ = (
 
 	if (!wallet.isConnected || !provider?.session) return of([]);
 
-	return getCachedObservable$(`accounts:${wallet.id}`, () =>
+	return getCachedObservable$(`accounts:${wallet.id}:`, () =>
 		new Observable<PolkadotAccount[]>((subscriber) => {
 			// AppKit's getAccount("polkadot").allAccounts is always empty because
 			// AppKit has no native polkadot adapter; the WalletConnect session is the

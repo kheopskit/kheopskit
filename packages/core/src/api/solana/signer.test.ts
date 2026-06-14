@@ -168,6 +168,18 @@ describe("createWalletConnectSolanaSigner", () => {
 		expect(new Uint8Array(signature as Uint8Array)).toEqual(sigBytes);
 	});
 
+	it("signTransaction: throws when the response has neither transaction nor signature", async () => {
+		const { provider } = makeProvider(() => ({}));
+		const signer = createWalletConnectSolanaSigner(
+			provider as never,
+			ADDRESS,
+			MAINNET,
+		);
+		await expect(signer.modifyAndSignTransactions([TX])).rejects.toThrow(
+			/returned no transaction or signature/,
+		);
+	});
+
 	it("throws when there is no active session", async () => {
 		const provider = { session: undefined, client: { request: vi.fn() } };
 		const signer = createWalletConnectSolanaSigner(
@@ -255,6 +267,34 @@ describe("createInjectedSolanaSigner", () => {
 		expect(Array.from((result as Transaction).messageBytes)).toEqual(
 			Array.from(TX.messageBytes),
 		);
+	});
+
+	it("signAndSendTransaction: forwards wire bytes + chain and returns the raw signature bytes", async () => {
+		const sigBytes = new Uint8Array(64).fill(5);
+		const signAndSendTransaction = vi.fn(
+			async (...inputs: Array<{ transaction: Uint8Array; chain: string }>) =>
+				inputs.map(() => ({ signature: sigBytes })),
+		);
+		const { wallet, account } = makeWalletAndAccount({
+			"solana:signAndSendTransaction": {
+				version: "1.0.0",
+				signAndSendTransaction,
+			},
+		});
+
+		const signer = createInjectedSolanaSigner(
+			wallet as never,
+			account as never,
+			MAINNET,
+		);
+		const [signature] = await signer.signAndSendTransactions([TX]);
+
+		const call = signAndSendTransaction.mock.calls[0];
+		if (!call) throw new Error("expected signAndSendTransaction to be called");
+		const input = call[0] as { transaction: Uint8Array; chain: string };
+		expect(Array.from(input.transaction)).toEqual(Array.from(wireBytes(TX)));
+		expect(input.chain).toBe(MAINNET);
+		expect(new Uint8Array(signature as Uint8Array)).toEqual(sigBytes);
 	});
 
 	it("throws a descriptive error when the feature is missing", async () => {

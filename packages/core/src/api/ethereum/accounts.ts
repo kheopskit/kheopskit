@@ -159,23 +159,33 @@ const wrapWalletConnectProvider = (
 	});
 };
 
+const sameAddresses = (a: string[], b: string[]) =>
+	a.length === b.length && a.every((addr, i) => addr === b[i]);
+
 const getAppKitAccounts$ = (
 	wallet: EthereumAppKitWallet,
 ): Observable<EthereumAccount[]> => {
-	const account = wallet.appKit.getAccount("eip155");
 	const provider = wallet.appKit.getProvider("eip155");
 
 	if (
 		!wallet.isConnected ||
-		!wallet.appKit ||
-		!account?.allAccounts.length ||
+		!wallet.appKit?.getAccount("eip155")?.allAccounts.length ||
 		!provider?.session
 	)
 		return of([]);
 
-	return getCachedObservable$(`accounts:${wallet.id}`, () =>
+	return getCachedObservable$(`accounts:${wallet.id}:`, () =>
 		new Observable<EthereumAccount[]>((subscriber) => {
 			const caipNetworkId$ = new ReplaySubject<string>(1);
+			const addresses$ = new ReplaySubject<string[]>(1);
+
+			// Read live from AppKit on each change rather than capturing a snapshot,
+			// so switching/adding the active account is reflected (mirrors the
+			// polkadot/solana AppKit paths).
+			const readAddresses = (): string[] =>
+				wallet.appKit
+					.getAccount("eip155")
+					?.allAccounts.map((acc) => acc.address) ?? [];
 
 			const handleChainChanged = (chainId: unknown) => {
 				const caipNetworkId = toCaipNetworkId(chainId);
@@ -184,13 +194,20 @@ const getAppKitAccounts$ = (
 				}
 			};
 
-			provider.on("chainChanged", handleChainChanged);
-			provider.request({ method: "eth_chainId" }).then(handleChainChanged);
+			const handleAccountsChanged = () => addresses$.next(readAddresses());
 
-			const sub = caipNetworkId$
+			provider.on("chainChanged", handleChainChanged);
+			provider.on("accountsChanged", handleAccountsChanged);
+			provider.on("session_update", handleAccountsChanged);
+			provider.request({ method: "eth_chainId" }).then(handleChainChanged);
+			addresses$.next(readAddresses());
+
+			const sub = combineLatest([
+				caipNetworkId$.pipe(distinctUntilChanged()),
+				addresses$.pipe(distinctUntilChanged(sameAddresses)),
+			])
 				.pipe(
-					distinctUntilChanged(),
-					map((caipNetworkId) => {
+					map(([caipNetworkId, addresses]) => {
 						const chainId = normalizeEvmChainId(caipNetworkId);
 						const transport = custom(
 							wrapWalletConnectProvider(
@@ -200,31 +217,30 @@ const getAppKitAccounts$ = (
 								caipNetworkId,
 							),
 						);
-						return { transport, chainId };
-					}),
-					map(({ transport, chainId }) =>
-						account.allAccounts.map((acc): EthereumAccount => {
+						return addresses.map((addr): EthereumAccount => {
 							const client = createWalletClient({
-								account: acc.address as `0x${string}`,
+								account: addr as `0x${string}`,
 								transport,
 							});
 
 							return {
-								id: getWalletAccountId(wallet.id, acc.address),
+								id: getWalletAccountId(wallet.id, addr),
 								platform: "ethereum",
 								walletName: wallet.name,
 								walletId: wallet.id,
-								address: acc.address as `0x${string}`,
+								address: addr as `0x${string}`,
 								client,
 								chainId,
 							};
-						}),
-					),
+						});
+					}),
 				)
 				.subscribe(subscriber);
 
 			return () => {
 				provider.off("chainChanged", handleChainChanged);
+				provider.off("accountsChanged", handleAccountsChanged);
+				provider.off("session_update", handleAccountsChanged);
 				sub.unsubscribe();
 			};
 		}).pipe(shareReplay({ refCount: true, bufferSize: 1 })),

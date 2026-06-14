@@ -8,6 +8,7 @@ import {
 	of,
 	shareReplay,
 	switchMap,
+	tap,
 } from "rxjs";
 import { clearCachedObservablesByPrefix } from "../utils/getCachedObservable";
 import { getWalletId } from "../utils/WalletId";
@@ -69,6 +70,25 @@ const setCachedAppKit = (
 export const resetAppKitCache = (): void => {
 	setCachedAppKit(undefined);
 };
+
+/**
+ * Tap callback that drops a WalletConnect wallet's cached account observables
+ * whenever it transitions to disconnected. Covers external disconnects (from
+ * the wallet app), which flip `isConnected` via `subscribeProviders` without
+ * ever calling `disconnect()`, so a later reconnect rebuilds the account
+ * observables against the fresh session instead of a stale closure.
+ *
+ * Keys are `accounts:<walletId>:...`; the trailing colon scopes the prefix to
+ * this wallet and avoids matching a sibling whose id is a string prefix.
+ */
+const clearAccountsCacheOnDisconnect =
+	(platform: "polkadot" | "ethereum" | "solana") =>
+	(isConnected: boolean): void => {
+		if (!isConnected)
+			clearCachedObservablesByPrefix(
+				`accounts:${getWalletId(platform, "walletconnect")}:`,
+			);
+	};
 
 /**
  * Observable of AppKit (WalletConnect) wallets for the given config.
@@ -143,6 +163,7 @@ export const getAppKitWallets$ = (
 						? status$.pipe(
 								map((s) => s.isPolkadotConnected),
 								distinctUntilChanged(),
+								tap(clearAccountsCacheOnDisconnect("polkadot")),
 								map((isConnected): PolkadotAppKitWallet => {
 									const walletInfo = appKit.getWalletInfo();
 									const walletId = getWalletId("polkadot", "walletconnect");
@@ -159,9 +180,6 @@ export const getAppKitWallets$ = (
 										},
 										disconnect: async () => {
 											if (isConnected) await appKit.disconnect();
-											// Drop cached account observables so a later reconnect
-											// rebuilds them against the fresh WalletConnect session.
-											clearCachedObservablesByPrefix(`accounts:${walletId}`);
 										},
 										isConnected,
 									};
@@ -173,6 +191,7 @@ export const getAppKitWallets$ = (
 						? status$.pipe(
 								map((s) => s.isEthereumConnected),
 								distinctUntilChanged(),
+								tap(clearAccountsCacheOnDisconnect("ethereum")),
 								map((isConnected): EthereumAppKitWallet => {
 									const walletInfo = appKit.getWalletInfo();
 									const walletId = getWalletId("ethereum", "walletconnect");
@@ -187,7 +206,6 @@ export const getAppKitWallets$ = (
 										connect: () => appKit.open(),
 										disconnect: async () => {
 											await appKit.disconnect();
-											clearCachedObservablesByPrefix(`accounts:${walletId}`);
 										},
 										isConnected,
 									};
@@ -199,6 +217,7 @@ export const getAppKitWallets$ = (
 						? status$.pipe(
 								map((s) => s.isSolanaConnected),
 								distinctUntilChanged(),
+								tap(clearAccountsCacheOnDisconnect("solana")),
 								map((isConnected): SolanaAppKitWallet => {
 									const walletInfo = appKit.getWalletInfo();
 									const walletId = getWalletId("solana", "walletconnect");
@@ -213,7 +232,6 @@ export const getAppKitWallets$ = (
 										connect: () => appKit.open(),
 										disconnect: async () => {
 											await appKit.disconnect();
-											clearCachedObservablesByPrefix(`accounts:${walletId}`);
 										},
 										isConnected,
 									};

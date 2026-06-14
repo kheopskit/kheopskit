@@ -99,9 +99,12 @@ export const createInjectedSolanaSigner = (
 					chain,
 				})),
 			);
-			return outputs.map((output) =>
-				decoder.decode(output.signedTransaction),
-			) as unknown as SignedTransactions;
+			return transactions.map((_tx, i) => {
+				const output = outputs[i];
+				if (!output)
+					throw new Error("[kheopskit] missing signTransaction output");
+				return decoder.decode(output.signedTransaction);
+			}) as unknown as SignedTransactions;
 		},
 		signAndSendTransactions: async (transactions) => {
 			const feature = requireFeature<SignAndSendApi>(

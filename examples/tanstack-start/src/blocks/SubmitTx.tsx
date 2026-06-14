@@ -365,7 +365,7 @@ const SubmitTxSol: FC<{
 			const rpc = getSolanaRpc();
 			const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
 
-			// Build a 1-lamport self-transfer and sign+send it via the account's
+			// Build a 0-lamport self-transfer and sign+send it via the account's
 			// kit signer (a TransactionSendingSigner).
 			const message = pipe(
 				createTransactionMessage({ version: 0 }),
@@ -376,7 +376,7 @@ const SubmitTxSol: FC<{
 						getTransferSolInstruction({
 							source: account.signer,
 							destination: address(recipient.address),
-							amount: lamports(1n),
+							amount: lamports(0n),
 						}),
 						m,
 					),
