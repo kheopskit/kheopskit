@@ -4,5 +4,10 @@ export type {
 	PolkadotInjectedWallet,
 	PolkadotWallet,
 } from "./api/polkadot/types";
-export type { PolkadotAccountType, PolkadotAppKitWallet } from "./api/types";
+export type { PolkadotAccountType } from "./api/types";
+export {
+	isInjectedWallet,
+	isWalletConnectWallet,
+	type WalletConnectWallet,
+} from "./api/types";
 export { isSs58Address } from "./utils/isSs58Address";

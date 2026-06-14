@@ -53,8 +53,7 @@ export const polkadot = (
 
 	return {
 		platform: "polkadot",
-		getWallets$: (ctx: PlatformContext) =>
-			getPolkadotWallets$(ctx.config, ctx.store),
+		getWallets$: (ctx: PlatformContext) => getPolkadotWallets$(ctx.store),
 		getAccounts$: (wallets$) => getPolkadotAccounts$(wallets$, accountTypes),
 		acceptsCachedAccount: (cached) =>
 			accountTypes.includes(cached.polkadotAccountType ?? "sr25519"),

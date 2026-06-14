@@ -1,7 +1,7 @@
-import { firstValueFrom, of, take, toArray } from "rxjs";
+import { filter, firstValueFrom, of, take, toArray } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
-import type { WalletId } from "../../utils/WalletId";
-import type { EthereumAppKitWallet } from "../types";
+import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../../utils/WalletId";
+import type { WalletConnectWallet } from "../types";
 import type { EthereumInjectedWallet } from "./types";
 
 // Valid Ethereum address for tests
@@ -60,14 +60,16 @@ const createMockInjectedWallet = (
 	...overrides,
 });
 
+// The single platform-less WalletConnect connector, configured to carry the
+// eip155 namespace.
 const createMockAppKitWallet = (
 	provider: ReturnType<typeof createMockProvider>,
-	overrides: Partial<EthereumAppKitWallet> = {},
-): EthereumAppKitWallet => ({
-	platform: "ethereum",
-	type: "appKit",
-	id: "ethereum:appkit" as WalletId,
-	name: "AppKit",
+	overrides: Partial<WalletConnectWallet> = {},
+): WalletConnectWallet => ({
+	type: "walletconnect",
+	id: WALLET_CONNECT_WALLET_ID,
+	platforms: ["ethereum"],
+	name: "WalletConnect",
 	icon: "data:image/svg+xml,...",
 	isConnected: true,
 	connect: vi.fn(),
@@ -80,15 +82,8 @@ const createMockAppKitWallet = (
 		// WalletConnect 0-accounts bug — if the code starts reading allAccounts
 		// again, every appKit test below loses its accounts.
 		getAccount: vi.fn(() => ({ allAccounts: [] })),
-		getProvider: vi.fn(
-			() =>
-				provider as unknown as EthereumAppKitWallet["appKit"] extends infer T
-					? T extends { getProvider: (...args: never[]) => infer P }
-						? P
-						: never
-					: never,
-		),
-	} as unknown as EthereumAppKitWallet["appKit"],
+		getProvider: vi.fn(() => provider),
+	} as unknown as WalletConnectWallet["appKit"],
 	...overrides,
 });
 
@@ -317,7 +312,14 @@ describe("Ethereum chain ID tracking", () => {
 			const wallet = createMockAppKitWallet(provider);
 			const { getEthereumAccounts$ } = await importAccounts();
 
-			const accounts = await firstValueFrom(getEthereumAccounts$(of([wallet])));
+			// The account surfaces immediately with the session-derived chain, then
+			// converges to the chain eth_chainId reports — wait for the converged value.
+			const accounts = await firstValueFrom(
+				getEthereumAccounts$(of([wallet])).pipe(
+					filter((a) => a[0]?.chainId === 137),
+					take(1),
+				),
+			);
 
 			expect(accounts).toHaveLength(1);
 			expect(accounts[0]?.chainId).toBe(137);
@@ -394,10 +396,37 @@ describe("Ethereum chain ID tracking", () => {
 			const wallet = createMockAppKitWallet(provider);
 			const { getEthereumAccounts$ } = await importAccounts();
 
-			const accounts = await firstValueFrom(getEthereumAccounts$(of([wallet])));
+			// The account surfaces immediately with the session-derived chain, then
+			// converges to the chain eth_chainId reports — wait for the converged value.
+			const accounts = await firstValueFrom(
+				getEthereumAccounts$(of([wallet])).pipe(
+					filter((a) => a[0]?.chainId === 137),
+					take(1),
+				),
+			);
 
 			expect(accounts).toHaveLength(1);
 			expect(accounts[0]?.chainId).toBe(137);
+		});
+
+		it("surfaces appKit accounts even when eth_chainId rejects", async () => {
+			const provider = createMockProvider();
+			setWalletConnectSession(provider);
+
+			provider.request.mockImplementation(async ({ method }) => {
+				if (method === "eth_chainId") throw new Error("not supported");
+				return null;
+			});
+
+			const wallet = createMockAppKitWallet(provider);
+			const { getEthereumAccounts$ } = await importAccounts();
+
+			// Regression: a rejecting eth_chainId must not strand the account list.
+			// The chainId falls back to the session-advertised chain (eip155:1).
+			const accounts = await firstValueFrom(getEthereumAccounts$(of([wallet])));
+
+			expect(accounts).toHaveLength(1);
+			expect(accounts[0]?.chainId).toBe(1);
 		});
 
 		it("tears down appKit chain/account listeners on unsubscribe", async () => {

@@ -18,8 +18,9 @@ import { KheopskitError } from "../errors";
 import type {
 	AppKitInstance,
 	PolkadotAccountType,
-	PolkadotAppKitWallet,
+	WalletConnectWallet,
 } from "../types";
+import { isWalletConnectWallet } from "../types";
 import type {
 	PolkadotAccount,
 	PolkadotInjectedWallet,
@@ -107,14 +108,15 @@ const getAppKitPolkadotSigner = (appKit: AppKitInstance, address: string) => {
 	);
 };
 
-const getAppKitAccounts$ = (
-	wallet: PolkadotAppKitWallet,
+const getWalletConnectAccounts$ = (
+	wallet: WalletConnectWallet,
 ): Observable<PolkadotAccount[]> => {
 	const provider = wallet.appKit.getProvider("polkadot");
 
-	if (!wallet.isConnected || !provider?.session) return of([]);
+	if (!wallet.platforms.includes("polkadot") || !provider?.session)
+		return of([]);
 
-	return getCachedObservable$(`accounts:${wallet.id}:`, () =>
+	return getCachedObservable$(`accounts:${wallet.id}:polkadot:`, () =>
 		new Observable<PolkadotAccount[]>((subscriber) => {
 			// AppKit's getAccount("polkadot").allAccounts is always empty because
 			// AppKit has no native polkadot adapter; the WalletConnect session is the
@@ -169,7 +171,7 @@ const getAppKitAccounts$ = (
 };
 
 export const getPolkadotAccounts$ = (
-	polkadotWallets$: Observable<PolkadotWallet[]>,
+	polkadotWallets$: Observable<(PolkadotWallet | WalletConnectWallet)[]>,
 	polkadotAccountTypes: PolkadotAccountType[],
 ) =>
 	new Observable<PolkadotAccount[]>((subscriber) => {
@@ -189,8 +191,8 @@ export const getPolkadotAccounts$ = (
 									.filter((w) => w.type === "injected")
 									.map(getInjectedWalletAccounts$),
 								...wallets
-									.filter((w) => w.type === "appKit")
-									.map(getAppKitAccounts$),
+									.filter(isWalletConnectWallet)
+									.map(getWalletConnectAccounts$),
 							])
 						: of([]),
 				),

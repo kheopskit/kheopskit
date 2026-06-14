@@ -1,3 +1,4 @@
+import { isWalletConnectWallet } from "@kheopskit/core";
 import { Button } from "@/components/ui/button";
 import {
 	Table,
@@ -31,7 +32,11 @@ export const Wallets = () => {
 				<TableBody>
 					{wallets.map((wallet) => (
 						<TableRow key={wallet.id}>
-							<TableCell>{wallet.platform}</TableCell>
+							<TableCell>
+								{isWalletConnectWallet(wallet)
+									? wallet.platforms.join(", ") || "—"
+									: wallet.platform}
+							</TableCell>
 							<TableCell>
 								{wallet.icon ? (
 									<img

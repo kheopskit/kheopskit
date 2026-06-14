@@ -1,3 +1,5 @@
+import type { WalletId } from "../utils/WalletId";
+
 /**
  * Stable error codes thrown by kheopskit. Catch a {@link KheopskitError} and
  * branch on `error.code` instead of matching message strings.
@@ -34,12 +36,12 @@ export type KheopskitErrorCode =
 export class KheopskitError extends Error {
 	readonly code: KheopskitErrorCode;
 	/** The wallet id this error relates to, when applicable. */
-	readonly walletId?: string;
+	readonly walletId?: WalletId;
 
 	constructor(
 		code: KheopskitErrorCode,
 		message: string,
-		options?: { walletId?: string; cause?: unknown },
+		options?: { walletId?: WalletId; cause?: unknown },
 	) {
 		super(`[kheopskit] ${message}`, { cause: options?.cause });
 		this.name = "KheopskitError";

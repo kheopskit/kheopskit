@@ -6,10 +6,11 @@ import { getWalletAccountId } from "../utils/WalletAccountId";
 import {
 	isValidWalletId,
 	parseWalletId,
+	WALLET_CONNECT_WALLET_ID,
 	type WalletId,
 } from "../utils/WalletId";
 import { DEFAULT_STORAGE_KEY } from "./config";
-import type { CachedAccount, CachedWallet } from "./types";
+import type { CachedAccount, CachedWallet, WalletPlatform } from "./types";
 
 type KheopskitStoreData = {
 	autoReconnect?: WalletId[];
@@ -19,23 +20,31 @@ type KheopskitStoreData = {
 	cachedAccounts?: CachedAccount[];
 };
 
+// wallet type: 0=injected, 1=walletconnect
 type CompactWalletEntry = [WalletId, string, 0 | 1, 0 | 1];
 type CompactPolkadotAccountType = 0 | 1 | 2 | 3;
+// platform: 0=polkadot, 1=ethereum, 2=solana
+type CompactPlatformCode = 0 | 1 | 2;
 type CompactAccountEntry = [
 	WalletId,
 	string,
 	string | null,
 	number | null,
-	(CompactPolkadotAccountType | null)?,
+	CompactPolkadotAccountType | null,
+	// Platform code. Newly written entries always include it (the WalletConnect
+	// connector's walletId is platform-less, so platform can't be derived from
+	// it); absent in entries written by older versions, where it's derived from
+	// the walletId instead.
+	(CompactPlatformCode | null)?,
 ];
 
 type CompactStoreV1 = {
 	v: 1;
 	// autoReconnect
 	r?: WalletId[];
-	// wallets: [id, name, isConnected(0|1), type(0=injected,1=appKit)?]
+	// wallets: [id, name, isConnected(0|1), type(0=injected,1=walletconnect)?]
 	w?: CompactWalletEntry[];
-	// accounts: [walletId, address, name?]
+	// accounts: [walletId, address, name?, chainId?, polkadotType?, platform?]
 	a?: CompactAccountEntry[];
 };
 
@@ -50,13 +59,14 @@ const DEFAULT_SETTINGS: KheopskitStoreData = {};
 const isValidCachedWallet = (value: unknown): value is CachedWallet => {
 	if (!value || typeof value !== "object") return false;
 	const w = value as Record<string, unknown>;
-	return (
-		isValidWalletId(w.id) &&
-		isWalletPlatform(w.platform) &&
-		typeof w.name === "string" &&
-		(w.type === "injected" || w.type === "appKit") &&
-		typeof w.isConnected === "boolean"
-	);
+	if (!isValidWalletId(w.id)) return false;
+	if (typeof w.name !== "string" || typeof w.isConnected !== "boolean")
+		return false;
+	// The WalletConnect connector is platform-less with a fixed id; drop stale
+	// per-platform WC entries written by older versions.
+	if (w.type === "walletconnect")
+		return w.id === WALLET_CONNECT_WALLET_ID && w.platform === undefined;
+	return w.type === "injected" && isWalletPlatform(w.platform);
 };
 
 /** Validates a cached account read from persisted storage. See {@link isValidCachedWallet}. */
@@ -103,6 +113,32 @@ const fromCompactPolkadotAccountType = (
 			return "ecdsa";
 		case 3:
 			return "ethereum";
+		default:
+			return undefined;
+	}
+};
+
+const toCompactPlatform = (platform: WalletPlatform): CompactPlatformCode => {
+	switch (platform) {
+		case "polkadot":
+			return 0;
+		case "ethereum":
+			return 1;
+		case "solana":
+			return 2;
+	}
+};
+
+const fromCompactPlatform = (
+	code: CompactPlatformCode | null | undefined,
+): WalletPlatform | undefined => {
+	switch (code) {
+		case 0:
+			return "polkadot";
+		case 1:
+			return "ethereum";
+		case 2:
+			return "solana";
 		default:
 			return undefined;
 	}
@@ -246,7 +282,7 @@ const toCompactStore = (data: KheopskitStoreData): CompactStoreV1 => {
 			wallet.id,
 			wallet.name,
 			wallet.isConnected ? 1 : 0,
-			wallet.type === "appKit" ? 1 : 0,
+			wallet.type === "walletconnect" ? 1 : 0,
 		],
 	);
 
@@ -257,6 +293,7 @@ const toCompactStore = (data: KheopskitStoreData): CompactStoreV1 => {
 			account.name ?? null,
 			account.chainId ?? null,
 			toCompactPolkadotAccountType(account.polkadotAccountType),
+			toCompactPlatform(account.platform),
 		],
 	);
 
@@ -279,12 +316,17 @@ const fromCompactStore = (data: CompactStoreV1): KheopskitStoreData => {
 		if (!Array.isArray(item)) continue;
 		const [id, name, isConnected, type] = item;
 		if (!isValidWalletId(id)) continue;
-		const { platform } = parseWalletId(id);
+		const isWalletConnect = id === WALLET_CONNECT_WALLET_ID;
+		const walletType = type === 1 ? "walletconnect" : "injected";
+		// Keep id/type consistent: the platform-less connector uses the fixed WC
+		// id; everything else is a platform-prefixed injected wallet. Drop stale
+		// mismatches (e.g. per-platform WC ids from older versions).
+		if (isWalletConnect !== (walletType === "walletconnect")) continue;
 		walletNameMap.set(id, name);
 		wallets.push({
 			id,
-			platform,
-			type: type === 1 ? "appKit" : "injected",
+			platform: isWalletConnect ? undefined : parseWalletId(id).platform,
+			type: walletType,
 			name,
 			isConnected: isConnected === 1,
 		});
@@ -293,10 +335,25 @@ const fromCompactStore = (data: CompactStoreV1): KheopskitStoreData => {
 	const accounts: CachedAccount[] = [];
 	for (const item of Array.isArray(data.a) ? data.a : []) {
 		if (!Array.isArray(item)) continue;
-		const [walletId, address, name, chainId, polkadotAccountType] = item;
+		const [
+			walletId,
+			address,
+			name,
+			chainId,
+			polkadotAccountType,
+			platformCode,
+		] = item;
 		if (!isValidWalletId(walletId) || typeof address !== "string" || !address)
 			continue;
-		const { platform } = parseWalletId(walletId);
+		// Prefer the explicit platform code; fall back to deriving it from the
+		// walletId for entries written before the code existed (never WC ones).
+		const platform =
+			platformCode != null
+				? fromCompactPlatform(platformCode)
+				: walletId === WALLET_CONNECT_WALLET_ID
+					? undefined
+					: parseWalletId(walletId).platform;
+		if (!isWalletPlatform(platform)) continue;
 		accounts.push({
 			id: getWalletAccountId(walletId, address),
 			platform,

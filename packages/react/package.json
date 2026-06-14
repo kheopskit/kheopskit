@@ -1,8 +1,9 @@
 {
 	"name": "@kheopskit/react",
-	"version": "4.0.0",
+	"version": "5.0.0",
 	"description": "",
 	"private": false,
+	"sideEffects": false,
 	"files": [
 		"dist",
 		"README.md"
@@ -12,10 +13,16 @@
 	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
-			"types": "./dist/index.d.ts",
-			"import": "./dist/index.mjs",
-			"require": "./dist/index.js"
-		}
+			"import": {
+				"types": "./dist/index.d.mts",
+				"default": "./dist/index.mjs"
+			},
+			"require": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			}
+		},
+		"./package.json": "./package.json"
 	},
 	"publishConfig": {
 		"access": "public"
@@ -36,7 +43,7 @@
 	},
 	"license": "ISC",
 	"peerDependencies": {
-		"@kheopskit/core": "^4.0.0",
+		"@kheopskit/core": "^5.0.0",
 		"react": ">=18.0.0",
 		"react-dom": ">=18.0.0",
 		"rxjs": ">=7.0.0"
@@ -62,6 +69,9 @@
 			"esm",
 			"cjs"
 		],
-		"target": "es2020"
+		"target": "es2020",
+		"banner": {
+			"js": "\"use client\";"
+		}
 	}
 }

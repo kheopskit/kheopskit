@@ -16,7 +16,8 @@ import {
 } from "viem";
 import { getWalletAccountId } from "../../utils";
 import { getCachedObservable$ } from "../../utils/getCachedObservable";
-import type { EthereumAppKitWallet } from "../types";
+import type { WalletConnectWallet } from "../types";
+import { isWalletConnectWallet } from "../types";
 import type {
 	EthereumAccount,
 	EthereumInjectedWallet,
@@ -141,19 +142,23 @@ const getInjectedWalletAccounts$ = (
 const wrapWalletConnectProvider = (
 	provider: EIP1193Provider,
 	sessionTopic: string,
-	caipNetworkId: string,
+	caipNetworkId: string | undefined,
 ): EIP1193Provider => {
 	return new Proxy(provider, {
 		get(target, prop, receiver) {
 			if (prop !== "request") return Reflect.get(target, prop, receiver);
 
-			// biome-ignore lint/suspicious/noExplicitAny: legacy
+			// biome-ignore lint/suspicious/noExplicitAny: EIP-1193 request args
 			return (args: any) => {
-				if (args && typeof args === "object" && args.method) {
-					if (!args.topic) args.topic = sessionTopic;
-					if (!args.chainId) args.chainId = caipNetworkId;
-				}
-				return target.request(args);
+				if (!args || typeof args !== "object" || !args.method)
+					return target.request(args);
+				// Build a new object rather than mutating the caller's args: the
+				// EIP-1193 request object is owned by viem and may be frozen or reused.
+				const next = { ...args };
+				if (next.topic === undefined) next.topic = sessionTopic;
+				if (next.chainId === undefined && caipNetworkId !== undefined)
+					next.chainId = caipNetworkId;
+				return target.request(next);
 			};
 		},
 	});
@@ -162,16 +167,17 @@ const wrapWalletConnectProvider = (
 const sameAddresses = (a: string[], b: string[]) =>
 	a.length === b.length && a.every((addr, i) => addr === b[i]);
 
-const getAppKitAccounts$ = (
-	wallet: EthereumAppKitWallet,
+const getWalletConnectAccounts$ = (
+	wallet: WalletConnectWallet,
 ): Observable<EthereumAccount[]> => {
 	const provider = wallet.appKit.getProvider("eip155");
 
-	if (!wallet.isConnected || !provider?.session) return of([]);
+	if (!wallet.platforms.includes("ethereum") || !provider?.session)
+		return of([]);
 
-	return getCachedObservable$(`accounts:${wallet.id}:`, () =>
+	return getCachedObservable$(`accounts:${wallet.id}:ethereum:`, () =>
 		new Observable<EthereumAccount[]>((subscriber) => {
-			const caipNetworkId$ = new ReplaySubject<string>(1);
+			const caipNetworkId$ = new ReplaySubject<string | undefined>(1);
 			const addresses$ = new ReplaySubject<string[]>(1);
 
 			// AppKit's getAccount("eip155").allAccounts is empty because this AppKit
@@ -200,6 +206,21 @@ const getAppKitAccounts$ = (
 				return [...addresses];
 			};
 
+			// Derive the CAIP network id from the session's eip155 CAIP-10 accounts
+			// ("eip155:<ref>:<addr>") as a synchronous fallback for eth_chainId.
+			const readCaipNetworkId = (): string | undefined => {
+				const session = provider.session;
+				if (!session) return undefined;
+				for (const namespace of Object.values(session.namespaces)) {
+					for (const account of namespace.accounts ?? []) {
+						if (!account.startsWith("eip155:")) continue;
+						const ref = account.split(":")[1];
+						if (ref) return `eip155:${ref}`;
+					}
+				}
+				return undefined;
+			};
+
 			const handleChainChanged = (chainId: unknown) => {
 				const caipNetworkId = toCaipNetworkId(chainId);
 				if (caipNetworkId) {
@@ -212,7 +233,16 @@ const getAppKitAccounts$ = (
 			provider.on("chainChanged", handleChainChanged);
 			provider.on("accountsChanged", handleAccountsChanged);
 			provider.on("session_update", handleAccountsChanged);
-			provider.request({ method: "eth_chainId" }).then(handleChainChanged);
+			// Seed the chain id from the session synchronously so the account list can
+			// surface even if eth_chainId never resolves; eth_chainId then refines it.
+			// Without this seed, combineLatest below never fires when eth_chainId
+			// rejects or returns an unparseable value, and the accounts silently never
+			// appear (the injected path seeds undefined on failure for the same reason).
+			caipNetworkId$.next(readCaipNetworkId());
+			provider
+				.request({ method: "eth_chainId" })
+				.then(handleChainChanged)
+				.catch(() => {});
 			addresses$.next(readAddresses());
 
 			const sub = combineLatest([
@@ -261,7 +291,7 @@ const getAppKitAccounts$ = (
 };
 
 export const getEthereumAccounts$ = (
-	ethereumWallets: Observable<EthereumWallet[]>,
+	ethereumWallets: Observable<(EthereumWallet | WalletConnectWallet)[]>,
 ) =>
 	new Observable<EthereumAccount[]>((subscriber) => {
 		const sub = ethereumWallets
@@ -274,9 +304,8 @@ export const getEthereumAccounts$ = (
 									.filter((w) => w.type === "injected")
 									.map(getInjectedWalletAccounts$),
 								...wallets
-									.filter((w) => w.type === "appKit")
-									.map(getAppKitAccounts$),
-								// todo appkit
+									.filter(isWalletConnectWallet)
+									.map(getWalletConnectAccounts$),
 							])
 						: of([]);
 				}),

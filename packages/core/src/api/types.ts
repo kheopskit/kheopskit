@@ -42,7 +42,7 @@ export type AppKitInstance = {
 	getCaipNetworks(namespace: string): { caipNetworkId?: string }[];
 };
 
-export type WalletType = "injected" | "appKit";
+export type WalletType = "injected" | "walletconnect";
 
 export type PolkadotAccountType = "sr25519" | "ed25519" | "ecdsa" | "ethereum";
 
@@ -82,21 +82,27 @@ export type BaseWalletAccount = {
 };
 
 /**
- * AppKit (WalletConnect) wallet handle for a given platform. References only
- * `@reown/appkit` (a hard dependency) — no optional platform SDK — so it lives
- * in core and is shared by every platform's wallet union.
+ * The single WalletConnect connector, shared across every platform.
  *
- * The per-platform aliases below (`PolkadotAppKitWallet`, … ) are kept so each
- * platform entry point can re-export a concrete name.
+ * Unlike injected wallets, it is **not tied to a platform**: one WalletConnect
+ * session spans whichever namespaces the remote wallet approves in a single
+ * pairing (a namespace can't be added to a live session afterwards). So there is
+ * exactly one of these in `wallets`, discriminated by `type: "walletconnect"`.
+ * Its accounts appear in `accounts`, each carrying its own `platform`.
  */
-export type AppKitWallet<P extends WalletPlatform = WalletPlatform> = {
+export type WalletConnectWallet = {
 	id: WalletId;
-	platform: P;
-	type: "appKit";
+	type: "walletconnect";
+	/**
+	 * Platforms (namespaces) the live session currently carries. Empty until
+	 * connected; populated with whatever the wallet approved (e.g. just
+	 * `["ethereum"]`, or `["polkadot", "ethereum"]`).
+	 */
+	platforms: WalletPlatform[];
 	/**
 	 * Raw Reown AppKit instance, exposed as an escape hatch for advanced use
 	 * (custom modal control, reading providers directly). Most consumers should
-	 * use the wallet's `connect`/`disconnect` and the derived accounts instead.
+	 * use `connect`/`disconnect` and the derived accounts instead.
 	 */
 	appKit: AppKitInstance;
 	name: string;
@@ -106,9 +112,28 @@ export type AppKitWallet<P extends WalletPlatform = WalletPlatform> = {
 	disconnect: () => Promise<void>;
 };
 
-export type PolkadotAppKitWallet = AppKitWallet<"polkadot">;
-export type EthereumAppKitWallet = AppKitWallet<"ethereum">;
-export type SolanaAppKitWallet = AppKitWallet<"solana">;
+/** Narrows a wallet to the platform-less {@link WalletConnectWallet}. */
+export const isWalletConnectWallet = (
+	wallet: BaseWallet | WalletConnectWallet,
+): wallet is WalletConnectWallet => wallet.type === "walletconnect";
+
+/**
+ * Narrows a wallet to an injected (browser-extension / Wallet Standard) wallet —
+ * the complement of {@link isWalletConnectWallet}. `state.wallets` is
+ * `(InjectedWallet | WalletConnectWallet)[]`, so use this to recover the
+ * injected-only fields when iterating: `platform`, `sourceId`, and the SDK
+ * handle (`provider` on Ethereum, `extension` on Polkadot, `wallet` on Solana).
+ *
+ * @example
+ * ```ts
+ * for (const wallet of wallets.filter(isInjectedWallet)) {
+ *   console.log(wallet.platform, wallet.sourceId); // typed, no WC widening
+ * }
+ * ```
+ */
+export const isInjectedWallet = <W extends BaseWallet | WalletConnectWallet>(
+	wallet: W,
+): wallet is Exclude<W, WalletConnectWallet> => wallet.type === "injected";
 
 /**
  * Dapp metadata shown in the WalletConnect modal. Mirrors WalletConnect's
@@ -168,7 +193,12 @@ export type KheopskitPlatform<
 	// assigned to the base `KheopskitPlatform` despite the contravariant
 	// `wallets$` parameter.
 	getWallets$(ctx: PlatformContext): Observable<TWallet[]>;
-	getAccounts$(wallets$: Observable<TWallet[]>): Observable<TAccount[]>;
+	// Receives this platform's (injected) wallets plus the shared, platform-less
+	// WalletConnect connector — the plugin derives its injected accounts and, if
+	// the WC session carries its namespace, its WalletConnect accounts.
+	getAccounts$(
+		wallets$: Observable<(TWallet | WalletConnectWallet)[]>,
+	): Observable<TAccount[]>;
 	/**
 	 * Optional hydration filter. Cached accounts for which this returns false are
 	 * dropped during SSR hydration (Polkadot uses it to honour `accountTypes`).
@@ -243,7 +273,7 @@ export type KheopskitConfig<
 export type KheopskitState<
 	P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],
 > = {
-	wallets: WalletOf<P[number]>[];
+	wallets: (WalletOf<P[number]> | WalletConnectWallet)[];
 	accounts: AccountOf<P[number]>[];
 	config: KheopskitConfig<P>;
 	/**
@@ -264,7 +294,8 @@ export type KheopskitState<
  */
 export type CachedWallet = {
 	id: WalletId;
-	platform: WalletPlatform;
+	/** Absent for the platform-less WalletConnect connector. */
+	platform?: WalletPlatform;
 	type: WalletType;
 	name: string;
 	isConnected: boolean;

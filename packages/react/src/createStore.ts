@@ -22,11 +22,13 @@ export const createStore = <T>(
 		}
 	};
 
-	// Start subscription immediately
-	ensureSubscription();
-
-	// If observable emitted synchronously, use that value
-	// Otherwise fall back to initialValue
+	// The subscription is created lazily by subscribe() (which React calls from a
+	// committed passive effect), never during render. React may render a tree and
+	// throw it away without committing — StrictMode double-invokes the initial
+	// render, and concurrent/Suspense can discard renders — so subscribing eagerly
+	// here (createStore runs inside the Provider's render-phase useMemo) would leak
+	// the discarded store's observable subscription. Until the first emission,
+	// getSnapshot falls back to initialValue.
 	const getSnapshot = () => latestValue ?? initialValue;
 
 	/**
@@ -39,9 +41,12 @@ export const createStore = <T>(
 
 	const subscribe = (callback: (value: T) => void) => {
 		subscriberCount++;
-		listeners.add(callback);
-		// Ensure observable subscription is active when someone subscribes
+		// Subscribe to the observable BEFORE registering this listener, so a
+		// synchronous replay (BehaviorSubject / shareReplay) updates latestValue
+		// without double-invoking this callback — the current value is emitted once,
+		// explicitly, just below.
 		ensureSubscription();
+		listeners.add(callback);
 
 		// Immediately emit current value (BehaviorSubject semantics)
 		callback(getSnapshot());

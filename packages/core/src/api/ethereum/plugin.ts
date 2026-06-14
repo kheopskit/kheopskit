@@ -18,7 +18,6 @@ export const ethereum = (): KheopskitPlatform<
 	EthereumAccount
 > => ({
 	platform: "ethereum",
-	getWallets$: (ctx: PlatformContext) =>
-		getEthereumWallets$(ctx.config, ctx.store),
+	getWallets$: (ctx: PlatformContext) => getEthereumWallets$(ctx.store),
 	getAccounts$: (wallets$) => getEthereumAccounts$(wallets$),
 });

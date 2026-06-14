@@ -4,7 +4,7 @@ import { KheopskitError } from "../errors";
  * Wallet Standard chain identifiers for Solana clusters.
  *
  * These are the values wallets advertise in their `chains` arrays and the
- * values kheopskit accepts in `config.solanaChain`.
+ * values kheopskit accepts in `solana({ chain })`.
  *
  * @see https://github.com/anza-xyz/wallet-standard
  */
@@ -60,12 +60,27 @@ export const getSolanaCaip2 = (chain: SolanaChainId): string => {
 	return caip2;
 };
 
-const CAIP2_TO_SOLANA_CHAIN: Record<string, SolanaChainId> = Object.fromEntries(
-	Object.entries(SOLANA_CHAIN_TO_CAIP2).map(([chain, caip2]) => [
-		caip2,
-		chain as SolanaChainId,
-	]),
-);
+/**
+ * AppKit's *deprecated* CAIP-2 cluster ids (its `deprecatedCaipNetworkId`
+ * values). Some wallets still place accounts in the WC session under these, so
+ * map them back to a {@link SolanaChainId} instead of silently falling back to
+ * the configured chain. Requests always use the current ids from
+ * {@link SOLANA_CHAIN_TO_CAIP2}; testnet has no deprecated id.
+ */
+const DEPRECATED_CAIP2_TO_SOLANA_CHAIN: Record<string, SolanaChainId> = {
+	"solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ": "solana:mainnet",
+	"solana:8E9rvCKLFQia2Y35HXjjpWzj8weVo44K": "solana:devnet",
+};
+
+const CAIP2_TO_SOLANA_CHAIN: Record<string, SolanaChainId> = {
+	...Object.fromEntries(
+		Object.entries(SOLANA_CHAIN_TO_CAIP2).map(([chain, caip2]) => [
+			caip2,
+			chain as SolanaChainId,
+		]),
+	),
+	...DEPRECATED_CAIP2_TO_SOLANA_CHAIN,
+};
 
 /**
  * Maps a CAIP-2 chain id (as found in WalletConnect session namespaces) back to

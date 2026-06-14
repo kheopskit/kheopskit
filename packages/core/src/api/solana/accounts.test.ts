@@ -1,8 +1,8 @@
 import { createSignableMessage } from "@solana/kit";
 import { firstValueFrom, of, take, toArray } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
-import type { WalletId } from "../../utils/WalletId";
-import type { SolanaAppKitWallet } from "../types";
+import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../../utils/WalletId";
+import type { WalletConnectWallet } from "../types";
 import type { SolanaInjectedWallet } from "./types";
 
 const ADDRESS_1 = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
@@ -75,8 +75,8 @@ const createMockInjectedWallet = (
 
 const createMockAppKitWallet = (
 	namespaces: Record<string, { accounts: string[] }>,
-	overrides: Partial<SolanaAppKitWallet> = {},
-): SolanaAppKitWallet => {
+	overrides: Partial<WalletConnectWallet> = {},
+): WalletConnectWallet => {
 	const listeners = new Map<string, Set<ChangeListener>>();
 	const provider = {
 		session: { topic: "test-topic", namespaces },
@@ -99,9 +99,9 @@ const createMockAppKitWallet = (
 	};
 
 	return {
-		platform: "solana",
-		type: "appKit",
-		id: "solana:walletconnect" as WalletId,
+		type: "walletconnect",
+		id: WALLET_CONNECT_WALLET_ID,
+		platforms: ["solana"],
 		name: "WalletConnect",
 		icon: "data:image/svg+xml;base64,AAAA",
 		isConnected: true,
@@ -113,7 +113,7 @@ const createMockAppKitWallet = (
 			// getAccount("solana").allAccounts is always empty. Accounts must come
 			// from session.namespaces (WalletConnect 0-accounts regression).
 			getAccount: vi.fn(() => ({ allAccounts: [] })),
-		} as unknown as SolanaAppKitWallet["appKit"],
+		} as unknown as WalletConnectWallet["appKit"],
 		...overrides,
 	};
 };

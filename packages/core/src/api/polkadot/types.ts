@@ -4,7 +4,7 @@ import type {
 } from "polkadot-api/pjs-signer";
 import type { WalletAccountId } from "../../utils/WalletAccountId";
 import type { WalletId } from "../../utils/WalletId";
-import type { PolkadotAccountType, PolkadotAppKitWallet } from "../types";
+import type { PolkadotAccountType } from "../types";
 
 export type PolkadotInjectedWallet = {
 	id: WalletId;
@@ -24,7 +24,7 @@ export type PolkadotInjectedWallet = {
 	disconnect: () => Promise<void>;
 };
 
-export type PolkadotWallet = PolkadotInjectedWallet | PolkadotAppKitWallet;
+export type PolkadotWallet = PolkadotInjectedWallet;
 
 /**
  * A Polkadot account. Inherits the fields of polkadot-api's

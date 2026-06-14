@@ -3,6 +3,13 @@ import { isWalletPlatform } from "./isWalletPlatform";
 
 export type WalletId = string;
 
+/**
+ * Stable id of the single WalletConnect connector. It is platform-less: one WC
+ * session spans whichever namespaces the wallet approves, so it isn't tied to a
+ * platform (unlike injected wallet ids, which are `<platform>:<identifier>`).
+ */
+export const WALLET_CONNECT_WALLET_ID: WalletId = "walletconnect";
+
 export const getWalletId = (
 	platform: WalletPlatform,
 	identifier: string,
@@ -26,6 +33,7 @@ export const parseWalletId = (walletId: string) => {
  */
 export const isValidWalletId = (walletId: unknown): walletId is WalletId => {
 	if (typeof walletId !== "string" || !walletId) return false;
+	if (walletId === WALLET_CONNECT_WALLET_ID) return true;
 	const [platform, identifier] = walletId.split(":");
 	return isWalletPlatform(platform) && !!identifier;
 };

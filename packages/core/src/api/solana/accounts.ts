@@ -10,7 +10,8 @@ import {
 } from "rxjs";
 import { getWalletAccountId } from "../../utils";
 import { getCachedObservable$ } from "../../utils/getCachedObservable";
-import type { SolanaAppKitWallet } from "../types";
+import type { WalletConnectWallet } from "../types";
+import { isWalletConnectWallet } from "../types";
 import { getSolanaChainIdFromCaip2, type SolanaChainId } from "./chains";
 import {
 	createInjectedSolanaSigner,
@@ -66,15 +67,15 @@ const getInjectedWalletAccounts$ = (
 	);
 };
 
-const getAppKitAccounts$ = (
-	wallet: SolanaAppKitWallet,
+const getWalletConnectAccounts$ = (
+	wallet: WalletConnectWallet,
 	chain: SolanaChainId,
 ): Observable<SolanaAccount[]> => {
 	const provider = wallet.appKit.getProvider("solana");
 
-	if (!wallet.isConnected || !provider?.session) return of([]);
+	if (!wallet.platforms.includes("solana") || !provider?.session) return of([]);
 
-	return getCachedObservable$(`accounts:${wallet.id}:${chain}`, () =>
+	return getCachedObservable$(`accounts:${wallet.id}:solana:${chain}`, () =>
 		new Observable<SolanaAccount[]>((subscriber) => {
 			// AppKit has no native solana adapter, so getAccount("solana").allAccounts
 			// is always empty; the WalletConnect session is the source of truth.
@@ -145,7 +146,7 @@ const getAppKitAccounts$ = (
 };
 
 export const getSolanaAccounts$ = (
-	solanaWallets$: Observable<SolanaWallet[]>,
+	solanaWallets$: Observable<(SolanaWallet | WalletConnectWallet)[]>,
 	solanaChain: SolanaChainId,
 ) =>
 	new Observable<SolanaAccount[]>((subscriber) => {
@@ -159,8 +160,8 @@ export const getSolanaAccounts$ = (
 									.filter((w) => w.type === "injected")
 									.map((w) => getInjectedWalletAccounts$(w, solanaChain)),
 								...wallets
-									.filter((w) => w.type === "appKit")
-									.map((w) => getAppKitAccounts$(w, solanaChain)),
+									.filter(isWalletConnectWallet)
+									.map((w) => getWalletConnectAccounts$(w, solanaChain)),
 							])
 						: of([]),
 				),

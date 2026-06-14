@@ -103,7 +103,9 @@ export const App = () => (
 );
 ```
 
-> **Prefer the component directly?** Use `<KheopskitProvider config={{ platforms }}>` and recover platform-precise account types (e.g. `account.signer` on Solana, `account.client` on Ethereum) with a type argument — `useWallets<typeof platforms>()`. React context can't be generic, so the bare `useWallets()` returns the SDK-free base shapes.
+> **Prefer the component directly?** Use `<KheopskitProvider config={{ platforms }}>` and recover platform-precise account types (e.g. `account.signer` on Solana, `account.client` on Ethereum) with a type argument — `useWallets<typeof platforms>()`. React context can't be generic, so the bare `useWallets()` returns the SDK-free base shapes. Pass a **referentially stable** `config` (module scope, `useMemo`, or `createKheopskit`); a new object each render recreates the store and re-subscribes.
+
+> **Reading a wallet's SDK handle?** `state.wallets` mixes injected wallets with the single, platform-less WalletConnect connector. Narrow with `isInjectedWallet(wallet)` (the complement of `isWalletConnectWallet`) to recover `wallet.platform`, `wallet.sourceId`, and the injected SDK handle (`provider` on Ethereum, `extension` on Polkadot, `wallet` on Solana).
 
 ### With Vanilla JavaScript and RxJS
 
@@ -183,6 +185,8 @@ When you pass `ssrCookies`:
 - No hydration mismatch between server and client
 
 #### Next.js (App Router)
+
+`@kheopskit/react` ships with a `"use client"` directive, so you can import `KheopskitProvider` straight into a Server Component (like the root layout below) — no manual client-boundary wrapper needed.
 
 ```tsx
 // app/layout.tsx

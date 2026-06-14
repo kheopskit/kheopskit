@@ -18,6 +18,7 @@ import {
 	type PropsWithChildren,
 	useEffect,
 	useMemo,
+	useRef,
 	useSyncExternalStore,
 } from "react";
 import { KheopskitContext } from "./context";
@@ -60,6 +61,29 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 	ssrCookies,
 }) => {
 	const resolvedConfig = useMemo(() => resolveConfig(config), [config]);
+
+	// Dev-only: warn if the `config` prop reference changes between renders. A new
+	// object each render recreates the store and re-subscribes the whole pipeline
+	// (re-hydrating, dropping live connection state) on every render. `config` must
+	// be referentially stable — define it at module scope, memoize it, or use
+	// createKheopskit() (which passes a stable reference for you).
+	const lastConfigRef = useRef(config);
+	const hasMountedRef = useRef(false);
+	useEffect(() => {
+		if (
+			hasMountedRef.current &&
+			lastConfigRef.current !== config &&
+			(typeof process === "undefined" || process.env?.NODE_ENV !== "production")
+		) {
+			console.warn(
+				"[kheopskit] KheopskitProvider received a new `config` reference; this " +
+					"recreates the store and re-subscribes on every render. Pass a " +
+					"referentially stable config (module scope, useMemo, or createKheopskit()).",
+			);
+		}
+		hasMountedRef.current = true;
+		lastConfigRef.current = config;
+	}, [config]);
 
 	// Create a single store for both reading cached state and powering the observable
 	const kheopskitStore = useMemo(
@@ -133,7 +157,7 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 	const store = useMemo(
 		() =>
 			createStore(
-				getKheopskit$(config, ssrCookies, kheopskitStore),
+				getKheopskit$(config, { ssrCookies, store: kheopskitStore }),
 				initialValue,
 				serverValue,
 			),

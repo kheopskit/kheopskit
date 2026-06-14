@@ -1,7 +1,7 @@
 import { firstValueFrom, of, take, toArray } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
-import type { WalletId } from "../../utils/WalletId";
-import type { PolkadotAccountType, PolkadotAppKitWallet } from "../types";
+import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../../utils/WalletId";
+import type { PolkadotAccountType, WalletConnectWallet } from "../types";
 import { getPolkadotAccounts$ } from "./accounts";
 import type { PolkadotInjectedWallet } from "./types";
 
@@ -138,9 +138,9 @@ describe("getPolkadotAccounts$", () => {
 				},
 			};
 			const wallet = {
-				id: "polkadot:walletconnect" as WalletId,
-				platform: "polkadot",
-				type: "appKit",
+				id: WALLET_CONNECT_WALLET_ID,
+				type: "walletconnect",
+				platforms: ["polkadot"],
 				name: "WalletConnect",
 				icon: "data:image/svg+xml;base64,AAAA",
 				isConnected: true,
@@ -155,8 +155,8 @@ describe("getPolkadotAccounts$", () => {
 					// getAccount("polkadot").allAccounts is always empty. Accounts must
 					// come from session.namespaces (WalletConnect 0-accounts regression).
 					getAccount: vi.fn(() => ({ allAccounts: [] })),
-				} as unknown as PolkadotAppKitWallet["appKit"],
-			} as PolkadotAppKitWallet;
+				} as unknown as WalletConnectWallet["appKit"],
+			} as WalletConnectWallet;
 			return { wallet, provider };
 		};
 
