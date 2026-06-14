@@ -151,6 +151,10 @@ describe("getPolkadotAccounts$", () => {
 					getCaipNetworks: vi.fn(() => [
 						{ caipNetworkId: `polkadot:${GENESIS}` },
 					]),
+					// Empty on purpose: AppKit has no native polkadot adapter, so
+					// getAccount("polkadot").allAccounts is always empty. Accounts must
+					// come from session.namespaces (WalletConnect 0-accounts regression).
+					getAccount: vi.fn(() => ({ allAccounts: [] })),
 				} as unknown as PolkadotAppKitWallet["appKit"],
 			} as PolkadotAppKitWallet;
 			return { wallet, provider };
@@ -179,6 +183,70 @@ describe("getPolkadotAccounts$", () => {
 			const results = await resultsPromise;
 			expect(results[0]).toHaveLength(1);
 			expect(results[1]).toHaveLength(2);
+		});
+
+		// Regression: AppKit has no native polkadot adapter, so
+		// getAccount("polkadot").allAccounts is always empty — accounts MUST be
+		// derived from the WalletConnect session (the "0 accounts over
+		// WalletConnect" bug). The mock keeps allAccounts empty to lock this in.
+		it("lists accounts from session namespaces though allAccounts is empty", async () => {
+			const { clearAllCachedObservables } = await import(
+				"../../utils/getCachedObservable"
+			);
+			clearAllCachedObservables();
+
+			const { wallet } = createMockAppKitWallet([
+				`polkadot:${GENESIS}:${ALICE}`,
+			]);
+			expect(wallet.appKit.getAccount("polkadot")?.allAccounts).toHaveLength(0);
+
+			const accounts = await firstValueFrom(
+				getPolkadotAccounts$(of([wallet]), ["sr25519"]),
+			);
+
+			expect(accounts).toHaveLength(1);
+			expect(accounts[0]?.address).toBe(ALICE);
+			expect(accounts[0]?.walletId).toBe(wallet.id);
+		});
+
+		it("dedupes one address advertised on multiple chains", async () => {
+			const { clearAllCachedObservables } = await import(
+				"../../utils/getCachedObservable"
+			);
+			clearAllCachedObservables();
+
+			const OTHER_GENESIS = "b0a8d493285c2df73290dfb7e61f870f";
+			const { wallet } = createMockAppKitWallet([
+				`polkadot:${GENESIS}:${ALICE}`,
+				`polkadot:${OTHER_GENESIS}:${ALICE}`,
+			]);
+
+			const accounts = await firstValueFrom(
+				getPolkadotAccounts$(of([wallet]), ["sr25519"]),
+			);
+
+			expect(accounts).toHaveLength(1);
+			expect(accounts[0]?.address).toBe(ALICE);
+		});
+
+		it("returns no accounts when the provider has no session", async () => {
+			const { clearAllCachedObservables } = await import(
+				"../../utils/getCachedObservable"
+			);
+			clearAllCachedObservables();
+
+			const { wallet } = createMockAppKitWallet([
+				`polkadot:${GENESIS}:${ALICE}`,
+			]);
+			(
+				wallet.appKit.getProvider as unknown as ReturnType<typeof vi.fn>
+			).mockReturnValue({ session: undefined });
+
+			const accounts = await firstValueFrom(
+				getPolkadotAccounts$(of([wallet]), ["sr25519"]),
+			);
+
+			expect(accounts).toHaveLength(0);
 		});
 	});
 });

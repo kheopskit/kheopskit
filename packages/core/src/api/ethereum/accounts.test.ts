@@ -73,9 +73,13 @@ const createMockAppKitWallet = (
 	connect: vi.fn(),
 	disconnect: vi.fn(),
 	appKit: {
-		getAccount: vi.fn(() => ({
-			allAccounts: [{ address: MOCK_ADDRESS }],
-		})),
+		// Empty on purpose: this AppKit instance is created with no native eip155
+		// adapter, so eip155 runs through the WalletConnect UniversalProvider and
+		// getAccount("eip155").allAccounts is ALWAYS empty. Accounts must come from
+		// session.namespaces. Keeping this empty is the regression guard for the
+		// WalletConnect 0-accounts bug — if the code starts reading allAccounts
+		// again, every appKit test below loses its accounts.
+		getAccount: vi.fn(() => ({ allAccounts: [] })),
 		getProvider: vi.fn(
 			() =>
 				provider as unknown as EthereumAppKitWallet["appKit"] extends infer T
@@ -87,6 +91,26 @@ const createMockAppKitWallet = (
 	} as unknown as EthereumAppKitWallet["appKit"],
 	...overrides,
 });
+
+/**
+ * Attaches a WalletConnect session to a mock provider. The eip155 accounts are
+ * derived from `session.namespaces` (CAIP-10 strings), mirroring how the AppKit
+ * path reads them at runtime. Returns the session so tests can mutate
+ * `namespaces` and re-emit `accountsChanged`.
+ */
+const setWalletConnectSession = (
+	provider: ReturnType<typeof createMockProvider>,
+	accounts: string[] = [`eip155:1:${MOCK_ADDRESS}`],
+) => {
+	const session = {
+		topic: "test-topic",
+		namespaces: { eip155: { accounts } },
+	};
+	(provider as unknown as { session: typeof session }).session = session;
+	(provider as unknown as { off: typeof provider.removeListener }).off =
+		provider.removeListener;
+	return session;
+};
 
 describe("Ethereum chain ID tracking", () => {
 	// Use dynamic import to avoid module-level caching issues
@@ -283,11 +307,7 @@ describe("Ethereum chain ID tracking", () => {
 	describe("appKit wallet chainId", () => {
 		it("normalizes hex chainId from provider request", async () => {
 			const provider = createMockProvider();
-			(provider as unknown as { session: { topic: string } }).session = {
-				topic: "test-topic",
-			};
-			(provider as unknown as { off: typeof provider.removeListener }).off =
-				provider.removeListener;
+			setWalletConnectSession(provider);
 
 			provider.request.mockImplementation(async ({ method }) => {
 				if (method === "eth_chainId") return "0x89";
@@ -305,11 +325,7 @@ describe("Ethereum chain ID tracking", () => {
 
 		it("updates chainId when appKit provider emits chainChanged", async () => {
 			const provider = createMockProvider();
-			(provider as unknown as { session: { topic: string } }).session = {
-				topic: "test-topic",
-			};
-			(provider as unknown as { off: typeof provider.removeListener }).off =
-				provider.removeListener;
+			setWalletConnectSession(provider);
 
 			provider.request.mockImplementation(async ({ method }) => {
 				if (method === "eth_chainId") return "0x1";
@@ -333,27 +349,17 @@ describe("Ethereum chain ID tracking", () => {
 
 		it("updates accounts when appKit provider emits accountsChanged", async () => {
 			const provider = createMockProvider();
-			(provider as unknown as { session: { topic: string } }).session = {
-				topic: "test-topic",
-			};
-			(provider as unknown as { off: typeof provider.removeListener }).off =
-				provider.removeListener;
+			// The session's eip155 namespace is read live on each change, so drive it
+			// through a session whose accounts list we mutate by reference.
+			const session = setWalletConnectSession(provider);
 
 			provider.request.mockImplementation(async ({ method }) => {
 				if (method === "eth_chainId") return "0x1";
 				return null;
 			});
 
-			// AppKit's account snapshot is read live on each change, so drive it
-			// through a mutable list the mock returns by reference.
 			const SECOND_ADDRESS = "0x1111111111111111111111111111111111111111";
-			let allAccounts = [{ address: MOCK_ADDRESS }];
-			const wallet = createMockAppKitWallet(provider, {
-				appKit: {
-					getAccount: vi.fn(() => ({ allAccounts })),
-					getProvider: vi.fn(() => provider),
-				} as unknown as EthereumAppKitWallet["appKit"],
-			});
+			const wallet = createMockAppKitWallet(provider);
 
 			const { getEthereumAccounts$ } = await importAccounts();
 
@@ -363,7 +369,10 @@ describe("Ethereum chain ID tracking", () => {
 			await new Promise((r) => setTimeout(r, 10));
 
 			// Wallet authorizes a second account, then notifies via accountsChanged.
-			allAccounts = [{ address: MOCK_ADDRESS }, { address: SECOND_ADDRESS }];
+			session.namespaces.eip155.accounts = [
+				`eip155:1:${MOCK_ADDRESS}`,
+				`eip155:1:${SECOND_ADDRESS}`,
+			];
 			provider._emit("accountsChanged", [MOCK_ADDRESS, SECOND_ADDRESS]);
 
 			const results = await resultsPromise;
@@ -375,11 +384,7 @@ describe("Ethereum chain ID tracking", () => {
 
 		it("normalizes decimal chainId from provider request", async () => {
 			const provider = createMockProvider();
-			(provider as unknown as { session: { topic: string } }).session = {
-				topic: "test-topic",
-			};
-			(provider as unknown as { off: typeof provider.removeListener }).off =
-				provider.removeListener;
+			setWalletConnectSession(provider);
 
 			provider.request.mockImplementation(async ({ method }) => {
 				if (method === "eth_chainId") return "137";
@@ -397,11 +402,7 @@ describe("Ethereum chain ID tracking", () => {
 
 		it("tears down appKit chain/account listeners on unsubscribe", async () => {
 			const provider = createMockProvider();
-			(provider as unknown as { session: { topic: string } }).session = {
-				topic: "test-topic",
-			};
-			(provider as unknown as { off: typeof provider.removeListener }).off =
-				provider.removeListener;
+			setWalletConnectSession(provider);
 
 			provider.request.mockImplementation(async ({ method }) => {
 				if (method === "eth_chainId") return "0x1";
@@ -423,6 +424,67 @@ describe("Ethereum chain ID tracking", () => {
 			expect(provider._listenerCount("chainChanged")).toBe(0);
 			expect(provider._listenerCount("accountsChanged")).toBe(0);
 			expect(provider._listenerCount("session_update")).toBe(0);
+		});
+	});
+
+	describe("appKit account derivation (WalletConnect 0-accounts regression)", () => {
+		const importAccounts = async () => {
+			const { clearAllCachedObservables } = await import(
+				"../../utils/getCachedObservable"
+			);
+			clearAllCachedObservables();
+			return import("./accounts");
+		};
+
+		// Regression: MetaMask mobile connected over WalletConnect showed
+		// "Disconnect" but no account, because the code read
+		// getAccount("eip155").allAccounts (always empty without a native eip155
+		// adapter) instead of the WalletConnect session. allAccounts is empty in
+		// every test here (see createMockAppKitWallet); accounts MUST come from
+		// session.namespaces.
+		it("lists the connected account from session namespaces", async () => {
+			const provider = createMockProvider();
+			setWalletConnectSession(provider);
+			provider.request.mockImplementation(async () => "0x1");
+
+			const wallet = createMockAppKitWallet(provider);
+			// Prove the source of truth is the session, not allAccounts.
+			expect(wallet.appKit.getAccount("eip155")?.allAccounts).toHaveLength(0);
+
+			const { getEthereumAccounts$ } = await importAccounts();
+			const accounts = await firstValueFrom(getEthereumAccounts$(of([wallet])));
+
+			expect(accounts).toHaveLength(1);
+			expect(accounts[0]?.address).toBe(MOCK_ADDRESS);
+		});
+
+		it("dedupes one address advertised on multiple eip155 chains", async () => {
+			const provider = createMockProvider();
+			setWalletConnectSession(provider, [
+				`eip155:1:${MOCK_ADDRESS}`,
+				`eip155:137:${MOCK_ADDRESS}`,
+			]);
+			provider.request.mockImplementation(async () => "0x1");
+
+			const wallet = createMockAppKitWallet(provider);
+			const { getEthereumAccounts$ } = await importAccounts();
+			const accounts = await firstValueFrom(getEthereumAccounts$(of([wallet])));
+
+			expect(accounts).toHaveLength(1);
+			expect(accounts[0]?.address).toBe(MOCK_ADDRESS);
+		});
+
+		it("returns no accounts when the provider has no session", async () => {
+			const provider = createMockProvider();
+			// No setWalletConnectSession → provider.session is undefined.
+			(provider as unknown as { off: typeof provider.removeListener }).off =
+				provider.removeListener;
+
+			const wallet = createMockAppKitWallet(provider);
+			const { getEthereumAccounts$ } = await importAccounts();
+			const accounts = await firstValueFrom(getEthereumAccounts$(of([wallet])));
+
+			expect(accounts).toHaveLength(0);
 		});
 	});
 });

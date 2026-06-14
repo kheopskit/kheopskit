@@ -167,25 +167,38 @@ const getAppKitAccounts$ = (
 ): Observable<EthereumAccount[]> => {
 	const provider = wallet.appKit.getProvider("eip155");
 
-	if (
-		!wallet.isConnected ||
-		!wallet.appKit?.getAccount("eip155")?.allAccounts.length ||
-		!provider?.session
-	)
-		return of([]);
+	if (!wallet.isConnected || !provider?.session) return of([]);
 
 	return getCachedObservable$(`accounts:${wallet.id}:`, () =>
 		new Observable<EthereumAccount[]>((subscriber) => {
 			const caipNetworkId$ = new ReplaySubject<string>(1);
 			const addresses$ = new ReplaySubject<string[]>(1);
 
-			// Read live from AppKit on each change rather than capturing a snapshot,
-			// so switching/adding the active account is reflected (mirrors the
-			// polkadot/solana AppKit paths).
-			const readAddresses = (): string[] =>
-				wallet.appKit
-					.getAccount("eip155")
-					?.allAccounts.map((acc) => acc.address) ?? [];
+			// AppKit's getAccount("eip155").allAccounts is empty because this AppKit
+			// instance has no native eip155 adapter — eip155 runs through the
+			// WalletConnect UniversalProvider, so the session is the source of truth
+			// (mirrors the polkadot/solana AppKit paths). Accounts are CAIP-10 strings
+			// ("eip155:<chainRef>:<address>"), one entry per chain, so dedupe to unique
+			// addresses. Read live on each change so switching/adding accounts is
+			// reflected.
+			const readAddresses = (): string[] => {
+				const session = provider.session;
+				if (!session) return [];
+				const addresses = new Set<string>();
+				for (const namespace of Object.values(session.namespaces)) {
+					for (const account of namespace.accounts ?? []) {
+						if (!account.startsWith("eip155:")) continue;
+						const raw = account.split(":")[2];
+						if (!raw) continue;
+						try {
+							addresses.add(getAddress(raw));
+						} catch {
+							// skip malformed CAIP-10 address
+						}
+					}
+				}
+				return [...addresses];
+			};
 
 			const handleChainChanged = (chainId: unknown) => {
 				const caipNetworkId = toCaipNetworkId(chainId);

@@ -109,6 +109,10 @@ const createMockAppKitWallet = (
 		disconnect: vi.fn(),
 		appKit: {
 			getProvider: vi.fn(() => provider),
+			// Empty on purpose: AppKit has no native solana adapter, so
+			// getAccount("solana").allAccounts is always empty. Accounts must come
+			// from session.namespaces (WalletConnect 0-accounts regression).
+			getAccount: vi.fn(() => ({ allAccounts: [] })),
 		} as unknown as SolanaAppKitWallet["appKit"],
 		...overrides,
 	};
@@ -268,6 +272,28 @@ describe("getSolanaAccounts$", () => {
 				[ADDRESS_1, ADDRESS_2].sort(),
 			);
 			expect(accounts.every((a) => a.platform === "solana")).toBe(true);
+		});
+
+		// Regression: AppKit has no native solana adapter, so
+		// getAccount("solana").allAccounts is always empty — accounts MUST be
+		// derived from the WalletConnect session (the "0 accounts over
+		// WalletConnect" bug). The mock keeps allAccounts empty to lock this in.
+		it("derives accounts from the session though allAccounts is empty", async () => {
+			const namespaces = {
+				solana: {
+					accounts: [`solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:${ADDRESS_1}`],
+				},
+			};
+			const wallet = createMockAppKitWallet(namespaces);
+			expect(wallet.appKit.getAccount("solana")?.allAccounts).toHaveLength(0);
+
+			const { getSolanaAccounts$ } = await importAccounts();
+			const accounts = await firstValueFrom(
+				getSolanaAccounts$(of([wallet]), "solana:mainnet"),
+			);
+
+			expect(accounts).toHaveLength(1);
+			expect(accounts[0]?.address).toBe(ADDRESS_1);
 		});
 
 		it("re-derives accounts when the WalletConnect session updates", async () => {
