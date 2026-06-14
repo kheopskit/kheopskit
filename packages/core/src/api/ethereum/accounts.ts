@@ -158,7 +158,16 @@ const wrapWalletConnectProvider = (
 				if (next.topic === undefined) next.topic = sessionTopic;
 				if (next.chainId === undefined && caipNetworkId !== undefined)
 					next.chainId = caipNetworkId;
-				return target.request(next);
+				// WalletConnect's UniversalProvider reads the target CAIP chain id from
+				// the SECOND positional argument of `request(args, chainId)`, not from a
+				// field on the args object. This AppKit instance has no native eip155
+				// adapter, so the provider has no default chain — without the positional
+				// chain id every call is rejected ("Unsupported chains" / "Method not
+				// found"). Pass it positionally so the request routes to the session's
+				// chain.
+				return (
+					target.request as (a: unknown, chainId?: string) => Promise<unknown>
+				)(next, caipNetworkId);
 			};
 		},
 	});
