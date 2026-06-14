@@ -37,6 +37,11 @@ const WalletsConsumer = () => {
 			<span data-testid="account-order">
 				{accounts.map((a) => `${a.platform}:${a.walletName}`).join(",")}
 			</span>
+			<span data-testid="account-chainids">
+				{accounts
+					.map((a) => (a as { chainId?: number }).chainId ?? "-")
+					.join(",")}
+			</span>
 		</div>
 	);
 };
@@ -186,6 +191,43 @@ describe("KheopskitProvider hydration (no flash on SPA reload)", () => {
 		expect(screen.getByTestId("account-order")).toHaveTextContent(
 			"polkadot:Talisman,ethereum:Beta,solana:Zeta",
 		);
+	});
+
+	it("remembers the ethereum chainId on the first render after reload", () => {
+		localStorage.setItem(
+			STORAGE_KEY,
+			JSON.stringify({
+				cachedWallets: [
+					{
+						id: "ethereum:metamask",
+						platform: "ethereum",
+						type: "injected",
+						name: "MetaMask",
+						isConnected: true,
+					},
+				],
+				cachedAccounts: [
+					{
+						id: "ethereum:metamask::0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+						platform: "ethereum",
+						address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+						chainId: 137,
+						walletId: "ethereum:metamask",
+						walletName: "MetaMask",
+					},
+				],
+			}),
+		);
+
+		render(
+			<KheopskitProvider config={{ platforms: [ethereum()] }}>
+				<WalletsConsumer />
+			</KheopskitProvider>,
+		);
+
+		// Regression: before the fix the placeholder dropped chainId, so this showed
+		// "-" until the async live account loaded (flicker), instead of "137".
+		expect(screen.getByTestId("account-chainids")).toHaveTextContent("137");
 	});
 
 	it("renders empty (no crash) when localStorage holds malformed/legacy cache", () => {

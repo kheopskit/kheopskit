@@ -68,8 +68,12 @@ export const hydrateWallet = (cached: CachedWallet): BaseWallet => {
 /**
  * Converts a CachedAccount to a placeholder account for SSR hydration display.
  *
- * The placeholder carries only the SDK-free {@link BaseWalletAccount} fields;
- * the real account (with its signer/client) replaces it once it loads.
+ * The placeholder carries the SDK-free {@link BaseWalletAccount} fields plus the
+ * plain, serializable platform data that lives in the cache — Ethereum `chainId`
+ * and the Polkadot key `type`. Those render immediately on reload (no blank →
+ * value flicker) and match what the live account will report. Only the SDK
+ * handles (`client`/`signer`/`polkadotSigner`) are absent until the real account
+ * replaces this placeholder; signing stays gated on `isHydrating` until then.
  */
 export const hydrateAccount = (cached: CachedAccount): BaseWalletAccount => ({
 	id: cached.id as WalletAccountId,
@@ -78,6 +82,13 @@ export const hydrateAccount = (cached: CachedAccount): BaseWalletAccount => ({
 	name: cached.name,
 	walletId: cached.walletId,
 	walletName: cached.walletName,
+	// Spread (not direct keys) so the extra platform fields don't trip the
+	// excess-property check against BaseWalletAccount; they're read back via the
+	// platform-specific account types once narrowed by `platform`.
+	...(cached.platform === "ethereum" && { chainId: cached.chainId }),
+	...(cached.platform === "polkadot" && {
+		type: cached.polkadotAccountType,
+	}),
 });
 
 /**

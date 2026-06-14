@@ -228,15 +228,17 @@ export type KheopskitConfig<
  *
  * @remarks
  * While {@link KheopskitState.isHydrating} is `true`, `wallets` and `accounts`
- * may contain cached placeholders restored from storage. These carry only the
- * SDK-free {@link BaseWallet} / {@link BaseWalletAccount} fields — the
- * SDK-typed fields the platform types advertise (e.g. `account.signer` /
- * `getSigner` on Solana, `account.client` on Ethereum, `wallet.provider` /
- * `extension`) are **absent at runtime even though the types claim them**, and
- * placeholder wallets throw if `connect`/`disconnect` is called. This applies
- * equally to the platform-specific *plain-data* fields (Ethereum `chainId`,
- * Solana `chains`, Polkadot `type`): they too are populated only once the live
- * account loads. Do not access any of these until `isHydrating` is `false`.
+ * may contain cached placeholders restored from storage. The **SDK handles** the
+ * platform types advertise (e.g. `account.signer` / `getSigner` on Solana,
+ * `account.client` on Ethereum, `wallet.provider` / `extension`) are **absent at
+ * runtime even though the types claim them**, and placeholder wallets throw if
+ * `connect`/`disconnect` is called. Guard all access to those behind
+ * `!isHydrating`.
+ *
+ * The plain, serializable platform data that is persisted in the cache IS
+ * restored on the placeholders (Ethereum `chainId`, Polkadot key `type`), so it
+ * renders immediately on reload without flashing. Solana `chains` is not cached,
+ * so it remains absent until the live account loads.
  */
 export type KheopskitState<
 	P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],
