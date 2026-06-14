@@ -10,12 +10,15 @@ describe("isWalletPlatform", () => {
 		it('returns true for "ethereum"', () => {
 			expect(isWalletPlatform("ethereum")).toBe(true);
 		});
+
+		it('returns true for "solana"', () => {
+			expect(isWalletPlatform("solana")).toBe(true);
+		});
 	});
 
 	describe("invalid platforms", () => {
 		it("returns false for unknown string", () => {
 			expect(isWalletPlatform("bitcoin")).toBe(false);
-			expect(isWalletPlatform("solana")).toBe(false);
 			expect(isWalletPlatform("cosmos")).toBe(false);
 		});
 
@@ -66,7 +69,7 @@ describe("isWalletPlatform", () => {
 			const platform: unknown = "polkadot";
 			if (isWalletPlatform(platform)) {
 				// TypeScript should now know platform is WalletPlatform
-				const _p: "polkadot" | "ethereum" = platform;
+				const _p: "polkadot" | "ethereum" | "solana" = platform;
 				expect(_p).toBe("polkadot");
 			}
 		});

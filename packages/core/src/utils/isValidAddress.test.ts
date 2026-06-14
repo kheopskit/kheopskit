@@ -55,6 +55,21 @@ describe("isValidAddress", () => {
 		});
 	});
 
+	describe("Solana addresses (non-0x prefix)", () => {
+		it("returns true for a valid Solana address", () => {
+			expect(
+				isValidAddress("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"),
+			).toBe(true);
+		});
+
+		it("returns true for well-known Solana program ids", () => {
+			expect(isValidAddress("11111111111111111111111111111111")).toBe(true);
+			expect(
+				isValidAddress("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+			).toBe(true);
+		});
+	});
+
 	describe("edge cases", () => {
 		it("returns false for empty string", () => {
 			expect(isValidAddress("")).toBe(false);

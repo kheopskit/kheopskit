@@ -1,12 +1,13 @@
+export { clearAllCachedObservables } from "../utils/getCachedObservable";
+export { isValidAddress } from "../utils/isValidAddress";
 export {
-	clearAllCachedObservables,
-	clearCachedObservable,
-} from "../utils/getCachedObservable";
-export { hydrateAccount, hydrateWallet } from "../utils/hydrateState";
-export { getCachedIcon } from "../utils/iconCache";
-export { getSafeLocalStorage } from "../utils/storage";
+	getWalletAccountId,
+	type WalletAccountId,
+} from "../utils/WalletAccountId";
+export { getWalletId, parseWalletId, type WalletId } from "../utils/WalletId";
 export { resetAppKitCache } from "./appKit";
 export { DEFAULT_STORAGE_KEY, resolveConfig } from "./config";
+export { KheopskitError, type KheopskitErrorCode } from "./errors";
 export * from "./kheopskit";
 export { createKheopskitStore, getDefaultStore } from "./store";
 export * from "./types";

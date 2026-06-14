@@ -1,12 +1,9 @@
 import type {
+	BaseWallet,
+	BaseWalletAccount,
 	CachedAccount,
 	CachedWallet,
-	EthereumAccount,
-	EthereumInjectedWallet,
-	PolkadotAccount,
-	PolkadotInjectedWallet,
-	Wallet,
-	WalletAccount,
+	PolkadotAccountType,
 } from "../api/types";
 import { POLKADOT_EXTENSIONS } from "./polkadotExtensions";
 import type { WalletAccountId } from "./WalletAccountId";
@@ -43,106 +40,62 @@ class PendingWalletError extends Error {
 }
 
 /**
- * Converts a CachedWallet to a placeholder Wallet object.
- * The placeholder has the same display properties but connect/disconnect throw errors.
+ * Converts a CachedWallet to a placeholder wallet for SSR hydration display.
  *
- * @param cached - The cached wallet data from storage
- * @returns A placeholder Wallet object that can be displayed but not interacted with
+ * The placeholder carries only the SDK-free {@link BaseWallet} fields; the real
+ * wallet (with its injected provider/extension/standard-wallet handle) replaces
+ * it once it loads. connect/disconnect throw until then.
  */
-export const hydrateWallet = (cached: CachedWallet): Wallet => {
+export const hydrateWallet = (cached: CachedWallet): BaseWallet => {
 	const { platform, identifier } = parseWalletId(cached.id);
 
 	const throwPending = () => {
 		throw new PendingWalletError(cached.id);
 	};
 
-	// All wallet types (injected + AppKit) are hydrated as injected placeholders.
-	// AppKit wallets can't be hydrated properly without the AppKit instance,
-	// so they use injected type as a display fallback and will be replaced
-	// when the real wallet loads.
-
-	const icon = lookupWalletIcon(platform, identifier);
-
-	if (platform === "polkadot") {
-		return {
-			id: cached.id,
-			platform: "polkadot",
-			type: "injected",
-			extensionId: identifier,
-			extension: undefined,
-			name: cached.name,
-			icon,
-			isConnected: cached.isConnected,
-			connect: throwPending,
-			disconnect: throwPending,
-		} satisfies PolkadotInjectedWallet;
-	}
-
-	if (platform === "ethereum") {
-		return {
-			id: cached.id,
-			platform: "ethereum",
-			type: "injected",
-			providerId: identifier,
-			provider: {} as never, // Placeholder - will be replaced by real wallet
-			name: cached.name,
-			icon,
-			isConnected: cached.isConnected,
-			connect: throwPending,
-			disconnect: throwPending,
-		} satisfies EthereumInjectedWallet;
-	}
-
-	// Should never happen if CachedWallet is properly typed
-	throw new Error(`Unknown platform: ${platform}`);
+	return {
+		id: cached.id,
+		platform: cached.platform,
+		type: cached.type,
+		name: cached.name,
+		icon: lookupWalletIcon(platform, identifier),
+		isConnected: cached.isConnected,
+		connect: throwPending,
+		disconnect: throwPending,
+	};
 };
 
 /**
- * Converts a CachedAccount to a placeholder WalletAccount object.
+ * Converts a CachedAccount to a placeholder account for SSR hydration display.
  *
- * @param cached - The cached account data from storage
- * @returns A placeholder WalletAccount object that can be displayed
+ * The placeholder carries the SDK-free {@link BaseWalletAccount} fields plus the
+ * plain, serializable platform data that lives in the cache — Ethereum `chainId`
+ * and the Polkadot key `type`. Those render immediately on reload (no blank →
+ * value flicker) and match what the live account will report. Only the SDK
+ * handles (`client`/`signer`/`polkadotSigner`) are absent until the real account
+ * replaces this placeholder; signing stays gated on `isHydrating` until then.
  */
-export const hydrateAccount = (cached: CachedAccount): WalletAccount => {
-	if (cached.platform === "polkadot") {
-		return {
-			id: cached.id as WalletAccountId,
-			platform: "polkadot",
-			type: cached.polkadotAccountType ?? "sr25519",
-			address: cached.address,
-			name: cached.name,
-			walletId: cached.walletId,
-			walletName: cached.walletName,
-			// PolkadotSigner is required but we can't provide a real one
-			// This is a placeholder that will be replaced by the real account
-			polkadotSigner: {} as never,
-		} satisfies PolkadotAccount;
-	}
-
-	if (cached.platform === "ethereum") {
-		return {
-			id: cached.id as WalletAccountId,
-			platform: "ethereum",
-			address: cached.address as `0x${string}`,
-			chainId: cached.chainId,
-			walletId: cached.walletId,
-			walletName: cached.walletName,
-			isWalletDefault: false,
-			client: {} as never, // Placeholder
-		} satisfies EthereumAccount;
-	}
-
-	throw new Error(`Unknown platform: ${cached.platform}`);
-};
+export const hydrateAccount = (cached: CachedAccount): BaseWalletAccount => ({
+	id: cached.id as WalletAccountId,
+	platform: cached.platform,
+	address: cached.address,
+	name: cached.name,
+	walletId: cached.walletId,
+	walletName: cached.walletName,
+	// Spread (not direct keys) so the extra platform fields don't trip the
+	// excess-property check against BaseWalletAccount; they're read back via the
+	// platform-specific account types once narrowed by `platform`.
+	...(cached.platform === "ethereum" && { chainId: cached.chainId }),
+	...(cached.platform === "polkadot" && {
+		type: cached.polkadotAccountType,
+	}),
+});
 
 /**
- * Converts a Wallet to a CachedWallet for storage.
+ * Converts a wallet to a CachedWallet for storage.
  * Only extracts the serializable properties needed for hydration.
- *
- * @param wallet - The wallet to serialize
- * @returns A CachedWallet suitable for storage
  */
-export const serializeWallet = (wallet: Wallet): CachedWallet => ({
+export const serializeWallet = (wallet: BaseWallet): CachedWallet => ({
 	id: wallet.id,
 	platform: wallet.platform,
 	type: wallet.type,
@@ -152,20 +105,26 @@ export const serializeWallet = (wallet: Wallet): CachedWallet => ({
 });
 
 /**
- * Converts a WalletAccount to a CachedAccount for storage.
- * Only extracts the serializable properties needed for hydration.
- *
- * @param account - The account to serialize
- * @returns A CachedAccount suitable for storage
+ * Converts an account to a CachedAccount for storage.
+ * Only extracts the serializable properties needed for hydration. Platform-only
+ * fields (Ethereum chainId, Polkadot key type) are read defensively so this
+ * stays SDK-free.
  */
-export const serializeAccount = (account: WalletAccount): CachedAccount => ({
+export const serializeAccount = (
+	account: BaseWalletAccount,
+): CachedAccount => ({
 	id: account.id,
 	platform: account.platform,
 	address: account.address,
-	name: "name" in account ? account.name : undefined,
-	chainId: account.platform === "ethereum" ? account.chainId : undefined,
+	name: account.name,
+	chainId:
+		account.platform === "ethereum"
+			? (account as { chainId?: number }).chainId
+			: undefined,
 	polkadotAccountType:
-		account.platform === "polkadot" ? account.type : undefined,
+		account.platform === "polkadot"
+			? (account as { type?: PolkadotAccountType }).type
+			: undefined,
 	walletId: account.walletId as WalletId,
 	walletName: account.walletName,
 });

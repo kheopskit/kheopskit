@@ -1,19 +1,21 @@
 # Kheopskit
 
-Kheopskit is a library designed to simplify the development of Polkadot DApps. It provides tools to:
+Kheopskit is a library designed to simplify the development of multi-chain DApps (Polkadot, Ethereum, Solana). It provides tools to:
 
 - List all installed wallets and connect/disconnect them.
 - List all accounts from those wallets.
-- Support both Polkadot and Ethereum wallets.
+- Support Polkadot, Ethereum, and Solana wallets.
 - Handle identical accounts injected by multiple wallets.
 
 Try it on the [interactive playground](https://Kheopskit.pages.dev/)
 
+> **Upgrading from v3?** v4 moves platforms to plugins and makes platform SDKs (and WalletConnect) optional peer dependencies. See the [v4 migration guide](./packages/core/MIGRATING_TO_V4.md).
+
 ## Features
 
-- **Multi-wallet support**: Easily interact with both Polkadot and Ethereum wallets.
+- **Multi-wallet support**: Easily interact with Polkadot, Ethereum, and Solana wallets.
 - **Account management**: Manage accounts from all connected wallets in a single list.
-- **Modern tech stack**: Designed for use with polkadot-api (PAPI) and viem.
+- **Modern tech stack**: Designed for use with polkadot-api (PAPI), viem, and @solana/kit.
 
 ---
 
@@ -25,65 +27,81 @@ Install the required packages using `pnpm`:
 pnpm add @kheopskit/core @kheopskit/react
 ```
 
+Each platform lives behind its own entry point and brings its own (optional) peer dependencies. **Install only the platforms you use:**
+
+| Platform | Entry point | Install |
+|----------|-------------|---------|
+| Polkadot | `@kheopskit/core/polkadot` | `pnpm add polkadot-api` |
+| Ethereum | `@kheopskit/core/ethereum` | `pnpm add viem mipd` |
+| Solana | `@kheopskit/core/solana` | `pnpm add @solana/kit @wallet-standard/app @wallet-standard/base` |
+
+WalletConnect support (via Reown AppKit, across any platform) is also optional — install it only if you pass `config.walletConnect`:
+
+| Feature | Install |
+|---------|---------|
+| WalletConnect | `pnpm add @reown/appkit` |
+
+`rxjs` is always required. Everything else is an optional peer dependency: a Polkadot-only dapp that doesn't use WalletConnect installs neither the Ethereum/Solana SDKs nor `@reown/appkit`, and none of their code is pulled into your bundle. If `config.walletConnect` is set but `@reown/appkit` isn't installed, WalletConnect is disabled with a console error while injected wallets keep working.
+
 ---
 
 ## Usage
 
 ### With React
 
-1. Import the required packages.
-2. Wrap your app with `KheopskitProvider`.
-3. Use the `useWallets` hook to access wallets and accounts.
+Platforms are enabled by passing **plugins** (imported from their entry points) to `config.platforms`. Bind them once with `createKheopskit` to get a `KheopskitProvider` plus `useWallets` / `useAccounts` hooks already typed to those platforms — no generic to repeat.
 
 ```tsx
-import React from "react";
-import { KheopskitProvider, useWallets } from "@kheopskit/react";
+// kheopskit.ts
+import { createKheopskit } from "@kheopskit/react";
+import { polkadot } from "@kheopskit/core/polkadot";
+import { ethereum } from "@kheopskit/core/ethereum";
 
-const App = () => {
-  const { wallets, accounts } = useWallets();
+export const { KheopskitProvider, useWallets, useAccounts } = createKheopskit({
+  platforms: [polkadot(), ethereum()],
+  autoReconnect: true,
+});
+```
+
+```tsx
+// app.tsx
+import { KheopskitProvider, useWallets } from "./kheopskit";
+
+const Wallets = () => {
+  const { wallets, accounts } = useWallets(); // platform-precise, no type argument
 
   return (
     <div>
       <h1>Wallets</h1>
       {wallets.map((wallet) => (
         <div key={wallet.id}>
-          <div>
-            [{wallet.platform}] {wallet.name}
-          </div>
+          [{wallet.platform}] {wallet.name}
           {wallet.isConnected ? (
-            <button onClick={wallet.disconnect}>Disconnect</button>
+            <button onClick={() => wallet.disconnect()}>Disconnect</button>
           ) : (
-            <button onClick={wallet.connect}>Connect</button>
+            <button onClick={() => wallet.connect()}>Connect</button>
           )}
         </div>
       ))}
 
       <h1>Accounts</h1>
       {accounts.map((account) => (
-        <div key={account.address}>
-          <p>
-            [{wallet.platform}] {account.name} (account.) - {account.address}
-          </p>
-        </div>
+        <p key={account.address}>
+          [{account.platform}] {account.name} - {account.address}
+        </p>
       ))}
     </div>
   );
 };
 
-const config = {
-  platforms: ["polkadot", "ethereum"],
-  autoReconnect: true,
-  polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa"],
-};
-
-const Root = () => (
-  <KheopskitProvider config={config}>
-    <App />
+export const App = () => (
+  <KheopskitProvider>
+    <Wallets />
   </KheopskitProvider>
 );
-
-export default Root;
 ```
+
+> **Prefer the component directly?** Use `<KheopskitProvider config={{ platforms }}>` and recover platform-precise account types (e.g. `account.signer` on Solana, `account.client` on Ethereum) with a type argument — `useWallets<typeof platforms>()`. React context can't be generic, so the bare `useWallets()` returns the SDK-free base shapes.
 
 ### With Vanilla JavaScript and RxJS
 
@@ -92,11 +110,12 @@ export default Root;
 
 ```javascript
 import { getKheopskit$ } from "@kheopskit/core";
+import { polkadot } from "@kheopskit/core/polkadot";
+import { ethereum } from "@kheopskit/core/ethereum";
 
 const config = {
-  platforms: ["polkadot", "ethereum"],
+  platforms: [polkadot(), ethereum()],
   autoReconnect: true,
-  polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa"],
 };
 const kheopskit$ = getKheopskit$(config);
 
@@ -108,22 +127,49 @@ kheopskit$.subscribe(({ wallets, accounts }) => {
 
 ### Polkadot account type filtering
 
-Use `polkadotAccountTypes` to control which Polkadot account key types are exposed in `accounts`.
+Pass `accountTypes` to the `polkadot()` plugin to control which Polkadot account key types are exposed in `accounts`.
 
 - Supported values: `"sr25519"`, `"ed25519"`, `"ecdsa"`, `"ethereum"`
-- Default: `[`"sr25519"`, `"ed25519"`, `"ecdsa"`]`
+- Default: `["sr25519", "ed25519", "ecdsa"]`
 - `"ethereum"` is excluded by default and must be opted in explicitly
-- Empty list (`[]`) disables all Polkadot accounts and logs a warning in the console
 
 Example including Ethereum-style Polkadot accounts:
 
 ```ts
+import { polkadot } from "@kheopskit/core/polkadot";
+
 const config = {
-  platforms: ["polkadot"],
+  platforms: [
+    polkadot({ accountTypes: ["sr25519", "ed25519", "ecdsa", "ethereum"] }),
+  ],
   autoReconnect: true,
-  polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa", "ethereum"],
 };
 ```
+
+### Solana
+
+Add the `solana()` plugin to `platforms` to surface Solana wallets. Injected wallets are discovered via the [Wallet Standard](https://github.com/anza-xyz/wallet-standard); WalletConnect is supported through Reown AppKit.
+
+Each Solana account exposes a signer built on [`@solana/kit`](https://www.npmjs.com/package/@solana/kit)'s signer interfaces, so it plugs directly into kit's transaction pipeline (e.g. `signAndSendTransactionMessageWithSigners`):
+
+```ts
+import { solana } from "@kheopskit/core/solana";
+
+const config = {
+  // `chain` is the cluster the account signers target. Default: "solana:mainnet"
+  platforms: [solana({ chain: "solana:mainnet" })],
+  autoReconnect: true,
+};
+
+// account.signer is bound to the plugin's `chain`
+const [signed] = await account.signer.modifyAndSignMessages([message]);
+
+// account.getSigner(chain) returns a signer bound to another cluster
+const devnetSigner = account.getSigner("solana:devnet");
+```
+
+- Supported `chain` values: `"solana:mainnet"`, `"solana:devnet"`, `"solana:testnet"`, `"solana:localnet"`
+- `"solana:localnet"` cannot be used over WalletConnect (no canonical CAIP-2 id)
 
 ### Server-Side Rendering (SSR)
 
@@ -139,12 +185,13 @@ When you pass `ssrCookies`:
 ```tsx
 // app/layout.tsx
 import { cookies } from "next/headers";
+import { ethereum } from "@kheopskit/core/ethereum";
+import { polkadot } from "@kheopskit/core/polkadot";
 import { App } from "./app";
 
 const config = {
-  platforms: ["polkadot", "ethereum"],
+  platforms: [polkadot(), ethereum()],
   autoReconnect: true,
-  polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa"],
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -170,12 +217,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { createServerFn, Meta, Scripts } from "@tanstack/start";
 import { getRequest } from "@tanstack/start/server";
+import { ethereum } from "@kheopskit/core/ethereum";
+import { polkadot } from "@kheopskit/core/polkadot";
 import { KheopskitProvider } from "@kheopskit/react";
 
 const config = {
-  platforms: ["polkadot", "ethereum"],
+  platforms: [polkadot(), ethereum()],
   autoReconnect: true,
-  polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa"],
 };
 
 const getSSRCookies = createServerFn({ method: "GET" }).handler(async () => {

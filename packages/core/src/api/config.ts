@@ -1,4 +1,4 @@
-import type { KheopskitConfig } from "./types";
+import type { KheopskitConfig, KheopskitPlatform } from "./types";
 
 /**
  * Default storage key for persisting wallet connection state.
@@ -7,35 +7,44 @@ import type { KheopskitConfig } from "./types";
  */
 export const DEFAULT_STORAGE_KEY = "kheopskit";
 
-const DEFAULT_CONFIG: KheopskitConfig = {
+const DEFAULTS = {
 	autoReconnect: true,
-	platforms: ["polkadot"],
-	polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa"],
 	debug: false,
 	storageKey: DEFAULT_STORAGE_KEY,
 	hydrationGracePeriod: 500,
-};
+} satisfies Omit<KheopskitConfig, "platforms" | "walletConnect">;
 
-const VALID_POLKADOT_ACCOUNT_TYPES = new Set<string>([
-	"sr25519",
-	"ed25519",
-	"ecdsa",
-	"ethereum",
-]);
+export const resolveConfig = <
+	const P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],
+>(
+	config?: Partial<KheopskitConfig<P>>,
+): KheopskitConfig<P> => {
+	const platforms = (config?.platforms ?? []) as P;
 
-export const resolveConfig = (
-	config: Partial<KheopskitConfig> | undefined,
-): KheopskitConfig => {
-	const resolved = Object.assign({}, DEFAULT_CONFIG, config);
-
-	const invalid = resolved.polkadotAccountTypes.filter(
-		(t) => !VALID_POLKADOT_ACCOUNT_TYPES.has(t),
+	// Guard the v4 breaking change: platforms are plugin instances, not strings.
+	// Catches JS callers (no tsc) and gives agents a fix that names the doc.
+	const invalidPlatforms = (platforms as readonly unknown[]).filter(
+		(p) =>
+			typeof p !== "object" ||
+			p === null ||
+			typeof (p as { getWallets$?: unknown }).getWallets$ !== "function",
 	);
-	if (invalid.length > 0) {
-		console.warn(
-			`[kheopskit] Unknown polkadotAccountTypes: ${JSON.stringify(invalid)}. Valid values: "sr25519", "ed25519", "ecdsa", "ethereum".`,
+	if (invalidPlatforms.length > 0) {
+		throw new Error(
+			"[kheopskit] config.platforms must contain plugin instances created by the " +
+				"per-platform factories (e.g. platforms: [polkadot(), ethereum(), solana()] " +
+				'imported from "@kheopskit/core/<platform>"). ' +
+				`Invalid entries: ${JSON.stringify(invalidPlatforms)}. ` +
+				'String platform names like "polkadot" were removed in v4 — see MIGRATING_TO_V4.md.',
 		);
 	}
 
-	return resolved;
+	if (platforms.length === 0) {
+		console.warn(
+			"[kheopskit] No platforms configured; wallets and accounts will be empty. " +
+				'Pass e.g. platforms: [polkadot()] from "@kheopskit/core/polkadot".',
+		);
+	}
+
+	return Object.assign({}, DEFAULTS, config, { platforms });
 };

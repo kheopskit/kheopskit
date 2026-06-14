@@ -1,6 +1,5 @@
 {
 	"$schema": "./node_modules/knip/schema.json",
-	"ignore": [".papi/**"],
 	"ignoreDependencies": ["@kheopskit/core", "@kheopskit/react", "tslib"],
 	"workspaces": {
 		".": {
@@ -16,16 +15,14 @@
 				"src/utils/sleep.ts",
 				"src/utils/throwAfter.ts",
 				"src/utils/storage.ts"
-			],
-			"ignoreDependencies": ["@walletconnect/types", "@walletconnect/utils"]
+			]
 		},
 		"packages/react": {
 			"ignoreDependencies": ["@types/react-dom", "react-dom"]
 		},
 		"examples/vite-react": {
-			"entry": ["src/main.tsx", "src/styles.css"],
+			"entry": ["src/styles.css"],
 			"ignore": [
-				"src/vite-env.d.ts",
 				"src/components/ui/**",
 				"src/lib/config/chains.ts",
 				"src/lib/config/playgroundConfig.ts",

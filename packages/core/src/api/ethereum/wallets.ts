@@ -11,14 +11,13 @@ import {
 	shareReplay,
 } from "rxjs";
 import type { EIP1193Provider } from "viem";
+import { clearCachedObservable } from "../../utils/getCachedObservable";
 import { getWalletId, type WalletId } from "../../utils/WalletId";
 import { getAppKitWallets$ } from "../appKit";
+import { KheopskitError } from "../errors";
 import { store as defaultStore, type KheopskitStore } from "../store";
-import type {
-	EthereumInjectedWallet,
-	EthereumWallet,
-	KheopskitConfig,
-} from "../types";
+import type { KheopskitConfig } from "../types";
+import type { EthereumInjectedWallet, EthereumWallet } from "./types";
 
 /**
  * Observable that emits EIP-6963 provider details from injected wallets.
@@ -58,7 +57,11 @@ const createEthereumInjectedWallets$ = (store: KheopskitStore) =>
 			provider: EIP1193Provider,
 		) => {
 			if (enabledWalletIds$.value.has(walletId))
-				throw new Error(`Extension ${walletId} already connected`);
+				throw new KheopskitError(
+					"WALLET_ALREADY_CONNECTED",
+					`wallet ${walletId} is already connected`,
+					{ walletId },
+				);
 
 			await provider.request({
 				method: "eth_requestAccounts",
@@ -73,12 +76,20 @@ const createEthereumInjectedWallets$ = (store: KheopskitStore) =>
 
 		const disconnectWallet = async (walletId: WalletId) => {
 			if (!enabledWalletIds$.value.has(walletId))
-				throw new Error(`Extension ${walletId} is not connected`);
+				throw new KheopskitError(
+					"WALLET_NOT_CONNECTED",
+					`wallet ${walletId} is not connected`,
+					{ walletId },
+				);
 			const newSet = new Set(enabledWalletIds$.value);
 			newSet.delete(walletId);
 			enabledWalletIds$.next(newSet);
 
 			store.removeEnabledWalletId(walletId);
+
+			// Drop the cached account observable so a later reconnect rebuilds it
+			// against the current provider, not a stale closure.
+			clearCachedObservable(`accounts:${walletId}`);
 		};
 
 		const sub = combineLatest([providersDetails$, enabledWalletIds$])
@@ -96,7 +107,7 @@ const createEthereumInjectedWallets$ = (store: KheopskitStore) =>
 							icon: pd.info.icon,
 							provider,
 							isConnected: enabledWalletIds.has(walletId),
-							providerId: pd.info.rdns,
+							sourceId: pd.info.rdns,
 							connect: () => connectWallet(walletId, provider),
 							disconnect: () => disconnectWallet(walletId),
 						};
@@ -118,7 +129,7 @@ export const getEthereumWallets$ = (
 	return new Observable<EthereumWallet[]>((subscriber) => {
 		const subscription = combineLatest([
 			createEthereumInjectedWallets$(store),
-			getAppKitWallets$(config)?.pipe(map((w) => w.ethereum)),
+			getAppKitWallets$(config).pipe(map((w) => w.ethereum)),
 		])
 			.pipe(
 				map(([injectedWallets, appKitWallet]) =>

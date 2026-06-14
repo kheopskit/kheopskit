@@ -1,4 +1,3 @@
-import { useWallets } from "@kheopskit/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useAccount, useConnect } from "wagmi";
@@ -10,11 +9,12 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { kheopskitConfig } from "@/lib/config/playgroundConfig";
+import { kheopskitConfig, useWallets } from "@/lib/config/playgroundConfig";
 import { AppBlock } from "./AppBlock";
 
 export const Wagmi = () => {
-	if (!kheopskitConfig.platforms?.includes("ethereum")) return null;
+	if (!kheopskitConfig.platforms?.some((p) => p.platform === "ethereum"))
+		return null;
 
 	return (
 		<AppBlock

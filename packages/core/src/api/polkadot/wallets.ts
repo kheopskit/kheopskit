@@ -19,12 +19,10 @@ import {
 	type WalletId,
 } from "../../utils/WalletId";
 import { getAppKitWallets$ } from "../appKit";
+import { KheopskitError } from "../errors";
 import { store as defaultStore, type KheopskitStore } from "../store";
-import type {
-	KheopskitConfig,
-	PolkadotInjectedWallet,
-	PolkadotWallet,
-} from "../types";
+import type { KheopskitConfig } from "../types";
+import type { PolkadotInjectedWallet, PolkadotWallet } from "./types";
 
 const getInjectedWalletsIds = () =>
 	typeof window === "undefined"
@@ -40,22 +38,24 @@ const createWalletIdsPoller$ = () => {
 		// Poll at shorter intervals initially, then slow down
 		const intervals = [100, 200, 300, 500];
 		let index = 0;
+		let timer: ReturnType<typeof setTimeout> | undefined;
 
 		const poll = () => {
 			subscriber.next(getInjectedWalletsIds());
 			if (index < intervals.length) {
 				const delay = intervals[index++];
-				setTimeout(poll, delay);
+				timer = setTimeout(poll, delay);
 			}
 		};
 
 		// Start polling after first immediate emission
 		if (intervals.length > 0) {
-			setTimeout(poll, intervals[index++] ?? 100);
+			timer = setTimeout(poll, intervals[index++] ?? 100);
 		}
 
 		return () => {
-			// Cleanup handled by setTimeout naturally expiring
+			// Cancel any pending poll so it can't fire after unsubscribe.
+			if (timer !== undefined) clearTimeout(timer);
 		};
 	}).pipe(
 		distinctUntilChanged<WalletId[]>(isEqual),
@@ -71,7 +71,11 @@ const createPolkadotInjectedWallets$ = (store: KheopskitStore) =>
 
 		const connect = async (walletId: WalletId) => {
 			if (enabledExtensions$.value.has(walletId))
-				throw new Error(`Extension ${walletId} already connected`);
+				throw new KheopskitError(
+					"WALLET_ALREADY_CONNECTED",
+					`wallet ${walletId} is already connected`,
+					{ walletId },
+				);
 			const { identifier } = parseWalletId(walletId);
 			const extension = await connectInjectedExtension(identifier);
 
@@ -82,9 +86,13 @@ const createPolkadotInjectedWallets$ = (store: KheopskitStore) =>
 			store.addEnabledWalletId(walletId);
 		};
 
-		const disconnect = (walletId: WalletId) => {
+		const disconnect = async (walletId: WalletId) => {
 			if (!enabledExtensions$.value.has(walletId))
-				throw new Error(`Extension ${walletId} is not connected`);
+				throw new KheopskitError(
+					"WALLET_NOT_CONNECTED",
+					`wallet ${walletId} is not connected`,
+					{ walletId },
+				);
 
 			const newMap = new Map(enabledExtensions$.value);
 			newMap.delete(walletId);
@@ -109,7 +117,7 @@ const createPolkadotInjectedWallets$ = (store: KheopskitStore) =>
 							platform: "polkadot",
 							name: extInfo?.name ?? identifier,
 							icon: extInfo?.icon ?? "",
-							extensionId: identifier,
+							sourceId: identifier,
 							extension,
 							isConnected: !!extension,
 							connect: () => connect(id),
@@ -133,7 +141,7 @@ export const getPolkadotWallets$ = (
 	return new Observable<PolkadotWallet[]>((subscriber) => {
 		const subscription = combineLatest([
 			createPolkadotInjectedWallets$(store),
-			getAppKitWallets$(config)?.pipe(map((w) => w.polkadot)),
+			getAppKitWallets$(config).pipe(map((w) => w.polkadot)),
 		])
 			.pipe(
 				map(([injectedWallets, appKitWallet]) =>

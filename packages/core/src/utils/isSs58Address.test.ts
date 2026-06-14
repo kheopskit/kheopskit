@@ -55,18 +55,29 @@ describe("isSs58Address", () => {
 				),
 			).toBe(false);
 		});
+
+		// Pins the disjointness invariant isValidAddress relies on: a valid
+		// 32-byte Solana base58 pubkey decodes to 32 bytes, not 35/36, so it must
+		// fail the SS58 length check rather than masquerade as a substrate address.
+		it("returns false for a valid Solana address (32-byte base58, no checksum)", () => {
+			expect(
+				isSs58Address("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"),
+			).toBe(false);
+		});
+
+		it("returns false for a Solana program id", () => {
+			expect(isSs58Address("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")).toBe(
+				false,
+			);
+		});
 	});
 
-	describe("type guard behavior", () => {
-		it("narrows type to SS58String when true", () => {
-			const address: string =
-				"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
-			if (isSs58Address(address)) {
-				// TypeScript should now know address is SS58String
-				expect(address).toBe(
-					"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-				);
-			}
+	describe("checksum behavior", () => {
+		it("returns false when the checksum byte is corrupted", () => {
+			// Valid Alice address with its last (checksum) base58 char changed.
+			expect(
+				isSs58Address("5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQZ"),
+			).toBe(false);
 		});
 	});
 });

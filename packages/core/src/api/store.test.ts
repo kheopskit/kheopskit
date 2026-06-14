@@ -212,6 +212,143 @@ describe("createKheopskitStore", () => {
 		});
 	});
 
+	describe("tolerates malformed / legacy cached state", () => {
+		const validWallet = {
+			id: "polkadot:talisman",
+			platform: "polkadot",
+			type: "injected",
+			name: "Talisman",
+			isConnected: false,
+		};
+		const validAccount = {
+			id: "polkadot:talisman:5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+			platform: "polkadot",
+			address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+			polkadotAccountType: "sr25519",
+			walletId: "polkadot:talisman",
+			walletName: "Talisman",
+		};
+
+		it("drops cached wallets with an invalid id but keeps valid ones", () => {
+			localStorage.setItem(
+				STORAGE_KEY,
+				JSON.stringify({
+					cachedWallets: [
+						{ ...validWallet, id: "garbage" },
+						{ ...validWallet, id: "unknownplatform:foo" },
+						validWallet,
+					],
+				}),
+			);
+
+			const cached = createKheopskitStore().getCachedState();
+			expect(cached.wallets).toHaveLength(1);
+			expect(cached.wallets[0]?.id).toBe("polkadot:talisman");
+		});
+
+		it("drops cached wallets/accounts missing required fields", () => {
+			localStorage.setItem(
+				STORAGE_KEY,
+				JSON.stringify({
+					cachedWallets: [
+						{ id: "polkadot:talisman" }, // missing name/type/isConnected
+						null,
+						"nope",
+					],
+					cachedAccounts: [
+						{ ...validAccount, walletName: undefined }, // missing walletName
+						{ ...validAccount, walletId: "bad" }, // invalid walletId
+					],
+				}),
+			);
+
+			const cached = createKheopskitStore().getCachedState();
+			expect(cached.wallets).toHaveLength(0);
+			expect(cached.accounts).toHaveLength(0);
+		});
+
+		it("keeps fully-valid cached wallets and accounts", () => {
+			localStorage.setItem(
+				STORAGE_KEY,
+				JSON.stringify({
+					cachedWallets: [validWallet],
+					cachedAccounts: [validAccount],
+				}),
+			);
+
+			const cached = createKheopskitStore().getCachedState();
+			expect(cached.wallets).toHaveLength(1);
+			expect(cached.accounts).toHaveLength(1);
+		});
+
+		it("returns empty when cached fields are not arrays", () => {
+			localStorage.setItem(
+				STORAGE_KEY,
+				JSON.stringify({ cachedWallets: "oops", cachedAccounts: { a: 1 } }),
+			);
+
+			const cached = createKheopskitStore().getCachedState();
+			expect(cached.wallets).toEqual([]);
+			expect(cached.accounts).toEqual([]);
+		});
+
+		it.each([
+			"null",
+			"[]",
+			"42",
+			'"a string"',
+		])("does not throw when the stored value is %s", (raw) => {
+			localStorage.setItem(STORAGE_KEY, raw);
+
+			const kstore = createKheopskitStore();
+			expect(() => kstore.getCachedState()).not.toThrow();
+			expect(kstore.getCachedState().wallets).toEqual([]);
+		});
+
+		it("ignores legacy data that only has autoReconnect", () => {
+			localStorage.setItem(
+				STORAGE_KEY,
+				JSON.stringify({ autoReconnect: ["polkadot:talisman"], legacyKey: 1 }),
+			);
+
+			const cached = createKheopskitStore().getCachedState();
+			expect(cached.wallets).toEqual([]);
+			expect(cached.accounts).toEqual([]);
+		});
+
+		it("does not throw on a malformed compact cookie and drops bad entries", () => {
+			const malformedCompact = {
+				v: 1,
+				w: [
+					["garbage", "Nope", 1, 0],
+					[123, "WrongType", 1, 0],
+					["polkadot:talisman", "Talisman", 1, 0],
+				],
+				a: [
+					["bad-wallet-id", "addr", null, null],
+					[
+						"polkadot:talisman",
+						"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+						null,
+						null,
+					],
+				],
+			};
+			// biome-ignore lint/suspicious/noDocumentCookie: necessary for test setup
+			document.cookie = `${STORAGE_KEY}=${encodeURIComponent(JSON.stringify(malformedCompact))};path=/`;
+
+			let kstore!: ReturnType<typeof createKheopskitStore>;
+			expect(() => {
+				kstore = createKheopskitStore({ ssrCookies: document.cookie });
+			}).not.toThrow();
+
+			const cached = kstore.getCachedState();
+			expect(cached.wallets).toHaveLength(1);
+			expect(cached.wallets[0]?.id).toBe("polkadot:talisman");
+			expect(cached.accounts).toHaveLength(1);
+		});
+	});
+
 	describe("observable behavior", () => {
 		it("emits initial value immediately", () => {
 			const kstore = createKheopskitStore();

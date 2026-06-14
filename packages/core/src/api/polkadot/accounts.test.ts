@@ -1,8 +1,9 @@
-import { firstValueFrom, of } from "rxjs";
+import { firstValueFrom, of, take, toArray } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import type { WalletId } from "../../utils/WalletId";
-import type { PolkadotAccountType, PolkadotInjectedWallet } from "../types";
+import type { PolkadotAccountType, PolkadotAppKitWallet } from "../types";
 import { getPolkadotAccounts$ } from "./accounts";
+import type { PolkadotInjectedWallet } from "./types";
 
 type ExtensionAccount = {
 	address: string;
@@ -31,7 +32,7 @@ const createMockInjectedWallet = (
 	id: "polkadot:test-wallet" as WalletId,
 	platform: "polkadot",
 	type: "injected",
-	extensionId: "test-wallet",
+	sourceId: "test-wallet",
 	extension: createMockExtension(accounts),
 	name: "Test Wallet",
 	icon: "data:image/svg+xml,...",
@@ -109,5 +110,75 @@ describe("getPolkadotAccounts$", () => {
 			"[kheopskit] config.polkadotAccountTypes is empty; all Polkadot accounts will be filtered out.",
 		);
 		warnSpy.mockRestore();
+	});
+
+	describe("appKit (WalletConnect) wallets", () => {
+		const ALICE = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+		const BOB = "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty";
+		const GENESIS = "91b171bb158e2d3848fa23a9f1c25182";
+
+		const createMockAppKitWallet = (accounts: string[]) => {
+			const listeners = new Map<string, Set<(props?: unknown) => void>>();
+			const provider = {
+				session: { topic: "t", namespaces: { polkadot: { accounts } } },
+				client: { request: vi.fn() },
+				on: vi.fn((event: string, cb: (props?: unknown) => void) => {
+					let set = listeners.get(event);
+					if (!set) {
+						set = new Set();
+						listeners.set(event, set);
+					}
+					set.add(cb);
+				}),
+				off: vi.fn((event: string, cb: (props?: unknown) => void) => {
+					listeners.get(event)?.delete(cb);
+				}),
+				_emit: (event: string, props?: unknown) => {
+					for (const cb of listeners.get(event) ?? []) cb(props);
+				},
+			};
+			const wallet = {
+				id: "polkadot:walletconnect" as WalletId,
+				platform: "polkadot",
+				type: "appKit",
+				name: "WalletConnect",
+				icon: "data:image/svg+xml;base64,AAAA",
+				isConnected: true,
+				connect: vi.fn(),
+				disconnect: vi.fn(),
+				appKit: {
+					getProvider: vi.fn(() => provider),
+					getCaipNetworks: vi.fn(() => [
+						{ caipNetworkId: `polkadot:${GENESIS}` },
+					]),
+				} as unknown as PolkadotAppKitWallet["appKit"],
+			} as PolkadotAppKitWallet;
+			return { wallet, provider };
+		};
+
+		it("re-derives accounts when the WalletConnect session updates", async () => {
+			const { clearAllCachedObservables } = await import(
+				"../../utils/getCachedObservable"
+			);
+			clearAllCachedObservables();
+
+			const { wallet, provider } = createMockAppKitWallet([
+				`polkadot:${GENESIS}:${ALICE}`,
+			]);
+
+			const accounts$ = getPolkadotAccounts$(of([wallet]), ["sr25519"]);
+			const resultsPromise = firstValueFrom(accounts$.pipe(take(2), toArray()));
+
+			await new Promise((r) => setTimeout(r, 10));
+
+			provider.session.namespaces.polkadot.accounts.push(
+				`polkadot:${GENESIS}:${BOB}`,
+			);
+			provider._emit("session_update");
+
+			const results = await resultsPromise;
+			expect(results[0]).toHaveLength(1);
+			expect(results[1]).toHaveLength(2);
+		});
 	});
 });

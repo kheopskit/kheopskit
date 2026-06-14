@@ -1,10 +1,9 @@
-import { KheopskitProvider } from "@kheopskit/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 import { GithubIcon } from "@/assets/GithubIcon";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
-import { kheopskitConfig } from "@/lib/config/playgroundConfig";
+import { KheopskitProvider } from "@/lib/config/playgroundConfig";
 import { wagmiConfig } from "@/lib/wagmi";
 import { Accounts } from "./blocks/Accounts";
 import { SubmitTx } from "./blocks/SubmitTx";
@@ -15,7 +14,7 @@ const queryClient = new QueryClient();
 
 export const App = () => {
 	return (
-		<KheopskitProvider config={kheopskitConfig}>
+		<KheopskitProvider>
 			<WagmiProvider config={wagmiConfig}>
 				<QueryClientProvider client={queryClient}>
 					<AppContent />

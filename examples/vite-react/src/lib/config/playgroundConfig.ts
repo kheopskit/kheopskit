@@ -1,58 +1,40 @@
-import type { KheopskitConfig } from "@kheopskit/core";
+import { type EthereumAccount, ethereum } from "@kheopskit/core/ethereum";
+import { type PolkadotAccount, polkadot } from "@kheopskit/core/polkadot";
+import { type SolanaAccount, solana } from "@kheopskit/core/solana";
+import { type CreateKheopskitConfig, createKheopskit } from "@kheopskit/react";
 import type { AppKitNetwork } from "@reown/appkit/networks";
-import { APPKIT_CHAINS, isEthereumNetwork, isPolkadotNetwork } from "./chains";
+import {
+	APPKIT_CHAINS,
+	isEthereumNetwork,
+	isPolkadotNetwork,
+	isSolanaNetwork,
+} from "./chains";
 
-type Prettify<T> = {
-	[K in keyof T]: T[K];
-} & {};
+/**
+ * Platform plugins enabled in the playground. The tuple type flows through
+ * `useWallets<Platforms>()` so account/wallet types stay SDK-precise.
+ */
+export const platforms = [
+	polkadot({ accountTypes: ["sr25519", "ed25519", "ecdsa", "ethereum"] }),
+	ethereum(),
+	solana({ chain: "solana:mainnet" }),
+] as const;
 
-export type PlaygroundConfig = Prettify<
-	Omit<KheopskitConfig, "walletConnect"> & {
-		walletConnect: boolean;
-	}
->;
+export type Platforms = typeof platforms;
+export type WalletAccount = PolkadotAccount | EthereumAccount | SolanaAccount;
 
-export const demoConfig: PlaygroundConfig = {
-	autoReconnect: true,
-	platforms: ["polkadot", "ethereum"],
-	walletConnect: !!import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID,
-	debug: true,
-	storageKey: "kheopskit",
-	hydrationGracePeriod: 500,
-	polkadotAccountTypes: ["sr25519", "ed25519", "ecdsa", "ethereum"],
-};
+const enabledPlatforms = platforms.map((p) => p.platform);
 
-const getKheopskitConfig = (
-	config: PlaygroundConfig,
-): Partial<KheopskitConfig> => {
-	const platforms = config.platforms ?? [];
-	const networks = getNetworks(platforms);
-
-	return {
-		...config,
-		walletConnect:
-			config.walletConnect && networks
-				? {
-						projectId: import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID,
-						metadata: {
-							name: "Kheopskit Demo",
-							description: "Kheopskit Demo",
-							url: window.location.origin,
-							icons: [],
-						},
-						networks,
-					}
-				: undefined,
-	};
-};
-
-const getNetworks = (platforms: KheopskitConfig["platforms"]) => {
+const getNetworks = () => {
 	const networks: AppKitNetwork[] = [
-		...(platforms.includes("polkadot")
+		...(enabledPlatforms.includes("polkadot")
 			? APPKIT_CHAINS.filter(isPolkadotNetwork)
 			: []),
-		...(platforms.includes("ethereum")
+		...(enabledPlatforms.includes("ethereum")
 			? APPKIT_CHAINS.filter(isEthereumNetwork)
+			: []),
+		...(enabledPlatforms.includes("solana")
+			? APPKIT_CHAINS.filter(isSolanaNetwork)
 			: []),
 	];
 
@@ -61,5 +43,30 @@ const getNetworks = (platforms: KheopskitConfig["platforms"]) => {
 		: null;
 };
 
-export const kheopskitConfig: Partial<KheopskitConfig> =
-	getKheopskitConfig(demoConfig);
+const networks = getNetworks();
+
+const walletConnect =
+	import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID && networks
+		? {
+				projectId: import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID,
+				metadata: {
+					name: "Kheopskit Demo",
+					description: "Kheopskit Demo",
+					url: window.location.origin,
+					icons: [],
+				},
+				networks,
+			}
+		: undefined;
+
+export const kheopskitConfig = {
+	autoReconnect: true,
+	platforms,
+	debug: true,
+	storageKey: "kheopskit",
+	hydrationGracePeriod: 500,
+	walletConnect,
+} satisfies CreateKheopskitConfig<Platforms>;
+
+export const { KheopskitProvider, useWallets, useAccounts } =
+	createKheopskit(kheopskitConfig);

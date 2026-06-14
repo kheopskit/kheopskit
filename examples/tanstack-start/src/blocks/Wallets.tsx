@@ -1,4 +1,3 @@
-import { useWallets } from "@kheopskit/react";
 import type { FC } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,6 +8,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useWallets } from "@/lib/config/playgroundConfig";
 import { cn } from "@/lib/utils";
 import { AppBlock } from "./AppBlock";
 
@@ -66,11 +66,11 @@ export const Wallets = () => {
 							</TableCell>
 							<TableCell className="text-right">
 								{wallet.isConnected ? (
-									<Button className="w-28" onClick={wallet.disconnect}>
+									<Button className="w-28" onClick={() => wallet.disconnect()}>
 										Disconnect
 									</Button>
 								) : (
-									<Button className="w-28" onClick={wallet.connect}>
+									<Button className="w-28" onClick={() => wallet.connect()}>
 										Connect
 									</Button>
 								)}

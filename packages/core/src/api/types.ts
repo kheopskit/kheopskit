@@ -1,42 +1,207 @@
-import type { AppKit, ThemeMode, ThemeVariables } from "@reown/appkit/core";
-import type { AppKitNetwork } from "@reown/appkit/networks";
-import type { Metadata } from "@walletconnect/universal-provider";
-import type {
-	InjectedExtension,
-	InjectedPolkadotAccount,
-} from "polkadot-api/pjs-signer";
-import type {
-	Account,
-	CustomTransport,
-	EIP1193Provider,
-	WalletClient,
-} from "viem";
+import type { Observable } from "rxjs";
 import type { WalletAccountId } from "../utils";
 import type { WalletId } from "../utils/WalletId";
+import type { KheopskitStore } from "./store";
 
-export type KheopskitConfig = {
-	autoReconnect: boolean;
-	platforms: WalletPlatform[];
-	/**
-	 * Allowed Polkadot account key types.
-	 * Accounts with other key types are filtered out from kheopskit state.
-	 *
-	 * @default ["sr25519", "ed25519", "ecdsa"]
-	 */
-	polkadotAccountTypes: PolkadotAccountType[];
-	walletConnect?: {
-		projectId: string;
-		metadata: Metadata;
-		/** Defaults to wss://relay.walletconnect.com */
-		relayUrl?: string;
-		/**
-		 * list of CAIP-13 ids of polkadot-sdk chains
-		 * see https://docs.reown.com/advanced/multichain/polkadot/dapp-integration-guide#walletconnect-code%2Fcomponent-setup
-		 */
-		networks: [AppKitNetwork, ...AppKitNetwork[]];
-		themeMode?: ThemeMode;
-		themeVariables?: ThemeVariables;
+export type WalletPlatform = "polkadot" | "ethereum" | "solana";
+
+/**
+ * Minimal structural view of a WalletConnect `UniversalProvider` — the subset
+ * kheopskit reads. Declared locally so core never depends on
+ * `@walletconnect/universal-provider`. The concrete instance comes from
+ * `@reown/appkit` at runtime.
+ */
+export type WalletConnectProvider = {
+	session?: {
+		topic: string;
+		namespaces: Record<string, { accounts?: string[] }>;
 	};
+	client: {
+		request<T = unknown>(args: {
+			topic: string;
+			chainId: string;
+			request: { method: string; params: unknown };
+		}): Promise<T>;
+	};
+	request(args: { method: string; params?: unknown }): Promise<unknown>;
+	on(event: string, listener: (...args: unknown[]) => void): void;
+	off(event: string, listener: (...args: unknown[]) => void): void;
+};
+
+/**
+ * Minimal structural view of the Reown AppKit instance — the subset kheopskit's
+ * account factories use. Exposed as the `appKit` escape hatch on AppKit wallets;
+ * cast it to `@reown/appkit`'s `AppKit` type for the full API. Declared locally
+ * so core never depends on `@reown/appkit`'s types (it's an optional peer).
+ */
+export type AppKitInstance = {
+	getProvider<T = WalletConnectProvider>(namespace: string): T | undefined;
+	getAccount(
+		namespace: string,
+	): { allAccounts: { address: string }[] } | undefined;
+	getCaipNetworks(namespace: string): { caipNetworkId?: string }[];
+};
+
+export type WalletType = "injected" | "appKit";
+
+export type PolkadotAccountType = "sr25519" | "ed25519" | "ecdsa" | "ethereum";
+
+/**
+ * SDK-free fields common to every wallet, regardless of platform. Platform
+ * packages (`@kheopskit/core/<platform>`) extend this with SDK-typed fields
+ * (the injected provider/extension/standard-wallet handle).
+ */
+export type BaseWallet = {
+	id: WalletId;
+	platform: WalletPlatform;
+	type: WalletType;
+	name: string;
+	icon: string;
+	isConnected: boolean;
+	connect: () => Promise<void>;
+	/**
+	 * Disconnect the wallet. Resolves once the underlying provider/extension
+	 * disconnect completes; rejects if it fails so callers can surface or retry.
+	 */
+	disconnect: () => Promise<void>;
+};
+
+/**
+ * SDK-free fields common to every account, regardless of platform. Platform
+ * packages extend this with their SDK-typed signer/client.
+ */
+export type BaseWalletAccount = {
+	id: WalletAccountId;
+	platform: WalletPlatform;
+	/** Base58 (Solana), SS58 (Polkadot) or 0x-hex (Ethereum) address. */
+	address: string;
+	/** Friendly account name, when the wallet exposes one (e.g. Polkadot). */
+	name?: string;
+	walletName: string;
+	walletId: WalletId;
+};
+
+/**
+ * AppKit (WalletConnect) wallet handle for a given platform. References only
+ * `@reown/appkit` (a hard dependency) — no optional platform SDK — so it lives
+ * in core and is shared by every platform's wallet union.
+ *
+ * The per-platform aliases below (`PolkadotAppKitWallet`, … ) are kept so each
+ * platform entry point can re-export a concrete name.
+ */
+export type AppKitWallet<P extends WalletPlatform = WalletPlatform> = {
+	id: WalletId;
+	platform: P;
+	type: "appKit";
+	/**
+	 * Raw Reown AppKit instance, exposed as an escape hatch for advanced use
+	 * (custom modal control, reading providers directly). Most consumers should
+	 * use the wallet's `connect`/`disconnect` and the derived accounts instead.
+	 */
+	appKit: AppKitInstance;
+	name: string;
+	icon: string;
+	isConnected: boolean;
+	connect: () => Promise<void>;
+	disconnect: () => Promise<void>;
+};
+
+export type PolkadotAppKitWallet = AppKitWallet<"polkadot">;
+export type EthereumAppKitWallet = AppKitWallet<"ethereum">;
+export type SolanaAppKitWallet = AppKitWallet<"solana">;
+
+/**
+ * Dapp metadata shown in the WalletConnect modal. Mirrors WalletConnect's
+ * `Metadata`, declared locally so core doesn't depend on
+ * `@walletconnect/universal-provider`.
+ */
+export type WalletConnectMetadata = {
+	name: string;
+	description: string;
+	url: string;
+	icons: string[];
+};
+
+export type WalletConnectConfig = {
+	projectId: string;
+	metadata: WalletConnectMetadata;
+	/** Defaults to wss://relay.walletconnect.com */
+	relayUrl?: string;
+	/**
+	 * Networks AppKit should enable. Pass `AppKitNetwork[]` from
+	 * `@reown/appkit/networks` (see
+	 * https://docs.reown.com/advanced/multichain/polkadot/dapp-integration-guide#walletconnect-code%2Fcomponent-setup).
+	 * Loosely typed (`unknown`) so core doesn't depend on `@reown/appkit`'s
+	 * types — the value is forwarded to AppKit as-is.
+	 */
+	networks: [unknown, ...unknown[]];
+	themeMode?: "light" | "dark";
+	themeVariables?: Record<string, string | number>;
+};
+
+/**
+ * Context passed to a platform plugin's `getWallets$`. Carries the shared store
+ * and the resolved core config (for WalletConnect / debug).
+ */
+export type PlatformContext = {
+	store: KheopskitStore;
+	config: KheopskitConfig;
+};
+
+/**
+ * A platform plugin. Created by the per-platform factories exported from
+ * `@kheopskit/core/polkadot`, `/ethereum`, `/solana`. Core iterates plugins
+ * generically and never imports a platform SDK itself.
+ *
+ * @typeParam TPlatform - the platform discriminant
+ * @typeParam TWallet - the platform's wallet type (extends {@link BaseWallet})
+ * @typeParam TAccount - the platform's account type (extends {@link BaseWalletAccount})
+ */
+export type KheopskitPlatform<
+	TPlatform extends WalletPlatform = WalletPlatform,
+	TWallet extends BaseWallet = BaseWallet,
+	TAccount extends BaseWalletAccount = BaseWalletAccount,
+> = {
+	readonly platform: TPlatform;
+	// Declared as methods (not arrow properties) so parameters are checked
+	// bivariantly — this lets a specific `KheopskitPlatform<"polkadot", …>` be
+	// assigned to the base `KheopskitPlatform` despite the contravariant
+	// `wallets$` parameter.
+	getWallets$(ctx: PlatformContext): Observable<TWallet[]>;
+	getAccounts$(wallets$: Observable<TWallet[]>): Observable<TAccount[]>;
+	/**
+	 * Optional hydration filter. Cached accounts for which this returns false are
+	 * dropped during SSR hydration (Polkadot uses it to honour `accountTypes`).
+	 */
+	acceptsCachedAccount?(cached: CachedAccount): boolean;
+};
+
+type ElementOf<T> = T extends readonly (infer E)[] ? E : never;
+
+/** The account type produced by a plugin (inferred from its `getAccounts$`). */
+export type AccountOf<T> = T extends {
+	getAccounts$: (wallets$: never) => Observable<infer R>;
+}
+	? ElementOf<R>
+	: never;
+
+/** The wallet type produced by a plugin (inferred from its `getWallets$`). */
+export type WalletOf<T> = T extends {
+	getWallets$: (ctx: never) => Observable<infer R>;
+}
+	? ElementOf<R>
+	: never;
+
+export type KheopskitConfig<
+	P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],
+> = {
+	autoReconnect: boolean;
+	/**
+	 * Platform plugins to enable, e.g. `[polkadot(), solana({ chain })]`.
+	 * Import factories from `@kheopskit/core/<platform>`.
+	 */
+	platforms: P;
+	walletConnect?: WalletConnectConfig;
 	debug: boolean;
 	/**
 	 * Custom storage key for persisting wallet connection state.
@@ -44,12 +209,6 @@ export type KheopskitConfig = {
 	 * to prevent state conflicts between different dapps.
 	 *
 	 * @default "kheopskit"
-	 *
-	 * @example
-	 * ```ts
-	 * // For app "MyDapp" to avoid conflicts
-	 * { storageKey: "kheopskit-mydapp" }
-	 * ```
 	 */
 	storageKey: string;
 	/**
@@ -64,87 +223,39 @@ export type KheopskitConfig = {
 	hydrationGracePeriod: number;
 };
 
-export type PolkadotInjectedWallet = {
-	id: WalletId;
-	platform: "polkadot";
-	type: "injected";
-	extensionId: string;
-	extension: InjectedExtension | undefined;
-	name: string;
-	icon: string;
-	isConnected: boolean;
-	connect: () => Promise<void>;
-	disconnect: () => void;
+/**
+ * The current kheopskit state.
+ *
+ * @remarks
+ * While {@link KheopskitState.isHydrating} is `true`, `wallets` and `accounts`
+ * may contain cached placeholders restored from storage. The **SDK handles** the
+ * platform types advertise (e.g. `account.signer` / `getSigner` on Solana,
+ * `account.client` on Ethereum, `wallet.provider` / `extension`) are **absent at
+ * runtime even though the types claim them**, and placeholder wallets throw if
+ * `connect`/`disconnect` is called. Guard all access to those behind
+ * `!isHydrating`.
+ *
+ * The plain, serializable platform data that is persisted in the cache IS
+ * restored on the placeholders (Ethereum `chainId`, Polkadot key `type`), so it
+ * renders immediately on reload without flashing. Solana `chains` is not cached,
+ * so it remains absent until the live account loads.
+ */
+export type KheopskitState<
+	P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],
+> = {
+	wallets: WalletOf<P[number]>[];
+	accounts: AccountOf<P[number]>[];
+	config: KheopskitConfig<P>;
+	/**
+	 * Whether the state is still being hydrated from cache.
+	 *
+	 * During hydration, cached wallets/accounts may be displayed before the
+	 * actual wallet extensions have injected. See the type-level remarks: while
+	 * this is `true`, SDK-typed fields (signer/client/provider/extension) are not
+	 * present at runtime — guard all access behind `!isHydrating`.
+	 */
+	isHydrating: boolean;
 };
-
-export type PolkadotAppKitWallet = {
-	id: WalletId;
-	platform: "polkadot";
-	type: "appKit";
-	appKit: AppKit;
-	name: string;
-	icon: string;
-	isConnected: boolean;
-	connect: () => Promise<void>;
-	disconnect: () => void;
-};
-
-export type PolkadotWallet = PolkadotInjectedWallet | PolkadotAppKitWallet;
-
-export type EthereumInjectedWallet = {
-	platform: "ethereum";
-	type: "injected";
-	id: WalletId;
-	providerId: string;
-	provider: EIP1193Provider;
-	name: string;
-	icon: string;
-	isConnected: boolean;
-	connect: () => Promise<void>;
-	disconnect: () => void;
-};
-
-export type EthereumAppKitWallet = {
-	platform: "ethereum";
-	type: "appKit";
-	id: WalletId;
-	appKit: AppKit;
-	name: string;
-	icon: string;
-	isConnected: boolean;
-	connect: () => Promise<void>;
-	disconnect: () => void;
-};
-
-export type EthereumWallet = EthereumInjectedWallet | EthereumAppKitWallet;
-
-export type Wallet = PolkadotWallet | EthereumWallet;
-
-export type WalletPlatform = Wallet["platform"];
-
-export type PolkadotAccountType = "sr25519" | "ed25519" | "ecdsa" | "ethereum";
-
-export type PolkadotAccount = Omit<InjectedPolkadotAccount, "type"> & {
-	type: PolkadotAccountType;
-	id: WalletAccountId;
-	platform: "polkadot";
-	walletName: string;
-	walletId: string;
-};
-
-export type EthereumAccount = {
-	id: WalletAccountId;
-	platform: "ethereum";
-	client: WalletClient<CustomTransport, undefined, Account, undefined>;
-	address: `0x${string}`;
-	/** Current chain ID the wallet is connected to. `undefined` while loading or after provider disconnect. */
-	chainId: number | undefined;
-	walletName: string;
-	walletId: string;
-	isWalletDefault: boolean;
-};
-
-export type WalletAccount = PolkadotAccount | EthereumAccount;
 
 /**
  * Serializable wallet data for SSR hydration cache.
@@ -154,7 +265,7 @@ export type WalletAccount = PolkadotAccount | EthereumAccount;
 export type CachedWallet = {
 	id: WalletId;
 	platform: WalletPlatform;
-	type: "injected" | "appKit";
+	type: WalletType;
 	name: string;
 	isConnected: boolean;
 };

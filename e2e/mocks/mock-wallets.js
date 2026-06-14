@@ -85,3 +85,73 @@ window.injectedWeb3["mock-polkadot-wallet"] = {
 		},
 	}),
 };
+
+// ---------------------------------------------------------------------------
+// Solana — Wallet Standard wallet (discovered by @wallet-standard/app)
+// ---------------------------------------------------------------------------
+
+// Wrapped-SOL mint pubkey — a real, valid base58 32-byte address so
+// @solana/kit's `address()` accepts it.
+const SOL_ADDRESS = "So11111111111111111111111111111111111111112";
+// 64 zero bytes -> base58 encodes to "1" x 64 (each leading zero byte is "1"),
+// giving a deterministic "Signature: 111…" the e2e test can assert.
+const SOL_SIGNATURE = new Uint8Array(64);
+const SOL_ICON =
+	"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxIDEiPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiM5OTQ1ZmYiLz48L3N2Zz4=";
+
+const solAccount = {
+	address: SOL_ADDRESS,
+	publicKey: new Uint8Array(32),
+	chains: ["solana:mainnet"],
+	features: ["solana:signMessage"],
+};
+
+const solanaWallet = {
+	version: "1.0.0",
+	name: "Mock Solana Wallet",
+	icon: SOL_ICON,
+	chains: ["solana:mainnet"],
+	accounts: [solAccount],
+	features: {
+		"standard:connect": {
+			version: "1.0.0",
+			connect: async () => ({ accounts: solanaWallet.accounts }),
+		},
+		"standard:disconnect": {
+			version: "1.0.0",
+			disconnect: async () => {},
+		},
+		"standard:events": {
+			version: "1.0.0",
+			// No account changes in the mock; return a no-op unsubscribe.
+			on: () => () => {},
+		},
+		"solana:signMessage": {
+			version: "1.0.0",
+			signMessage: async (...inputs) =>
+				inputs.map((input) => ({
+					signedMessage: input.message,
+					signature: SOL_SIGNATURE,
+				})),
+		},
+	},
+};
+
+// Wallet Standard registration handshake: announce now (for an app already
+// listening) and register on the app-ready event (for the app loading later,
+// which is the case under addInitScript).
+const registerSolanaWallet = () => {
+	const callback = ({ register }) => register(solanaWallet);
+	try {
+		window.dispatchEvent(
+			new CustomEvent("wallet-standard:register-wallet", { detail: callback }),
+		);
+	} catch {}
+	window.addEventListener("wallet-standard:app-ready", (event) => {
+		try {
+			callback(event.detail);
+		} catch {}
+	});
+};
+
+registerSolanaWallet();

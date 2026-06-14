@@ -1,12 +1,21 @@
 "use client";
 
-import type {
-	EthereumAccount,
-	PolkadotAccount,
-	WalletAccount,
-} from "@kheopskit/core";
-import { useWallets } from "@kheopskit/react";
+import type { EthereumAccount } from "@kheopskit/core/ethereum";
+import type { PolkadotAccount } from "@kheopskit/core/polkadot";
+import type { SolanaAccount } from "@kheopskit/core/solana";
 import { MultiAddress } from "@polkadot-api/descriptors";
+import {
+	address,
+	appendTransactionMessageInstruction,
+	createTransactionMessage,
+	getBase58Decoder,
+	lamports,
+	pipe,
+	setTransactionMessageFeePayerSigner,
+	setTransactionMessageLifetimeUsingBlockhash,
+	signAndSendTransactionMessageWithSigners,
+} from "@solana/kit";
+import { getTransferSolInstruction } from "@solana-program/system";
 import type { TxEvent } from "polkadot-api";
 import { type FC, useEffect, useMemo, useState } from "react";
 import type { Observable } from "rxjs";
@@ -25,9 +34,12 @@ import {
 	APPKIT_CHAINS,
 	isEthereumNetwork,
 	isPolkadotNetwork,
+	isSolanaNetwork,
 	VIEM_CHAINS_BY_ID,
 } from "@/lib/config/chains";
+import { useWallets, type WalletAccount } from "@/lib/config/playgroundConfig";
 import { getPolkadotApi, type PolkadotChainId } from "@/lib/getPolkadotApi";
+import { getSolanaRpc } from "@/lib/getSolanaRpc";
 import { AppBlock } from "./AppBlock";
 
 export const SubmitTx = () => (
@@ -67,9 +79,11 @@ const Content = () => {
 
 	useEffect(() => {
 		if ((!account || !recipient) && network && accounts.length) {
-			const platform = /^\d+$/.test(String(network.id))
+			const platform = isEthereumNetwork(network)
 				? "ethereum"
-				: "polkadot";
+				: isSolanaNetwork(network)
+					? "solana"
+					: "polkadot";
 			const match = accounts.find((a) => a.platform === platform);
 			if (match) {
 				setAccountId(match.id);
@@ -152,6 +166,12 @@ const Content = () => {
 							account={account}
 							recipient={recipient}
 						/>
+					)}
+
+				{!!network &&
+					account?.platform === "solana" &&
+					recipient?.platform === "solana" && (
+						<SubmitTxSol account={account} recipient={recipient} />
 					)}
 			</div>
 		</div>
@@ -336,6 +356,64 @@ const SubmitTxDot: FC<{
 	);
 };
 
+const SubmitTxSol: FC<{
+	account: SolanaAccount;
+	recipient: SolanaAccount;
+}> = ({ account, recipient }) => {
+	const [signature, setSignature] = useState<string | null>(null);
+
+	const handleSendClick = async () => {
+		try {
+			const rpc = getSolanaRpc();
+			const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
+
+			// Build a 0-lamport self-transfer and sign+send it via the account's
+			// kit signer (a TransactionSendingSigner).
+			const message = pipe(
+				createTransactionMessage({ version: 0 }),
+				(m) => setTransactionMessageFeePayerSigner(account.signer, m),
+				(m) => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, m),
+				(m) =>
+					appendTransactionMessageInstruction(
+						getTransferSolInstruction({
+							source: account.signer,
+							destination: address(recipient.address),
+							amount: lamports(0n),
+						}),
+						m,
+					),
+			);
+
+			const sig = await signAndSendTransactionMessageWithSigners(message);
+			const sigText = getBase58Decoder().decode(sig);
+			setSignature(sigText);
+			toast.success(`Transaction sent: ${sigText}`);
+		} catch (err) {
+			toast.error(`Error: ${(err as Error).message}`);
+		}
+	};
+
+	const blockExplorerUrl = useMemo(
+		() => (signature ? `https://explorer.solana.com/tx/${signature}` : null),
+		[signature],
+	);
+
+	return (
+		<>
+			<div>
+				<Button disabled={!account} onClick={handleSendClick}>
+					Send
+				</Button>
+			</div>
+			<div>
+				{!!blockExplorerUrl && (
+					<a href={blockExplorerUrl}>View on block explorer</a>
+				)}
+			</div>
+		</>
+	);
+};
+
 const useDefaultNetworkId = () => {
 	const { config } = useWallets();
 
@@ -343,18 +421,23 @@ const useDefaultNetworkId = () => {
 		if (!config.platforms?.length)
 			throw new Error("No platforms configured in KheopskitConfig");
 
-		if (config.platforms.includes("polkadot")) {
+		if (config.platforms.some((p) => p.platform === "polkadot")) {
 			const polkadotChains = APPKIT_CHAINS.filter(isPolkadotNetwork);
 			if (!polkadotChains.length)
 				throw new Error("No Polkadot chains configured in KheopskitConfig");
 			return polkadotChains[0].id;
 		}
 
-		if (config.platforms.includes("ethereum")) {
+		if (config.platforms.some((p) => p.platform === "ethereum")) {
 			const ethereumChains = APPKIT_CHAINS.filter(isEthereumNetwork);
 			if (!ethereumChains.length)
 				throw new Error("No Ethereum chains configured in KheopskitConfig");
 			if (ethereumChains.length === 1) return ethereumChains[0].id;
+		}
+
+		if (config.platforms.some((p) => p.platform === "solana")) {
+			const solanaChains = APPKIT_CHAINS.filter(isSolanaNetwork);
+			if (solanaChains.length) return solanaChains[0].id;
 		}
 
 		throw new Error("No default network found for the selected platforms");

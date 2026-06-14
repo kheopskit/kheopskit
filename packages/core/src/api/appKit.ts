@@ -8,12 +8,16 @@ import {
 	of,
 	shareReplay,
 	switchMap,
+	tap,
 } from "rxjs";
+import { clearCachedObservablesByPrefix } from "../utils/getCachedObservable";
 import { getWalletId } from "../utils/WalletId";
 import type {
+	AppKitInstance,
 	EthereumAppKitWallet,
 	KheopskitConfig,
 	PolkadotAppKitWallet,
+	SolanaAppKitWallet,
 } from "./types";
 
 /**
@@ -22,8 +26,18 @@ import type {
  * The AppKit library uses Lit for web components which requires document.
  */
 const loadAppKit = async () => {
-	const { createAppKit } = await import("@reown/appkit/core");
-	return createAppKit;
+	try {
+		const { createAppKit } = await import("@reown/appkit/core");
+		return createAppKit;
+	} catch (cause) {
+		console.error(
+			"[kheopskit] WalletConnect is configured but @reown/appkit could not be loaded. " +
+				"Install it with `pnpm add @reown/appkit` (or remove config.walletConnect). " +
+				"WalletConnect wallets are disabled; injected wallets still work.",
+			cause,
+		);
+		return null;
+	}
 };
 
 const WALLET_CONNECT_ICON =
@@ -32,10 +46,21 @@ const WALLET_CONNECT_ICON =
 type AppKitWallets = {
 	polkadot?: PolkadotAppKitWallet;
 	ethereum?: EthereumAppKitWallet;
+	solana?: SolanaAppKitWallet;
 };
 
-// once it exists, appKit object should never be recreated
-let cachedAppKit: Observable<AppKitWallets> | null = null;
+// Once it exists, the appKit object should never be recreated. Anchored on
+// globalThis so it stays a single instance even if this module is duplicated
+// across bundle chunks (e.g. CJS subpath entries).
+const APPKIT_SYMBOL = Symbol.for("kheopskit.cachedAppKit");
+type AppKitGlobal = Record<symbol, Observable<AppKitWallets> | undefined>;
+const getCachedAppKit = (): Observable<AppKitWallets> | undefined =>
+	(globalThis as unknown as AppKitGlobal)[APPKIT_SYMBOL];
+const setCachedAppKit = (
+	value: Observable<AppKitWallets> | undefined,
+): void => {
+	(globalThis as unknown as AppKitGlobal)[APPKIT_SYMBOL] = value;
+};
 
 /**
  * Clears the cached AppKit observable.
@@ -43,9 +68,38 @@ let cachedAppKit: Observable<AppKitWallets> | null = null;
  * Note: This does NOT destroy the appKit instance created by Reown.
  */
 export const resetAppKitCache = (): void => {
-	cachedAppKit = null;
+	setCachedAppKit(undefined);
 };
 
+/**
+ * Tap callback that drops a WalletConnect wallet's cached account observables
+ * whenever it transitions to disconnected. Covers external disconnects (from
+ * the wallet app), which flip `isConnected` via `subscribeProviders` without
+ * ever calling `disconnect()`, so a later reconnect rebuilds the account
+ * observables against the fresh session instead of a stale closure.
+ *
+ * Keys are `accounts:<walletId>:...`; the trailing colon scopes the prefix to
+ * this wallet and avoids matching a sibling whose id is a string prefix.
+ */
+const clearAccountsCacheOnDisconnect =
+	(platform: "polkadot" | "ethereum" | "solana") =>
+	(isConnected: boolean): void => {
+		if (!isConnected)
+			clearCachedObservablesByPrefix(
+				`accounts:${getWalletId(platform, "walletconnect")}:`,
+			);
+	};
+
+/**
+ * Observable of AppKit (WalletConnect) wallets for the given config.
+ *
+ * @remarks
+ * The AppKit instance is a process-wide singleton (Reown AppKit itself cannot
+ * be instantiated twice). The **first** call with a `walletConnect` config wins;
+ * later calls with a *different* `walletConnect` config reuse that first
+ * instance. Call {@link resetAppKitCache} before re-initialising if the
+ * WalletConnect config must change.
+ */
 export const getAppKitWallets$ = (
 	config: KheopskitConfig,
 ): Observable<AppKitWallets> => {
@@ -56,21 +110,31 @@ export const getAppKitWallets$ = (
 
 	const walletConnect = config.walletConnect;
 
+	let cachedAppKit = getCachedAppKit();
 	if (!cachedAppKit) {
 		// Use dynamic import to avoid loading @reown/appkit at module evaluation time
 		// This is critical for SSR and edge runtimes like Cloudflare Workers
 		cachedAppKit = from(loadAppKit()).pipe(
 			switchMap((createAppKit) => {
+				// @reown/appkit missing (optional peer dep) — degrade gracefully.
+				if (!createAppKit) return of<AppKitWallets>({});
 				return new Observable<AppKitWallets>((subscriber) => {
 					const appKit = createAppKit({
 						projectId: walletConnect.projectId,
 						metadata: walletConnect.metadata,
-						networks: walletConnect.networks,
+						// Loosely typed in WalletConnectConfig to keep @reown/appkit's
+						// types out of core; forwarded to AppKit verbatim.
+						networks: walletConnect.networks as never,
 						themeMode: walletConnect.themeMode,
-						themeVariables: walletConnect.themeVariables,
+						themeVariables: walletConnect.themeVariables as never,
 						universalProviderConfigOverride: {
 							methods: {
 								polkadot: ["polkadot_signTransaction", "polkadot_signMessage"],
+								solana: [
+									"solana_signTransaction",
+									"solana_signMessage",
+									"solana_signAndSendTransaction",
+								],
 							},
 						},
 						allWallets: "HIDE",
@@ -78,15 +142,20 @@ export const getAppKitWallets$ = (
 						allowUnsupportedChain: true,
 					});
 
+					// Exposed on wallets as the (decoupled) AppKitInstance escape hatch.
+					const appKitInstance = appKit as unknown as AppKitInstance;
+
 					const status$ = new BehaviorSubject({
 						isPolkadotConnected: false,
 						isEthereumConnected: false,
+						isSolanaConnected: false,
 					});
 
 					const unsubProviders = appKit.subscribeProviders((providers) => {
 						status$.next({
 							isPolkadotConnected: !!providers.polkadot,
 							isEthereumConnected: !!providers.eip155,
+							isSolanaConnected: !!providers.solana,
 						});
 					});
 
@@ -94,21 +163,23 @@ export const getAppKitWallets$ = (
 						? status$.pipe(
 								map((s) => s.isPolkadotConnected),
 								distinctUntilChanged(),
+								tap(clearAccountsCacheOnDisconnect("polkadot")),
 								map((isConnected): PolkadotAppKitWallet => {
 									const walletInfo = appKit.getWalletInfo();
+									const walletId = getWalletId("polkadot", "walletconnect");
 
 									return {
-										id: getWalletId("polkadot", "walletconnect"),
+										id: walletId,
 										platform: "polkadot",
 										type: "appKit",
-										appKit, // todo maybe we dont want to expose the appKit instance
+										appKit: appKitInstance,
 										name: walletInfo?.name ?? "WalletConnect",
 										icon: walletInfo?.icon ?? WALLET_CONNECT_ICON,
 										connect: async () => {
 											if (!isConnected) await appKit.open();
 										},
-										disconnect: () => {
-											if (isConnected) appKit.disconnect();
+										disconnect: async () => {
+											if (isConnected) await appKit.disconnect();
 										},
 										isConnected,
 									};
@@ -120,18 +191,48 @@ export const getAppKitWallets$ = (
 						? status$.pipe(
 								map((s) => s.isEthereumConnected),
 								distinctUntilChanged(),
+								tap(clearAccountsCacheOnDisconnect("ethereum")),
 								map((isConnected): EthereumAppKitWallet => {
 									const walletInfo = appKit.getWalletInfo();
+									const walletId = getWalletId("ethereum", "walletconnect");
 
 									return {
-										id: getWalletId("ethereum", "walletconnect"),
+										id: walletId,
 										platform: "ethereum",
 										type: "appKit",
-										appKit,
+										appKit: appKitInstance,
 										name: walletInfo?.name ?? "WalletConnect",
 										icon: walletInfo?.icon ?? WALLET_CONNECT_ICON,
 										connect: () => appKit.open(),
-										disconnect: () => appKit.disconnect(),
+										disconnect: async () => {
+											await appKit.disconnect();
+										},
+										isConnected,
+									};
+								}),
+							)
+						: of(undefined);
+
+					const solanaWallet$ = appKit.chainNamespaces.includes("solana")
+						? status$.pipe(
+								map((s) => s.isSolanaConnected),
+								distinctUntilChanged(),
+								tap(clearAccountsCacheOnDisconnect("solana")),
+								map((isConnected): SolanaAppKitWallet => {
+									const walletInfo = appKit.getWalletInfo();
+									const walletId = getWalletId("solana", "walletconnect");
+
+									return {
+										id: walletId,
+										platform: "solana",
+										type: "appKit",
+										appKit: appKitInstance,
+										name: walletInfo?.name ?? "WalletConnect",
+										icon: walletInfo?.icon ?? WALLET_CONNECT_ICON,
+										connect: () => appKit.open(),
+										disconnect: async () => {
+											await appKit.disconnect();
+										},
 										isConnected,
 									};
 								}),
@@ -141,6 +242,7 @@ export const getAppKitWallets$ = (
 					const sub = combineLatest({
 						polkadot: polkadotWallet$,
 						ethereum: ethereumWallet$,
+						solana: solanaWallet$,
 					}).subscribe(subscriber);
 
 					return () => {
@@ -151,6 +253,7 @@ export const getAppKitWallets$ = (
 			}),
 			shareReplay({ refCount: true, bufferSize: 1 }),
 		);
+		setCachedAppKit(cachedAppKit);
 	}
 
 	return cachedAppKit;

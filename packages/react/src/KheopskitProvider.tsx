@@ -1,13 +1,18 @@
 import {
 	createKheopskitStore,
-	getCachedIcon,
 	getKheopskit$,
-	hydrateAccount,
-	hydrateWallet,
 	type KheopskitConfig,
 	type KheopskitState,
 	resolveConfig,
 } from "@kheopskit/core";
+import {
+	acceptsCachedAccount,
+	getCachedIcon,
+	hydrateAccount,
+	hydrateWallet,
+	sortAccounts,
+	sortWallets,
+} from "@kheopskit/core/internal";
 import {
 	type FC,
 	type PropsWithChildren,
@@ -19,6 +24,15 @@ import { KheopskitContext } from "./context";
 import { createStore } from "./createStore";
 
 export type KheopskitProviderProps = PropsWithChildren & {
+	/**
+	 * Kheopskit configuration.
+	 *
+	 * @remarks
+	 * Must be a **referentially stable** value — define it once (module scope, a
+	 * `useMemo`, or via {@link createKheopskit}) and pass the same reference. A
+	 * new object literal on every render (`config={{ platforms: [...] }}` inline)
+	 * recreates the underlying store and re-subscribes each render.
+	 */
 	config?: Partial<KheopskitConfig>;
 	/**
 	 * Cookie string for SSR hydration.
@@ -71,38 +85,50 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 		}
 		const cached = kheopskitStore.getCachedState();
 		return {
-			wallets: cached.wallets.map(hydrateWallet),
+			wallets: cached.wallets.map(hydrateWallet).sort(sortWallets),
 			accounts: cached.accounts
+				.filter((account) =>
+					acceptsCachedAccount(account, resolvedConfig.platforms),
+				)
 				.map(hydrateAccount)
-				.filter(
-					(account) =>
-						account.platform !== "polkadot" ||
-						resolvedConfig.polkadotAccountTypes.includes(account.type),
-				),
+				.sort(sortAccounts),
 			config: resolvedConfig,
 			isHydrating: true,
 		};
 	}, [ssrCookies, kheopskitStore, resolvedConfig]);
 
-	// Initial value for client includes localStorage icons
-	// This is what we WANT the client to render, not what server rendered
+	// Client-only initial snapshot, read straight from the client cache so a hard
+	// reload paints the cached wallet/account list on the very first frame instead
+	// of flashing empty until the live observable produces its first emission —
+	// which can be asynchronous (e.g. WalletConnect's AppKit is loaded via dynamic
+	// import, so the underlying combineLatest can't emit synchronously).
+	//
+	// We can't derive this from `serverValue`: without SSR cookies that stays empty
+	// (to keep the server/client hydration markup identical), so the SPA case would
+	// otherwise render nothing. This snapshot is only ever read on the client via
+	// getSnapshot, so reading the cache here is safe — and getCachedIcon returns ""
+	// on the server, making the icon enrichment a no-op there.
 	const initialValue = useMemo<KheopskitState>(() => {
-		// On client, enrich wallets with localStorage icons
-		// getCachedIcon returns empty on server (no localStorage), so this is safe
-		const enrichedWallets = serverValue.wallets.map((w) => {
-			if (!w.icon) {
-				const cachedIcon = getCachedIcon(w.id);
-				if (cachedIcon) {
-					return { ...w, icon: cachedIcon };
-				}
-			}
-			return w;
-		});
+		const cached = kheopskitStore.getCachedState();
 		return {
-			...serverValue,
-			wallets: enrichedWallets,
+			wallets: cached.wallets
+				.map(hydrateWallet)
+				.map((wallet) => {
+					if (wallet.icon) return wallet;
+					const cachedIcon = getCachedIcon(wallet.id);
+					return cachedIcon ? { ...wallet, icon: cachedIcon } : wallet;
+				})
+				.sort(sortWallets),
+			accounts: cached.accounts
+				.filter((account) =>
+					acceptsCachedAccount(account, resolvedConfig.platforms),
+				)
+				.map(hydrateAccount)
+				.sort(sortAccounts),
+			config: resolvedConfig,
+			isHydrating: true,
 		};
-	}, [serverValue]);
+	}, [kheopskitStore, resolvedConfig]);
 
 	const store = useMemo(
 		() =>

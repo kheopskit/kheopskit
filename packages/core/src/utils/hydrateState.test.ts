@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CachedAccount, PolkadotAccount } from "../api/types";
+import type { PolkadotAccount } from "../api/polkadot/types";
+import type { CachedAccount } from "../api/types";
 import { hydrateAccount, serializeAccount } from "./hydrateState";
 import type { WalletAccountId } from "./WalletAccountId";
 import type { WalletId } from "./WalletId";
@@ -9,42 +10,61 @@ const ACCOUNT_ID =
 	"polkadot:talisman::5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY" as WalletAccountId;
 const ADDRESS = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 
-describe("hydrateAccount (polkadot cached type)", () => {
-	it("uses cached polkadotAccountType when provided", () => {
+describe("hydrateAccount", () => {
+	it("carries the base fields plus the polkadot key type from cache", () => {
 		const cached: CachedAccount = {
 			id: ACCOUNT_ID,
 			platform: "polkadot",
 			address: ADDRESS,
+			name: "Alice",
 			polkadotAccountType: "ethereum",
 			walletId: WALLET_ID,
 			walletName: "Talisman",
 		};
 
-		const hydrated = hydrateAccount(cached);
-
-		expect(hydrated.platform).toBe("polkadot");
-		if (hydrated.platform !== "polkadot") {
-			throw new Error("expected polkadot account");
-		}
-		expect(hydrated.type).toBe("ethereum");
-	});
-
-	it("falls back to sr25519 for legacy cached accounts without type", () => {
-		const cached: CachedAccount = {
+		expect(hydrateAccount(cached)).toEqual({
 			id: ACCOUNT_ID,
 			platform: "polkadot",
 			address: ADDRESS,
+			name: "Alice",
+			// plain serializable data is preserved so reload renders it immediately
+			type: "ethereum",
 			walletId: WALLET_ID,
 			walletName: "Talisman",
+		});
+	});
+
+	it("carries the ethereum chainId from cache", () => {
+		const cached: CachedAccount = {
+			id: "ethereum:metamask::0xabc" as WalletAccountId,
+			platform: "ethereum",
+			address: "0xabc",
+			chainId: 137,
+			walletId: "ethereum:metamask" as WalletId,
+			walletName: "MetaMask",
 		};
 
-		const hydrated = hydrateAccount(cached);
+		const account = hydrateAccount(cached) as typeof cached & {
+			chainId?: number;
+		};
+		expect(account.chainId).toBe(137);
+		expect(account.platform).toBe("ethereum");
+	});
 
-		expect(hydrated.platform).toBe("polkadot");
-		if (hydrated.platform !== "polkadot") {
-			throw new Error("expected polkadot account");
-		}
-		expect(hydrated.type).toBe("sr25519");
+	it("does not invent platform fields the cache lacks", () => {
+		const cached: CachedAccount = {
+			id: "ethereum:metamask::0xabc" as WalletAccountId,
+			platform: "ethereum",
+			address: "0xabc",
+			// chainId unknown when cached
+			walletId: "ethereum:metamask" as WalletId,
+			walletName: "MetaMask",
+		};
+
+		const account = hydrateAccount(cached) as Record<string, unknown>;
+		expect(account.chainId).toBeUndefined();
+		// the polkadot-only field is never present on an ethereum placeholder
+		expect("type" in account).toBe(false);
 	});
 });
 

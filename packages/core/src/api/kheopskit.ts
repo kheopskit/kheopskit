@@ -20,33 +20,28 @@ import {
 } from "../utils/hydrateState";
 import { getCachedIcon, setCachedIcons } from "../utils/iconCache";
 import { logObservable } from "../utils/logObservable";
+import { sortAccounts } from "../utils/sortAccounts";
+import { sortWallets } from "../utils/sortWallets";
 import { getAccounts$ } from "./accounts";
 import { resolveConfig } from "./config";
+import { acceptsCachedAccount } from "./platform";
 import { createKheopskitStore } from "./store";
-import type { KheopskitConfig, Wallet, WalletAccount } from "./types";
+import type {
+	KheopskitConfig,
+	KheopskitPlatform,
+	KheopskitState,
+} from "./types";
 import { getWallets$ } from "./wallets";
 
-export type { KheopskitConfig } from "./types";
+export type { KheopskitConfig, KheopskitState } from "./types";
 
-export type KheopskitState = {
-	wallets: Wallet[];
-	accounts: WalletAccount[];
-	config: KheopskitConfig;
-	/**
-	 * Whether the state is still being hydrated from cache.
-	 * During hydration, cached wallets/accounts may be displayed
-	 * before the actual wallet extensions have injected.
-	 *
-	 * Use this to show loading indicators or disable certain actions.
-	 */
-	isHydrating: boolean;
-};
-
-export const getKheopskit$ = (
-	config?: Partial<KheopskitConfig>,
+export const getKheopskit$ = <
+	const P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],
+>(
+	config?: Partial<KheopskitConfig<P>>,
 	ssrCookies?: string,
 	existingStore?: ReturnType<typeof createKheopskitStore>,
-) => {
+): Observable<KheopskitState<P>> => {
 	const kc = resolveConfig(config);
 	const store =
 		existingStore ??
@@ -77,12 +72,8 @@ export const getKheopskit$ = (
 		return wallet;
 	});
 	const cachedAccounts = cachedState.accounts
-		.map(hydrateAccount)
-		.filter(
-			(account) =>
-				account.platform !== "polkadot" ||
-				kc.polkadotAccountTypes.includes(account.type),
-		);
+		.filter((cached) => acceptsCachedAccount(cached, kc.platforms))
+		.map(hydrateAccount);
 
 	if (kc.debug && cachedWallets.length > 0) {
 		console.debug("[kheopskit] hydrating from cache:", {
@@ -143,10 +134,20 @@ export const getKheopskit$ = (
 			},
 		);
 
+		// Share the buffered streams so the main and persistence subscriptions
+		// below reuse a single hydration pipeline (timers, isHydrating state)
+		// instead of running the buffering twice.
+		const sharedWallets$ = bufferedWallets$.pipe(
+			shareReplay({ bufferSize: 1, refCount: true }),
+		);
+		const sharedAccounts$ = bufferedAccounts$.pipe(
+			shareReplay({ bufferSize: 1, refCount: true }),
+		);
+
 		// Combine buffered wallets and accounts
 		const subscription = combineLatest({
-			wallets: bufferedWallets$,
-			accounts: bufferedAccounts$,
+			wallets: sharedWallets$,
+			accounts: sharedAccounts$,
 		})
 			.pipe(
 				map(({ wallets, accounts }) => {
@@ -159,10 +160,14 @@ export const getKheopskit$ = (
 							walletsTotal: wallets.items.length,
 						});
 					}
+					// Sort on every emission with the same comparators used for the
+					// cached initial snapshot. The hydration buffers append cached-only
+					// items after live ones (and reconnects land out of order), so
+					// without this the list visibly reorders as wallets come back.
 					return {
 						config: kc,
-						wallets: wallets.items,
-						accounts: accounts.items,
+						wallets: [...wallets.items].sort(sortWallets),
+						accounts: [...accounts.items].sort(sortAccounts),
 						isHydrating: wallets.isHydrating || accounts.isHydrating,
 					};
 				}),
@@ -171,8 +176,8 @@ export const getKheopskit$ = (
 
 		// Persist state snapshot when hydration completes and state stabilizes
 		const persistSub = combineLatest({
-			wallets: bufferedWallets$,
-			accounts: bufferedAccounts$,
+			wallets: sharedWallets$,
+			accounts: sharedAccounts$,
 		})
 			.pipe(
 				// Wait for hydration to complete
@@ -235,7 +240,9 @@ export const getKheopskit$ = (
 		throttleTime(16, undefined, { leading: true, trailing: true }), // ~1 frame at 60fps
 		logObservable("kheopskit$", { enabled: kc.debug, printValue: true }),
 		shareReplay({ bufferSize: 1, refCount: true }),
-	);
+		// The runtime objects are the concrete per-plugin wallet/account types;
+		// recover the precise KheopskitState<P> the caller's plugins imply.
+	) as unknown as Observable<KheopskitState<P>>;
 };
 
 const arraysEqual = (a: string[], b: string[]) =>
@@ -252,10 +259,27 @@ const statesEqual = (a: KheopskitState, b: KheopskitState): boolean =>
 		(w, i) =>
 			w.id === b.wallets[i]?.id && w.isConnected === b.wallets[i]?.isConnected,
 	) &&
-	a.accounts.every(
-		(acc, i) =>
-			acc.id === b.accounts[i]?.id &&
-			(acc.platform !== "ethereum" ||
-				(acc as { chainId?: number }).chainId ===
-					(b.accounts[i] as { chainId?: number })?.chainId),
-	);
+	a.accounts.every((acc, i) => {
+		const other = b.accounts[i];
+		if (acc.id !== other?.id) return false;
+		// Compare platform-specific fields that can change without the account id
+		// changing, so the UI re-renders on e.g. an Ethereum chain switch.
+		switch (acc.platform) {
+			case "ethereum":
+				return (
+					(acc as { chainId?: number }).chainId ===
+					(other as { chainId?: number }).chainId
+				);
+			case "polkadot":
+				return (
+					(acc as { type?: string }).type === (other as { type?: string }).type
+				);
+			case "solana":
+				return arraysEqual(
+					(acc as { chains?: string[] }).chains ?? [],
+					(other as { chains?: string[] }).chains ?? [],
+				);
+			default:
+				return true;
+		}
+	});

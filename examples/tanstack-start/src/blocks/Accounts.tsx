@@ -1,5 +1,4 @@
-import type { WalletAccount } from "@kheopskit/core";
-import { useWallets } from "@kheopskit/react";
+import { createSignableMessage, getBase58Decoder } from "@solana/kit";
 import { Binary } from "polkadot-api";
 import { type FC, useCallback, useMemo } from "react";
 import { toast } from "sonner";
@@ -12,6 +11,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useWallets, type WalletAccount } from "@/lib/config/playgroundConfig";
 import { shortenAddress } from "@/lib/shortenAddress";
 import { AppBlock } from "./AppBlock";
 
@@ -69,6 +69,9 @@ const AccountRow: FC<{ account: WalletAccount }> = ({ account }) => {
 };
 
 const SignButton: FC<{ account: WalletAccount }> = ({ account }) => {
+	// SDK fields (signer/client/polkadotSigner) are absent while hydrating;
+	// disable signing until hydration completes. See MIGRATING_TO_V4.md.
+	const { isHydrating } = useWallets();
 	const MESSAGE = "Kheopskit rocks!";
 
 	const handleClick = useCallback(async () => {
@@ -97,8 +100,29 @@ const SignButton: FC<{ account: WalletAccount }> = ({ account }) => {
 				}
 				break;
 			}
+
+			case "solana": {
+				try {
+					const [signed] = await account.signer.modifyAndSignMessages([
+						createSignableMessage(MESSAGE),
+					]);
+					// the signer adds exactly one signature (for this account)
+					const [signatureBytes] = Object.values(signed?.signatures ?? {});
+					const signature = signatureBytes
+						? getBase58Decoder().decode(signatureBytes)
+						: "";
+					toast.success(`Signature: ${signature}`);
+				} catch (err) {
+					toast.error(`Error: ${(err as Error).message}`);
+				}
+				break;
+			}
 		}
 	}, [account]);
 
-	return <Button onClick={handleClick}>Sign</Button>;
+	return (
+		<Button onClick={handleClick} disabled={isHydrating}>
+			Sign
+		</Button>
+	);
 };

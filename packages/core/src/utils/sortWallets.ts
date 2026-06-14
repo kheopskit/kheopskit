@@ -1,9 +1,15 @@
-import type { Wallet } from "../api";
+import type { BaseWallet, WalletPlatform } from "../api/types";
 
-export const sortWallets = (w1: Wallet, w2: Wallet) => {
-	// Sort by platform first: polkadot first, then ethereum
+const PLATFORM_ORDER: Record<WalletPlatform, number> = {
+	polkadot: 0,
+	ethereum: 1,
+	solana: 2,
+};
+
+export const sortWallets = (w1: BaseWallet, w2: BaseWallet) => {
+	// Sort by platform first: polkadot, then ethereum, then solana
 	if (w1.platform !== w2.platform) {
-		return w1.platform === "polkadot" ? -1 : 1;
+		return PLATFORM_ORDER[w1.platform] - PLATFORM_ORDER[w2.platform];
 	}
 
 	// Sort by name, but Talisman first

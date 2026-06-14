@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { WalletAccount } from "../api";
+import type { BaseWalletAccount } from "../api/types";
 import { sortAccounts } from "./sortAccounts";
 import { getWalletId } from "./WalletId";
 
@@ -8,7 +8,7 @@ const createAccount = (
 	walletName: string,
 	name: string | undefined,
 	address: string,
-): WalletAccount =>
+): BaseWalletAccount =>
 	((walletId) =>
 		({
 			id: `${walletId}::${address}`,
@@ -17,7 +17,7 @@ const createAccount = (
 			walletName,
 			name,
 			address,
-		}) as WalletAccount)(
+		}) as BaseWalletAccount)(
 		getWalletId(platform, walletName.toLowerCase().replace(/\s+/g, "-")),
 	);
 

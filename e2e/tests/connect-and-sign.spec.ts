@@ -87,3 +87,39 @@ test.describe("polkadot mock wallet", () => {
 		await expect(accountRow).not.toBeVisible();
 	});
 });
+
+test.describe("solana mock wallet", () => {
+	test("connect, list account, sign message, disconnect", async ({ page }) => {
+		await page.goto("/");
+
+		const walletRow = getWalletsTable(page).getByRole("row", {
+			name: /Mock Solana Wallet/,
+		});
+		await walletRow.getByRole("button", { name: "Connect" }).click();
+
+		await expect(
+			walletRow.getByRole("button", { name: "Disconnect" }),
+		).toBeVisible();
+		await expect(
+			walletRow.getByRole("cell", { name: "1", exact: true }),
+		).toBeVisible();
+
+		// Account appears, discovered via the Wallet Standard
+		const accountRow = getAccountsTable(page).getByRole("row", {
+			name: /Mock Solana Wallet/,
+		});
+		await expect(accountRow).toBeVisible();
+		await expect(accountRow).toContainText("solana");
+
+		// Sign goes through the Wallet Standard solana:signMessage feature; the
+		// mock returns 64 zero bytes, which base58-encodes to "1" x 64.
+		await accountRow.getByRole("button", { name: "Sign" }).click();
+		await expect(page.getByText(/Signature: 1{20,}/).first()).toBeVisible();
+
+		await walletRow.getByRole("button", { name: "Disconnect" }).click();
+		await expect(
+			walletRow.getByRole("button", { name: "Connect" }),
+		).toBeVisible();
+		await expect(accountRow).not.toBeVisible();
+	});
+});

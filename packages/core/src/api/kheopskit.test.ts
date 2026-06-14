@@ -1,6 +1,7 @@
 import { firstValueFrom, of, take } from "rxjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WalletId } from "../utils/WalletId";
+import { polkadot } from "./polkadot/plugin";
 import { createKheopskitStore } from "./store";
 
 vi.mock("./wallets", () => ({
@@ -16,7 +17,7 @@ describe("getKheopskit$ cached account filtering", () => {
 		localStorage.clear();
 	});
 
-	it("filters cached polkadot accounts that are not allowed by config", async () => {
+	it("filters cached polkadot accounts that are not allowed by the plugin", async () => {
 		const store = createKheopskitStore();
 		const walletId = "polkadot:talisman" as WalletId;
 
@@ -46,9 +47,8 @@ describe("getKheopskit$ cached account filtering", () => {
 		const state = await firstValueFrom(
 			getKheopskit$(
 				{
-					platforms: ["polkadot"],
+					platforms: [polkadot({ accountTypes: ["sr25519"] })],
 					autoReconnect: true,
-					polkadotAccountTypes: ["sr25519"],
 					debug: false,
 					storageKey: "kheopskit",
 					hydrationGracePeriod: 500,
@@ -61,7 +61,7 @@ describe("getKheopskit$ cached account filtering", () => {
 		expect(state.accounts).toEqual([]);
 	});
 
-	it("keeps cached polkadot accounts when type is allowed", async () => {
+	it("keeps cached polkadot accounts when the key type is allowed", async () => {
 		const store = createKheopskitStore();
 		const walletId = "polkadot:talisman" as WalletId;
 
@@ -91,9 +91,8 @@ describe("getKheopskit$ cached account filtering", () => {
 		const state = await firstValueFrom(
 			getKheopskit$(
 				{
-					platforms: ["polkadot"],
+					platforms: [polkadot({ accountTypes: ["ed25519"] })],
 					autoReconnect: true,
-					polkadotAccountTypes: ["ed25519"],
 					debug: false,
 					storageKey: "kheopskit",
 					hydrationGracePeriod: 500,
@@ -106,9 +105,8 @@ describe("getKheopskit$ cached account filtering", () => {
 		expect(state.accounts).toHaveLength(1);
 		const account = state.accounts[0];
 		expect(account?.platform).toBe("polkadot");
-		if (account?.platform !== "polkadot") {
-			throw new Error("expected polkadot account");
-		}
-		expect(account.type).toBe("ed25519");
+		expect(account?.address).toBe(
+			"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+		);
 	});
 });

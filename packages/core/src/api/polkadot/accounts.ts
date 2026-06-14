@@ -1,5 +1,3 @@
-import type { AppKit } from "@reown/appkit/core";
-import type UniversalProvider from "@walletconnect/universal-provider";
 import {
 	getPolkadotSignerFromPjs,
 	type InjectedExtension,
@@ -15,13 +13,18 @@ import {
 	switchMap,
 } from "rxjs";
 import { getWalletAccountId } from "../../utils";
+import { getCachedObservable$ } from "../../utils/getCachedObservable";
+import { KheopskitError } from "../errors";
 import type {
-	PolkadotAccount,
+	AppKitInstance,
 	PolkadotAccountType,
 	PolkadotAppKitWallet,
+} from "../types";
+import type {
+	PolkadotAccount,
 	PolkadotInjectedWallet,
 	PolkadotWallet,
-} from "../types";
+} from "./types";
 
 const getInjectedWalletAccounts$ = (
 	wallet: PolkadotInjectedWallet,
@@ -54,15 +57,17 @@ const getInjectedWalletAccounts$ = (
 	});
 };
 
-const getAppKitPolkadotSigner = (appKit: AppKit, address: string) => {
-	const provider = appKit.getProvider<UniversalProvider>("polkadot");
-	if (!provider) throw new Error("No provider found");
-	if (!provider.session) throw new Error("No session found");
+const getAppKitPolkadotSigner = (appKit: AppKitInstance, address: string) => {
+	const provider = appKit.getProvider("polkadot");
+	if (!provider) throw new KheopskitError("NO_PROVIDER", "No provider found");
+	if (!provider.session)
+		throw new KheopskitError("NO_SESSION", "No session found");
 
 	return getPolkadotSignerFromPjs(
 		address,
 		(transactionPayload) => {
-			if (!provider.session) throw new Error("No session found");
+			if (!provider.session)
+				throw new KheopskitError("NO_SESSION", "No session found");
 
 			return provider.client.request({
 				topic: provider.session.topic,
@@ -77,10 +82,15 @@ const getAppKitPolkadotSigner = (appKit: AppKit, address: string) => {
 			});
 		},
 		async ({ address, data }) => {
-			if (!provider.session) throw new Error("No session found");
+			if (!provider.session)
+				throw new KheopskitError("NO_SESSION", "No session found");
 			const networks = appKit.getCaipNetworks("polkadot");
 			const chainId = networks[0]?.caipNetworkId;
-			if (!chainId) throw new Error("No chainId found");
+			if (!chainId)
+				throw new KheopskitError(
+					"NO_SESSION",
+					"No CAIP network available for polkadot",
+				);
 
 			return provider.client.request({
 				topic: provider.session.topic,
@@ -97,41 +107,64 @@ const getAppKitPolkadotSigner = (appKit: AppKit, address: string) => {
 	);
 };
 
-const getAppKitAccounts$ = (wallet: PolkadotAppKitWallet) => {
-	const provider = wallet.appKit.getProvider<UniversalProvider>("polkadot");
+const getAppKitAccounts$ = (
+	wallet: PolkadotAppKitWallet,
+): Observable<PolkadotAccount[]> => {
+	const provider = wallet.appKit.getProvider("polkadot");
 
 	if (!wallet.isConnected || !provider?.session) return of([]);
 
-	// AppKit's getAccount("polkadot").allAccounts is always empty because AppKit
-	// has no native polkadot adapter; the WalletConnect session is the source of
-	// truth. Accounts are CAIP-10 strings ("polkadot:<chainRef>:<address>"), one
-	// entry per chain, so dedupe to unique addresses.
-	const addresses = [
-		...new Set(
-			Object.values(provider.session.namespaces)
-				.flatMap((namespace) => namespace.accounts ?? [])
-				.filter((account) => account.startsWith("polkadot:"))
-				.map((account) => account.split(":")[2])
-				.filter((address): address is string => !!address),
-		),
-	];
+	return getCachedObservable$(`accounts:${wallet.id}:`, () =>
+		new Observable<PolkadotAccount[]>((subscriber) => {
+			// AppKit's getAccount("polkadot").allAccounts is always empty because
+			// AppKit has no native polkadot adapter; the WalletConnect session is the
+			// source of truth. Accounts are CAIP-10 strings
+			// ("polkadot:<chainRef>:<address>"), one entry per chain, so dedupe to
+			// unique addresses.
+			const buildAccounts = (): PolkadotAccount[] => {
+				const session = provider.session;
+				if (!session) return [];
 
-	return of(
-		addresses.map(
-			(address): PolkadotAccount => ({
-				id: getWalletAccountId(wallet.id, address),
-				platform: "polkadot",
-				walletName: wallet.name,
-				walletId: wallet.id,
-				address,
-				polkadotSigner: getAppKitPolkadotSigner(wallet.appKit, address),
-				genesisHash: null,
-				name: `${wallet.name} Polkadot`,
-				// WalletConnect (Reown AppKit) doesn't expose account key type;
-				// default to sr25519, which is the most common Polkadot key type.
-				type: "sr25519",
-			}),
-		),
+				const addresses = [
+					...new Set(
+						Object.values(session.namespaces)
+							.flatMap((namespace) => namespace.accounts ?? [])
+							.filter((account) => account.startsWith("polkadot:"))
+							.map((account) => account.split(":")[2])
+							.filter((address): address is string => !!address),
+					),
+				];
+
+				return addresses.map(
+					(address): PolkadotAccount => ({
+						id: getWalletAccountId(wallet.id, address),
+						platform: "polkadot",
+						walletName: wallet.name,
+						walletId: wallet.id,
+						address,
+						polkadotSigner: getAppKitPolkadotSigner(wallet.appKit, address),
+						genesisHash: null,
+						name: `${wallet.name} Polkadot`,
+						// WalletConnect (Reown AppKit) doesn't expose account key type;
+						// default to sr25519, which is the most common Polkadot key type.
+						type: "sr25519",
+					}),
+				);
+			};
+
+			subscriber.next(buildAccounts());
+
+			// Re-derive when the WalletConnect session's accounts change, mirroring
+			// the injected extension's subscribe and the Solana AppKit path.
+			const reemit = () => subscriber.next(buildAccounts());
+			provider.on("session_update", reemit);
+			provider.on("accountsChanged", reemit);
+
+			return () => {
+				provider.off("session_update", reemit);
+				provider.off("accountsChanged", reemit);
+			};
+		}).pipe(shareReplay({ refCount: true, bufferSize: 1 })),
 	);
 };
 

@@ -1,6 +1,5 @@
 import {
 	combineLatest,
-	distinct,
 	filter,
 	map,
 	mergeMap,
@@ -10,10 +9,8 @@ import {
 	take,
 } from "rxjs";
 import { sortWallets } from "../utils/sortWallets";
-import { getEthereumWallets$ } from "./ethereum/wallets";
-import { getPolkadotWallets$ } from "./polkadot/wallets";
 import { store as defaultStore, type KheopskitStore } from "./store";
-import type { KheopskitConfig, Wallet } from "./types";
+import type { BaseWallet, KheopskitConfig, PlatformContext } from "./types";
 
 export const getWallets$ = (
 	config: KheopskitConfig,
@@ -26,17 +23,10 @@ export const getWallets$ = (
 		shareReplay({ bufferSize: 1, refCount: true }),
 	);
 
-	return new Observable<Wallet[]>((subscriber) => {
-		// biome-ignore lint/suspicious/useIterableCallbackReturn: false positive
-		const observables = config.platforms.map(
-			(platform): Observable<Wallet[]> => {
-				switch (platform) {
-					case "polkadot":
-						return getPolkadotWallets$(config, store);
-					case "ethereum":
-						return getEthereumWallets$(config, store);
-				}
-			},
+	return new Observable<BaseWallet[]>((subscriber) => {
+		const ctx: PlatformContext = { config, store };
+		const observables = config.platforms.map((plugin) =>
+			plugin.getWallets$(ctx),
 		);
 
 		const wallets$ = observables.length
@@ -44,10 +34,14 @@ export const getWallets$ = (
 					map((wallets) => wallets.flat().sort(sortWallets)),
 					// Note: No startWith([]) here - the hydration buffer handles initial state
 				)
-			: of([]);
+			: of<BaseWallet[]>([]);
 
-		// Track wallets being reconnected to avoid duplicate attempts
+		// Track wallets currently reconnecting (avoid duplicate concurrent attempts)
+		// and those already reconnected (so we don't fight a later manual disconnect).
+		// A failed attempt is left out of `reconnected`, so it can retry when the
+		// wallet next re-emits (e.g. a late-injecting extension).
 		const reconnectingWallets = new Set<string>();
+		const reconnectedWallets = new Set<string>();
 
 		const subAutoReconnect = combineLatest([wallets$, autoReconnectWalletIds$])
 			.pipe(
@@ -55,16 +49,20 @@ export const getWallets$ = (
 				mergeMap(([wallets, walletIds]) =>
 					wallets.filter((wallet) => walletIds?.includes(wallet.id)),
 				),
-				distinct((w) => w.id),
 			)
 			.subscribe(async (wallet) => {
-				if (wallet.isConnected || reconnectingWallets.has(wallet.id)) {
+				if (
+					wallet.isConnected ||
+					reconnectingWallets.has(wallet.id) ||
+					reconnectedWallets.has(wallet.id)
+				) {
 					return;
 				}
 
 				reconnectingWallets.add(wallet.id);
 				try {
 					await wallet.connect();
+					reconnectedWallets.add(wallet.id);
 				} catch (err) {
 					console.error("Failed to reconnect wallet %s", wallet.id, { err });
 				} finally {
