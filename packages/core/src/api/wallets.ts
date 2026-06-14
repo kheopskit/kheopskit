@@ -60,6 +60,14 @@ export const getWallets$ = (
 		// wallet next re-emits (e.g. a late-injecting extension).
 		const reconnectingWallets = new Set<string>();
 		const reconnectedWallets = new Set<string>();
+		// Bounded retry: a wallet whose connect() keeps rejecting (e.g. a permission
+		// permanently denied, or a buggy provider) must not be re-attempted on every
+		// wallets$ emission — the stream re-emits frequently (polkadot polling,
+		// mipd/wallet-standard register events). Allow a few attempts so a
+		// late-injecting extension that isn't ready on first sight still reconnects,
+		// then give up for this session.
+		const MAX_RECONNECT_ATTEMPTS = 3;
+		const failedAttempts = new Map<string, number>();
 
 		const subAutoReconnect = combineLatest([wallets$, autoReconnectWalletIds$])
 			.pipe(
@@ -72,7 +80,8 @@ export const getWallets$ = (
 				if (
 					wallet.isConnected ||
 					reconnectingWallets.has(wallet.id) ||
-					reconnectedWallets.has(wallet.id)
+					reconnectedWallets.has(wallet.id) ||
+					(failedAttempts.get(wallet.id) ?? 0) >= MAX_RECONNECT_ATTEMPTS
 				) {
 					return;
 				}
@@ -81,7 +90,12 @@ export const getWallets$ = (
 				try {
 					await wallet.connect();
 					reconnectedWallets.add(wallet.id);
+					failedAttempts.delete(wallet.id);
 				} catch (err) {
+					failedAttempts.set(
+						wallet.id,
+						(failedAttempts.get(wallet.id) ?? 0) + 1,
+					);
 					console.error("Failed to reconnect wallet %s", wallet.id, { err });
 				} finally {
 					reconnectingWallets.delete(wallet.id);

@@ -27,21 +27,40 @@ import { resolveConfig } from "./config";
 import { acceptsCachedAccount } from "./platform";
 import { createKheopskitStore } from "./store";
 import type {
+	BaseWallet,
+	BaseWalletAccount,
 	KheopskitConfig,
 	KheopskitPlatform,
 	KheopskitState,
+	WalletConnectWallet,
 } from "./types";
+import { isWalletConnectWallet } from "./types";
 import { getWallets$ } from "./wallets";
 
 export type { KheopskitConfig, KheopskitState } from "./types";
+
+/** Options for {@link getKheopskit$}. */
+export type GetKheopskitOptions = {
+	/**
+	 * Cookie string for SSR hydration. When provided, state is read from cookies
+	 * instead of localStorage so the server can hydrate without a flash. Pass the
+	 * request's `cookie` header.
+	 */
+	ssrCookies?: string;
+	/**
+	 * An existing store to reuse instead of creating one. Advanced escape hatch —
+	 * most callers omit it. (`@kheopskit/react` passes its provider-scoped store.)
+	 */
+	store?: ReturnType<typeof createKheopskitStore>;
+};
 
 export const getKheopskit$ = <
 	const P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],
 >(
 	config?: Partial<KheopskitConfig<P>>,
-	ssrCookies?: string,
-	existingStore?: ReturnType<typeof createKheopskitStore>,
+	options: GetKheopskitOptions = {},
 ): Observable<KheopskitState<P>> => {
+	const { ssrCookies, store: existingStore } = options;
 	const kc = resolveConfig(config);
 	const store =
 		existingStore ??
@@ -187,15 +206,18 @@ export const getKheopskit$ = <
 				),
 				// Debounce to avoid excessive writes
 				debounceTime(1000),
-				// Only persist if state actually changed
+				// Only persist if the serialized snapshot would actually change.
+				// Compare the persisted fields (not just ids): an Ethereum chain switch
+				// keeps the same account id but changes the cached chainId, so an
+				// id-only comparator would skip persisting it.
 				distinctUntilChanged((prev, curr) => {
-					const prevWalletIds = prev.wallets.items.map((w) => w.id);
-					const currWalletIds = curr.wallets.items.map((w) => w.id);
-					const prevAccountIds = prev.accounts.items.map((a) => a.id);
-					const currAccountIds = curr.accounts.items.map((a) => a.id);
+					const prevWalletKeys = prev.wallets.items.map(walletPersistKey);
+					const currWalletKeys = curr.wallets.items.map(walletPersistKey);
+					const prevAccountKeys = prev.accounts.items.map(accountChangeKey);
+					const currAccountKeys = curr.accounts.items.map(accountChangeKey);
 					return (
-						arraysEqual(prevWalletIds, currWalletIds) &&
-						arraysEqual(prevAccountIds, currAccountIds)
+						arraysEqual(prevWalletKeys, currWalletKeys) &&
+						arraysEqual(prevAccountKeys, currAccountKeys)
 					);
 				}),
 			)
@@ -248,38 +270,62 @@ export const getKheopskit$ = <
 const arraysEqual = (a: string[], b: string[]) =>
 	a.length === b.length && a.every((v, i) => v === b[i]);
 
+// Mutable per-platform account fields that can change without the account id
+// changing. Declared locally (not imported from the platform packages) so this
+// core entry stays free of platform SDK types — see check:isolation.
+type EthereumAccountFields = { chainId?: number };
+type PolkadotAccountFields = { type?: string };
+type SolanaAccountFields = { chains?: string[] };
+
 /**
- * Deep equality check for KheopskitState to prevent unnecessary emissions.
+ * A signature of an account covering its id plus the platform-specific fields
+ * that can change without the id changing (Ethereum chainId, Polkadot key type,
+ * Solana clusters). Used to detect both UI-relevant changes and changes worth
+ * re-persisting, so the two comparators can't drift apart.
+ */
+const accountChangeKey = (account: BaseWalletAccount): string => {
+	switch (account.platform) {
+		case "ethereum":
+			return `${account.id}|${(account as EthereumAccountFields).chainId ?? ""}`;
+		case "polkadot":
+			return `${account.id}|${(account as PolkadotAccountFields).type ?? ""}`;
+		case "solana":
+			return `${account.id}|${((account as SolanaAccountFields).chains ?? []).join(",")}`;
+		default:
+			return account.id;
+	}
+};
+
+/** Platforms a wallet's live session carries (only the WalletConnect connector). */
+const walletPlatforms = (wallet: BaseWallet | WalletConnectWallet): string =>
+	isWalletConnectWallet(wallet) ? wallet.platforms.join(",") : "";
+
+/** Fields persisted to the cache for a wallet (icon is stored separately). */
+const walletPersistKey = (wallet: BaseWallet | WalletConnectWallet): string =>
+	`${wallet.id}|${wallet.isConnected ? 1 : 0}|${wallet.name}`;
+
+/**
+ * UI-significant signature of a wallet: the persisted fields plus icon and the
+ * WalletConnect connector's `platforms` array, which drive what the UI shows but
+ * aren't part of the id (icon and platforms can arrive asynchronously after
+ * connect without isConnected flipping).
+ */
+const walletUiKey = (wallet: BaseWallet | WalletConnectWallet): string =>
+	`${walletPersistKey(wallet)}|${wallet.icon}|${walletPlatforms(wallet)}`;
+
+/**
+ * Equality check for KheopskitState to prevent unnecessary emissions. Compares
+ * the UI-significant signature of every wallet and account, in order.
  */
 const statesEqual = (a: KheopskitState, b: KheopskitState): boolean =>
 	a.isHydrating === b.isHydrating &&
 	a.wallets.length === b.wallets.length &&
 	a.accounts.length === b.accounts.length &&
-	a.wallets.every(
-		(w, i) =>
-			w.id === b.wallets[i]?.id && w.isConnected === b.wallets[i]?.isConnected,
-	) &&
+	a.wallets.every((w, i) => {
+		const other = b.wallets[i];
+		return !!other && walletUiKey(w) === walletUiKey(other);
+	}) &&
 	a.accounts.every((acc, i) => {
 		const other = b.accounts[i];
-		if (acc.id !== other?.id) return false;
-		// Compare platform-specific fields that can change without the account id
-		// changing, so the UI re-renders on e.g. an Ethereum chain switch.
-		switch (acc.platform) {
-			case "ethereum":
-				return (
-					(acc as { chainId?: number }).chainId ===
-					(other as { chainId?: number }).chainId
-				);
-			case "polkadot":
-				return (
-					(acc as { type?: string }).type === (other as { type?: string }).type
-				);
-			case "solana":
-				return arraysEqual(
-					(acc as { chains?: string[] }).chains ?? [],
-					(other as { chains?: string[] }).chains ?? [],
-				);
-			default:
-				return true;
-		}
+		return !!other && accountChangeKey(acc) === accountChangeKey(other);
 	});

@@ -16,7 +16,6 @@ describe("getWalletConnectWallet$ when @reown/appkit is unavailable", () => {
 	afterEach(() => {
 		vi.resetModules();
 		vi.restoreAllMocks();
-		vi.unmock("@reown/appkit/core");
 	});
 
 	it("degrades to no connector and logs an error (optional peer dep missing)", async () => {
@@ -50,7 +49,6 @@ describe("getWalletConnectWallet$ disconnect", () => {
 	afterEach(() => {
 		vi.resetModules();
 		vi.restoreAllMocks();
-		vi.unmock("@reown/appkit/core");
 	});
 
 	it("awaits the underlying disconnect and drops cached accounts when the status flips to disconnected", async () => {
@@ -124,7 +122,6 @@ describe("getWalletConnectWallet$ single-session connect model", () => {
 	afterEach(() => {
 		vi.resetModules();
 		vi.restoreAllMocks();
-		vi.unmock("@reown/appkit/core");
 	});
 
 	// Fake AppKit whose connected namespaces the test drives via `emit`.
@@ -240,6 +237,86 @@ describe("getWalletConnectWallet$ single-session connect model", () => {
 
 		const wallet = emissions.at(-1);
 		expect(wallet?.platforms).toEqual(["ethereum"]);
+
+		sub.unsubscribe();
+		resetAppKitCache();
+	});
+});
+
+describe("getWalletConnectWallet$ single AppKit instance", () => {
+	afterEach(() => {
+		vi.resetModules();
+		vi.restoreAllMocks();
+	});
+
+	const makeCreateAppKit = () =>
+		vi.fn(() => ({
+			chainNamespaces: ["eip155"],
+			subscribeProviders: (cb: (p: Record<string, unknown>) => void) => {
+				cb({});
+				return () => {};
+			},
+			getWalletInfo: () => undefined,
+			open: vi.fn(() => Promise.resolve()),
+			disconnect: vi.fn(() => Promise.resolve()),
+		}));
+
+	it("creates the AppKit instance at most once across teardown and re-subscribe", async () => {
+		vi.resetModules();
+		// createAppKit must run at most once per process — Reown AppKit cannot be
+		// instantiated twice. The cached connector observable is multicast with
+		// refCount:false so draining every subscriber and re-subscribing (React
+		// unmount/remount, StrictMode) does NOT re-run the producer.
+		const createAppKit = makeCreateAppKit();
+		vi.doMock("@reown/appkit/core", () => ({ createAppKit }));
+
+		const { getWalletConnectWallet$, resetAppKitCache } = await import(
+			"./appKit"
+		);
+		resetAppKitCache();
+
+		// First subscriber, then fully unsubscribe (drains refCount to 0).
+		const sub1 = getWalletConnectWallet$(walletConnectConfig).subscribe();
+		await vi.waitFor(() => expect(createAppKit).toHaveBeenCalledTimes(1));
+		sub1.unsubscribe();
+
+		// Re-subscribe after the previous subscriber drained — must reuse the
+		// existing AppKit instance, not create a second one.
+		const sub2 = getWalletConnectWallet$(walletConnectConfig).subscribe();
+		await new Promise((r) => setTimeout(r, 10));
+		expect(createAppKit).toHaveBeenCalledTimes(1);
+
+		sub2.unsubscribe();
+		resetAppKitCache();
+	});
+
+	it("warns when re-initialised with a different projectId", async () => {
+		vi.resetModules();
+		const createAppKit = makeCreateAppKit();
+		vi.doMock("@reown/appkit/core", () => ({ createAppKit }));
+
+		const { getWalletConnectWallet$, resetAppKitCache } = await import(
+			"./appKit"
+		);
+		resetAppKitCache();
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		const cfgB = {
+			...walletConnectConfig,
+			walletConnect: {
+				...walletConnectConfig.walletConnect,
+				projectId: "different",
+			},
+		} as unknown as KheopskitConfig;
+
+		const sub = getWalletConnectWallet$(walletConnectConfig).subscribe();
+		getWalletConnectWallet$(cfgB); // different projectId → warns, reuses instance
+
+		expect(warnSpy).toHaveBeenCalledWith(
+			expect.stringContaining("already initialised with projectId"),
+			expect.anything(),
+			expect.anything(),
+		);
 
 		sub.unsubscribe();
 		resetAppKitCache();

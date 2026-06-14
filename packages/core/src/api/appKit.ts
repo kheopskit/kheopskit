@@ -45,17 +45,30 @@ const WALLET_CONNECT_ICON =
 // globalThis so it stays a single instance even if this module is duplicated
 // across bundle chunks (e.g. CJS subpath entries).
 const APPKIT_SYMBOL = Symbol.for("kheopskit.cachedAppKit");
+// The projectId AppKit was first initialised with. AppKit is a process-wide
+// singleton, so a later call with a different WalletConnect config is silently
+// ignored — we keep this to warn loudly instead of letting it pass unnoticed.
+const APPKIT_PROJECT_ID_SYMBOL = Symbol.for("kheopskit.cachedAppKitProjectId");
 type AppKitGlobal = Record<
 	symbol,
-	Observable<WalletConnectWallet | null> | undefined
+	Observable<WalletConnectWallet | null> | string | undefined
 >;
 const getCachedAppKit = ():
 	| Observable<WalletConnectWallet | null>
-	| undefined => (globalThis as unknown as AppKitGlobal)[APPKIT_SYMBOL];
+	| undefined =>
+	(globalThis as unknown as AppKitGlobal)[APPKIT_SYMBOL] as
+		| Observable<WalletConnectWallet | null>
+		| undefined;
+const getCachedAppKitProjectId = (): string | undefined =>
+	(globalThis as unknown as AppKitGlobal)[APPKIT_PROJECT_ID_SYMBOL] as
+		| string
+		| undefined;
 const setCachedAppKit = (
 	value: Observable<WalletConnectWallet | null> | undefined,
+	projectId?: string,
 ): void => {
 	(globalThis as unknown as AppKitGlobal)[APPKIT_SYMBOL] = value;
+	(globalThis as unknown as AppKitGlobal)[APPKIT_PROJECT_ID_SYMBOL] = projectId;
 };
 
 /**
@@ -111,6 +124,21 @@ export const getWalletConnectWallet$ = (
 	if (typeof window === "undefined") return of(null);
 
 	const walletConnect = config.walletConnect;
+
+	const cachedProjectId = getCachedAppKitProjectId();
+	if (
+		cachedProjectId !== undefined &&
+		cachedProjectId !== walletConnect.projectId
+	) {
+		console.warn(
+			"[kheopskit] WalletConnect is already initialised with projectId %s; " +
+				"AppKit is a process-wide singleton, so the first configuration wins and " +
+				"projectId %s is ignored. Call resetAppKitCache() before re-initialising " +
+				"if the WalletConnect config must change.",
+			cachedProjectId,
+			walletConnect.projectId,
+		);
+	}
 
 	let cachedAppKit = getCachedAppKit();
 	if (!cachedAppKit) {
@@ -233,9 +261,17 @@ export const getWalletConnectWallet$ = (
 					};
 				});
 			}),
-			shareReplay({ refCount: true, bufferSize: 1 }),
+			// refCount:false keeps the AppKit instance alive for the process lifetime
+			// once created: createAppKit runs at most once (Reown AppKit cannot be
+			// instantiated twice). With refCount:true the producer would re-run
+			// createAppKit whenever every subscriber drained and a new one
+			// re-subscribed — e.g. a React unmount/remount or StrictMode's
+			// mount→unmount→remount — throwing on the duplicate Lit web components and
+			// WalletConnect modal singleton. The replayed connector value also keeps
+			// the wallet list stable across such teardown/rebuild cycles.
+			shareReplay({ refCount: false, bufferSize: 1 }),
 		);
-		setCachedAppKit(cachedAppKit);
+		setCachedAppKit(cachedAppKit, walletConnect.projectId);
 	}
 
 	return cachedAppKit;

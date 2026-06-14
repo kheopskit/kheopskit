@@ -31,6 +31,9 @@ describe("createStore (React)", () => {
 		it("returns latest emitted value", () => {
 			const subject = new BehaviorSubject({ count: 0 });
 			const store = createStore(subject.asObservable(), { count: 0 });
+			// React subscribes (in an effect) before reading snapshots; the
+			// subscription is what tracks live emissions into getSnapshot.
+			store.subscribe(() => {});
 
 			subject.next({ count: 10 });
 			expect(store.getSnapshot()).toEqual({ count: 10 });
@@ -291,6 +294,9 @@ describe("createStore (React)", () => {
 
 			const subject = new BehaviorSubject(clientData);
 			const store = createStore(subject.asObservable(), serverData, serverData);
+			// React subscribes on the client (in an effect) before reading
+			// getSnapshot; the subscription is what surfaces the live client value.
+			store.subscribe(() => {});
 
 			// Server returns stable value
 			expect(store.getServerSnapshot()).toEqual(serverData);

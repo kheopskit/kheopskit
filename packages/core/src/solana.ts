@@ -11,5 +11,9 @@ export type {
 	SolanaSigner,
 	SolanaWallet,
 } from "./api/solana/types";
-export { isWalletConnectWallet, type WalletConnectWallet } from "./api/types";
+export {
+	isInjectedWallet,
+	isWalletConnectWallet,
+	type WalletConnectWallet,
+} from "./api/types";
 export { isSolanaAddress } from "./utils/isSolanaAddress";

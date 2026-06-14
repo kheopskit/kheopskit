@@ -53,8 +53,7 @@ describe("getKheopskit$ cached account filtering", () => {
 					storageKey: "kheopskit",
 					hydrationGracePeriod: 500,
 				},
-				undefined,
-				store,
+				{ store },
 			).pipe(take(1)),
 		);
 
@@ -97,8 +96,7 @@ describe("getKheopskit$ cached account filtering", () => {
 					storageKey: "kheopskit",
 					hydrationGracePeriod: 500,
 				},
-				undefined,
-				store,
+				{ store },
 			).pipe(take(1)),
 		);
 

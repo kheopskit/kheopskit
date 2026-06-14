@@ -118,6 +118,24 @@ export const isWalletConnectWallet = (
 ): wallet is WalletConnectWallet => wallet.type === "walletconnect";
 
 /**
+ * Narrows a wallet to an injected (browser-extension / Wallet Standard) wallet —
+ * the complement of {@link isWalletConnectWallet}. `state.wallets` is
+ * `(InjectedWallet | WalletConnectWallet)[]`, so use this to recover the
+ * injected-only fields when iterating: `platform`, `sourceId`, and the SDK
+ * handle (`provider` on Ethereum, `extension` on Polkadot, `wallet` on Solana).
+ *
+ * @example
+ * ```ts
+ * for (const wallet of wallets.filter(isInjectedWallet)) {
+ *   console.log(wallet.platform, wallet.sourceId); // typed, no WC widening
+ * }
+ * ```
+ */
+export const isInjectedWallet = <W extends BaseWallet | WalletConnectWallet>(
+	wallet: W,
+): wallet is Exclude<W, WalletConnectWallet> => wallet.type === "injected";
+
+/**
  * Dapp metadata shown in the WalletConnect modal. Mirrors WalletConnect's
  * `Metadata`, declared locally so core doesn't depend on
  * `@walletconnect/universal-provider`.
