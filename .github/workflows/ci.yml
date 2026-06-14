@@ -22,6 +22,8 @@ jobs:
         run: pnpm check
       - name: Build packages
         run: pnpm build:packages
+      - name: Knip
+        run: pnpm knip
       - name: Bundle isolation
         run: pnpm check:isolation
       - name: Typecheck

@@ -27,7 +27,7 @@
 		"check": "pnpm biome check .",
 		"check:isolation": "node scripts/check-bundle-isolation.mjs",
 		"typecheck": "pnpm -r --parallel typecheck",
-		"knip": "knip"
+		"knip": "knip --treat-config-hints-as-errors --treat-tag-hints-as-errors"
 	},
 	"keywords": [],
 	"author": "",
