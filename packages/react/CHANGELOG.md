@@ -1,29 +1,5 @@
 # @kheopskit/react
 
-## 5.0.0
-
-### Major Changes
-
-- WalletConnect is now a single, platform-less connector instead of one wallet per platform.
-
-  A WalletConnect session is shared across every namespace and is established in a single pairing, so `wallets` now contains exactly one `WalletConnectWallet` (`type: "walletconnect"`, no `platform`) with a `platforms: WalletPlatform[]` array of the namespaces the live session actually approved. Its accounts still appear in `accounts`, each carrying its own `platform`.
-
-  This fixes the previous behaviour where each platform showed its own "WalletConnect" connect button — only the first did anything, and disconnecting one tore down the whole session.
-
-  BREAKING CHANGES:
-
-  - Removed `AppKitWallet`, `PolkadotAppKitWallet`, `EthereumAppKitWallet`, `SolanaAppKitWallet`. Use `WalletConnectWallet` together with the `isWalletConnectWallet(wallet)` type guard (exported from `@kheopskit/core` and from each platform entry point).
-  - `WalletType` is now `"injected" | "walletconnect"` (`"appKit"` removed).
-  - The WalletConnect entry has no `platform` field — narrow with `isWalletConnectWallet(wallet)` before reading `wallet.platform`. Per-platform wallet filters (`wallets.filter(w => w.platform === "polkadot")`) no longer match it; find it with `wallets.find(isWalletConnectWallet)`.
-  - Connect/disconnect are session-wide: connecting opens one modal and the wallet approves whichever namespaces it supports; a namespace cannot be added to a live session (disconnect and re-pair to change the approved set).
-
-### Patch Changes
-
-- [`ef02b3a`](https://github.com/kheopskit/kheopskit/commit/ef02b3ade87c04c1732e746f4490b70b94b85451) Thanks [@0xKheops](https://github.com/0xKheops)! - fix: wallet connect ethereum
-
-- Updated dependencies [[`ef02b3a`](https://github.com/kheopskit/kheopskit/commit/ef02b3ade87c04c1732e746f4490b70b94b85451)]:
-  - @kheopskit/core@5.0.0
-
 ## 4.0.0
 
 ### Major Changes
