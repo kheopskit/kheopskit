@@ -1,8 +1,13 @@
 import { uniq } from "lodash-es";
 import { createStore } from "../utils/createStore";
+import { isWalletPlatform } from "../utils/isWalletPlatform";
 import { cookieStorage, safeLocalStorage } from "../utils/storage";
 import { getWalletAccountId } from "../utils/WalletAccountId";
-import { parseWalletId, type WalletId } from "../utils/WalletId";
+import {
+	isValidWalletId,
+	parseWalletId,
+	type WalletId,
+} from "../utils/WalletId";
 import { DEFAULT_STORAGE_KEY } from "./config";
 import type { CachedAccount, CachedWallet } from "./types";
 
@@ -35,6 +40,39 @@ type CompactStoreV1 = {
 };
 
 const DEFAULT_SETTINGS: KheopskitStoreData = {};
+
+/**
+ * Validates a cached wallet read from persisted storage. Cached state may have
+ * been written by an older (or corrupted) version with a different shape, so we
+ * drop anything that wouldn't survive hydration/sort rather than letting it
+ * throw at render time. Only the fields downstream code relies on are checked.
+ */
+const isValidCachedWallet = (value: unknown): value is CachedWallet => {
+	if (!value || typeof value !== "object") return false;
+	const w = value as Record<string, unknown>;
+	return (
+		isValidWalletId(w.id) &&
+		isWalletPlatform(w.platform) &&
+		typeof w.name === "string" &&
+		(w.type === "injected" || w.type === "appKit") &&
+		typeof w.isConnected === "boolean"
+	);
+};
+
+/** Validates a cached account read from persisted storage. See {@link isValidCachedWallet}. */
+const isValidCachedAccount = (value: unknown): value is CachedAccount => {
+	if (!value || typeof value !== "object") return false;
+	const a = value as Record<string, unknown>;
+	return (
+		typeof a.id === "string" &&
+		!!a.id &&
+		isWalletPlatform(a.platform) &&
+		typeof a.address === "string" &&
+		!!a.address &&
+		isValidWalletId(a.walletId) &&
+		typeof a.walletName === "string"
+	);
+};
 
 const toCompactPolkadotAccountType = (
 	type: CachedAccount["polkadotAccountType"],
@@ -118,10 +156,21 @@ export const createKheopskitStore = (
 	};
 
 	const getCachedState = () => {
-		const data = store.get();
+		// `store.get()` returns whatever JSON was persisted — it may be from an
+		// older version, a different shape, or outright corrupt. Read defensively:
+		// coerce non-objects/arrays to empty and drop any entry that fails
+		// validation, so stale cache degrades to "start fresh" instead of throwing
+		// during hydration (which renders eagerly, so a throw blanks the dapp).
+		const data = store.get() as Partial<KheopskitStoreData> | null | undefined;
+		const cachedWallets = Array.isArray(data?.cachedWallets)
+			? data.cachedWallets
+			: [];
+		const cachedAccounts = Array.isArray(data?.cachedAccounts)
+			? data.cachedAccounts
+			: [];
 		return {
-			wallets: data.cachedWallets ?? [],
-			accounts: data.cachedAccounts ?? [],
+			wallets: cachedWallets.filter(isValidCachedWallet),
+			accounts: cachedAccounts.filter(isValidCachedAccount),
 		};
 	};
 
@@ -222,23 +271,33 @@ const toCompactStore = (data: KheopskitStoreData): CompactStoreV1 => {
 const fromCompactStore = (data: CompactStoreV1): KheopskitStoreData => {
 	const walletNameMap = new Map<WalletId, string>();
 
-	const wallets: CachedWallet[] = (data.w ?? []).map((item) => {
+	// Decode defensively: a compact payload may be malformed (older/corrupt
+	// cookie, hand-edited). Skip entries with an unparseable wallet id rather
+	// than throwing, which would crash store initialisation.
+	const wallets: CachedWallet[] = [];
+	for (const item of Array.isArray(data.w) ? data.w : []) {
+		if (!Array.isArray(item)) continue;
 		const [id, name, isConnected, type] = item;
-		walletNameMap.set(id, name);
+		if (!isValidWalletId(id)) continue;
 		const { platform } = parseWalletId(id);
-		return {
+		walletNameMap.set(id, name);
+		wallets.push({
 			id,
 			platform,
 			type: type === 1 ? "appKit" : "injected",
 			name,
 			isConnected: isConnected === 1,
-		};
-	});
+		});
+	}
 
-	const accounts: CachedAccount[] = (data.a ?? []).map((item) => {
+	const accounts: CachedAccount[] = [];
+	for (const item of Array.isArray(data.a) ? data.a : []) {
+		if (!Array.isArray(item)) continue;
 		const [walletId, address, name, chainId, polkadotAccountType] = item;
+		if (!isValidWalletId(walletId) || typeof address !== "string" || !address)
+			continue;
 		const { platform } = parseWalletId(walletId);
-		return {
+		accounts.push({
 			id: getWalletAccountId(walletId, address),
 			platform,
 			address,
@@ -250,8 +309,8 @@ const fromCompactStore = (data: CompactStoreV1): KheopskitStoreData => {
 					: undefined,
 			walletId,
 			walletName: walletNameMap.get(walletId) ?? walletId,
-		};
-	});
+		});
+	}
 
 	return {
 		autoReconnect: data.r,

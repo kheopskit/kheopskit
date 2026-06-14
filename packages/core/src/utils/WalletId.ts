@@ -19,3 +19,13 @@ export const parseWalletId = (walletId: string) => {
 	if (!identifier) throw new Error("Invalid address");
 	return { platform, identifier };
 };
+
+/**
+ * Non-throwing variant of {@link parseWalletId}. Use when validating untrusted
+ * input (e.g. cached state persisted by an older version) before parsing.
+ */
+export const isValidWalletId = (walletId: unknown): walletId is WalletId => {
+	if (typeof walletId !== "string" || !walletId) return false;
+	const [platform, identifier] = walletId.split(":");
+	return isWalletPlatform(platform) && !!identifier;
+};

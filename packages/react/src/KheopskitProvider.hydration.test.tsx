@@ -187,4 +187,31 @@ describe("KheopskitProvider hydration (no flash on SPA reload)", () => {
 			"polkadot:Talisman,ethereum:Beta,solana:Zeta",
 		);
 	});
+
+	it("renders empty (no crash) when localStorage holds malformed/legacy cache", () => {
+		// Cache written by an older or incompatible version: wrong wallet id shape
+		// and accounts missing required fields. The provider must degrade to an
+		// empty list, not throw during render and blank the dapp.
+		localStorage.setItem(
+			STORAGE_KEY,
+			JSON.stringify({
+				cachedWallets: [
+					{ id: "garbage", name: "X" },
+					{ id: "polkadot:talisman", platform: "polkadot" }, // missing fields
+				],
+				cachedAccounts: [{ foo: "bar" }],
+			}),
+		);
+
+		expect(() =>
+			render(
+				<KheopskitProvider config={{ platforms: [polkadot()] }}>
+					<WalletsConsumer />
+				</KheopskitProvider>,
+			),
+		).not.toThrow();
+
+		expect(screen.getByTestId("wallets-count")).toHaveTextContent("0");
+		expect(screen.getByTestId("accounts-count")).toHaveTextContent("0");
+	});
 });
