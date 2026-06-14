@@ -1,5 +1,15 @@
 # kheopskit
 
+## 5.0.1
+
+### Patch Changes
+
+- [`98786a2`](https://github.com/kheopskit/kheopskit/commit/98786a2a8bcbafe3314637c1388c3e49255da242) Thanks [@0xKheops](https://github.com/0xKheops)! - fix chain switching
+
+- Updated dependencies [[`98786a2`](https://github.com/kheopskit/kheopskit/commit/98786a2a8bcbafe3314637c1388c3e49255da242)]:
+  - @kheopskit/core@5.0.1
+  - @kheopskit/react@5.0.1
+
 ## 5.0.0
 
 ### Major Changes
