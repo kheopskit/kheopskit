@@ -16,7 +16,8 @@ import {
 } from "viem";
 import { getWalletAccountId } from "../../utils";
 import { getCachedObservable$ } from "../../utils/getCachedObservable";
-import type { EthereumAppKitWallet } from "../types";
+import type { WalletConnectWallet } from "../types";
+import { isWalletConnectWallet } from "../types";
 import type {
 	EthereumAccount,
 	EthereumInjectedWallet,
@@ -162,14 +163,15 @@ const wrapWalletConnectProvider = (
 const sameAddresses = (a: string[], b: string[]) =>
 	a.length === b.length && a.every((addr, i) => addr === b[i]);
 
-const getAppKitAccounts$ = (
-	wallet: EthereumAppKitWallet,
+const getWalletConnectAccounts$ = (
+	wallet: WalletConnectWallet,
 ): Observable<EthereumAccount[]> => {
 	const provider = wallet.appKit.getProvider("eip155");
 
-	if (!wallet.isConnected || !provider?.session) return of([]);
+	if (!wallet.platforms.includes("ethereum") || !provider?.session)
+		return of([]);
 
-	return getCachedObservable$(`accounts:${wallet.id}:`, () =>
+	return getCachedObservable$(`accounts:${wallet.id}:ethereum:`, () =>
 		new Observable<EthereumAccount[]>((subscriber) => {
 			const caipNetworkId$ = new ReplaySubject<string>(1);
 			const addresses$ = new ReplaySubject<string[]>(1);
@@ -261,7 +263,7 @@ const getAppKitAccounts$ = (
 };
 
 export const getEthereumAccounts$ = (
-	ethereumWallets: Observable<EthereumWallet[]>,
+	ethereumWallets: Observable<(EthereumWallet | WalletConnectWallet)[]>,
 ) =>
 	new Observable<EthereumAccount[]>((subscriber) => {
 		const sub = ethereumWallets
@@ -274,9 +276,8 @@ export const getEthereumAccounts$ = (
 									.filter((w) => w.type === "injected")
 									.map(getInjectedWalletAccounts$),
 								...wallets
-									.filter((w) => w.type === "appKit")
-									.map(getAppKitAccounts$),
-								// todo appkit
+									.filter(isWalletConnectWallet)
+									.map(getWalletConnectAccounts$),
 							])
 						: of([]);
 				}),

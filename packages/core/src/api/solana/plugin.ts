@@ -40,8 +40,7 @@ export const solana = (
 
 	return {
 		platform: "solana",
-		getWallets$: (ctx: PlatformContext) =>
-			getSolanaWallets$(ctx.config, ctx.store),
+		getWallets$: (ctx: PlatformContext) => getSolanaWallets$(ctx.store),
 		getAccounts$: (wallets$) => getSolanaAccounts$(wallets$, chain),
 	};
 };

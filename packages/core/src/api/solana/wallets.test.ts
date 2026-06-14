@@ -1,7 +1,6 @@
 import { firstValueFrom } from "rxjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { KheopskitStore } from "../store";
-import type { KheopskitConfig } from "../types";
 import type { SolanaWallet } from "./types";
 
 type Listener = (...args: unknown[]) => void;
@@ -52,7 +51,6 @@ const createMockStandardWallet = (name: string, solana = true) => ({
 	},
 });
 
-const config = { platforms: ["solana"] } as unknown as KheopskitConfig;
 const mockStore = {
 	addEnabledWalletId: vi.fn(),
 	removeEnabledWalletId: vi.fn(),
@@ -72,7 +70,7 @@ describe("getSolanaWallets$", () => {
 		mockState.wallets = [createMockStandardWallet("Phantom")];
 		const { getSolanaWallets$ } = await importWallets();
 
-		const wallets = await firstValueFrom(getSolanaWallets$(config, mockStore));
+		const wallets = await firstValueFrom(getSolanaWallets$(mockStore));
 
 		expect(wallets).toHaveLength(1);
 		expect(wallets[0]?.name).toBe("Phantom");
@@ -88,7 +86,7 @@ describe("getSolanaWallets$", () => {
 		];
 		const { getSolanaWallets$ } = await importWallets();
 
-		const wallets = await firstValueFrom(getSolanaWallets$(config, mockStore));
+		const wallets = await firstValueFrom(getSolanaWallets$(mockStore));
 
 		expect(wallets).toHaveLength(1);
 		expect(wallets[0]?.name).toBe("Phantom");
@@ -98,7 +96,7 @@ describe("getSolanaWallets$", () => {
 		const { getSolanaWallets$ } = await importWallets();
 
 		const seen: number[] = [];
-		const sub = getSolanaWallets$(config, mockStore).subscribe((w) =>
+		const sub = getSolanaWallets$(mockStore).subscribe((w) =>
 			seen.push(w.length),
 		);
 
@@ -120,7 +118,7 @@ describe("getSolanaWallets$", () => {
 		const { getSolanaWallets$ } = await importWallets();
 
 		let latest: SolanaWallet[] = [];
-		const sub = getSolanaWallets$(config, mockStore).subscribe((w) => {
+		const sub = getSolanaWallets$(mockStore).subscribe((w) => {
 			latest = w;
 		});
 
@@ -149,7 +147,7 @@ describe("getSolanaWallets$", () => {
 		clearAllCachedObservables();
 
 		let latest: SolanaWallet[] = [];
-		const sub = getSolanaWallets$(config, mockStore).subscribe((w) => {
+		const sub = getSolanaWallets$(mockStore).subscribe((w) => {
 			latest = w;
 		});
 		await new Promise((r) => setTimeout(r, 10));

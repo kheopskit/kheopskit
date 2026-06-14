@@ -6,7 +6,6 @@ import type {
 } from "viem";
 import type { WalletAccountId } from "../../utils/WalletAccountId";
 import type { WalletId } from "../../utils/WalletId";
-import type { EthereumAppKitWallet } from "../types";
 
 export type EthereumInjectedWallet = {
 	platform: "ethereum";
@@ -26,7 +25,7 @@ export type EthereumInjectedWallet = {
 	disconnect: () => Promise<void>;
 };
 
-export type EthereumWallet = EthereumInjectedWallet | EthereumAppKitWallet;
+export type EthereumWallet = EthereumInjectedWallet;
 
 export type EthereumAccount = {
 	id: WalletAccountId;

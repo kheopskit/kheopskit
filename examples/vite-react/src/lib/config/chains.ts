@@ -7,26 +7,6 @@ import {
 import * as viemChains from "viem/chains";
 import type { PolkadotChainId } from "../getPolkadotApi";
 
-export const polkadot = defineChain({
-	id: "91b171bb158e2d3848fa23a9f1c25182",
-	name: "Polkadot",
-	nativeCurrency: { name: "Polkadot", symbol: "DOT", decimals: 10 },
-	rpcUrls: {
-		default: {
-			http: ["https://rpc.ibp.network/polkadot"],
-			webSocket: ["wss://rpc.ibp.network/polkadot"],
-		},
-	},
-	blockExplorers: {
-		default: {
-			name: "Polkadot Explorer",
-			url: "https://polkadot.subscan.io/",
-		},
-	},
-	chainNamespace: "polkadot",
-	caipNetworkId: "polkadot:91b171bb158e2d3848fa23a9f1c25182",
-});
-
 export const polkadotAssetHub = defineChain({
 	id: "68d56f15f85d3136970ec16946040bc1",
 	name: "Polkadot Asset Hub",
@@ -47,24 +27,29 @@ export const polkadotAssetHub = defineChain({
 	caipNetworkId: "polkadot:68d56f15f85d3136970ec16946040bc1",
 });
 
-export const westendAssetHub = defineChain({
-	id: "67f9723393ef76214df0118c34bbbd3d",
-	name: "Westend Asset Hub",
-	nativeCurrency: { name: "Westend", symbol: "WND", decimals: 10 },
+// Polkadot Asset Hub's EVM (PolkaVM) endpoint, exposed as an eip155 network so
+// it shows up under the Ethereum platform. Distinct from `polkadotAssetHub`
+// above, which is the substrate (polkadot-namespace) view of the same chain.
+export const polkadotAssetHubEvm = defineChain({
+	id: "420420419",
+	name: "Polkadot Asset Hub (EVM)",
+	nativeCurrency: { name: "DOT", symbol: "DOT", decimals: 18 },
 	rpcUrls: {
 		default: {
-			http: ["https://westend-asset-hub.polkadot.io"],
-			webSocket: ["wss://westend-asset-hub.polkadot.io"],
+			http: [
+				"https://services.polkadothub-rpc.com/mainnet",
+				"https://eth-rpc.polkadot.io",
+			],
 		},
 	},
 	blockExplorers: {
 		default: {
-			name: "Polkadot Explorer",
-			url: "https://assethub-westend.subscan.io/",
+			name: "Blockscout",
+			url: "https://blockscout.polkadot.io/",
 		},
 	},
-	chainNamespace: "polkadot",
-	caipNetworkId: "polkadot:67f9723393ef76214df0118c34bbbd3d",
+	chainNamespace: "eip155",
+	caipNetworkId: "eip155:420420419",
 });
 
 const viemChainToWalletConnectChain = (chain: viemChains.Chain) => {
@@ -82,13 +67,10 @@ const viemChainToWalletConnectChain = (chain: viemChains.Chain) => {
 };
 
 export const APPKIT_CHAINS: [AppKitNetwork, ...AppKitNetwork[]] = [
-	polkadot,
 	polkadotAssetHub,
-	westendAssetHub,
-	viemChainToWalletConnectChain(viemChains.sepolia),
-	viemChainToWalletConnectChain(viemChains.moonbaseAlpha),
+	polkadotAssetHubEvm,
 	viemChainToWalletConnectChain(viemChains.mainnet),
-	viemChainToWalletConnectChain(viemChains.westendAssetHub),
+	viemChainToWalletConnectChain(viemChains.base),
 	solana,
 ];
 
@@ -98,9 +80,7 @@ export const VIEM_CHAINS_BY_ID: Record<number, viemChains.Chain> =
 // maps a chain id to a papi descriptor key
 export const APPKIT_CHAIN_ID_TO_DOT_CHAIN_ID: Record<string, PolkadotChainId> =
 	{
-		"91b171bb158e2d3848fa23a9f1c25182": "polkadot",
 		"68d56f15f85d3136970ec16946040bc1": "polkadotAssetHub",
-		"67f9723393ef76214df0118c34bbbd3d": "westendAssetHub",
 	};
 
 export const isPolkadotNetwork = (network: AppKitNetwork): boolean => {

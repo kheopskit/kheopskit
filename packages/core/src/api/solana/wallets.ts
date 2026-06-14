@@ -14,12 +14,10 @@ import {
 } from "rxjs";
 import { clearCachedObservablesByPrefix } from "../../utils/getCachedObservable";
 import { getWalletId, type WalletId } from "../../utils/WalletId";
-import { getAppKitWallets$ } from "../appKit";
 import { KheopskitError } from "../errors";
 import { store as defaultStore, type KheopskitStore } from "../store";
-import type { KheopskitConfig } from "../types";
 import { isSolanaChainId, type SolanaChainId } from "./chains";
-import type { SolanaInjectedWallet, SolanaWallet } from "./types";
+import type { SolanaInjectedWallet } from "./types";
 
 type ConnectApi = StandardConnectFeature["standard:connect"];
 type DisconnectApi = StandardDisconnectFeature["standard:disconnect"];
@@ -159,27 +157,10 @@ const createSolanaInjectedWallets$ = (store: KheopskitStore) =>
 		};
 	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
 
-export const getSolanaWallets$ = (
-	config: KheopskitConfig,
-	store: KheopskitStore = defaultStore,
-) => {
-	return new Observable<SolanaWallet[]>((subscriber) => {
-		const subscription = combineLatest([
-			createSolanaInjectedWallets$(store),
-			getAppKitWallets$(config).pipe(map((w) => w.solana)),
-		])
-			.pipe(
-				map(([injectedWallets, appKitWallet]) =>
-					appKitWallet ? [...injectedWallets, appKitWallet] : injectedWallets,
-				),
-			)
-			.subscribe(subscriber);
-
-		return () => {
-			subscription.unsubscribe();
-		};
-	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
-};
+// The shared WalletConnect connector is emitted once by core (see
+// `getWallets$`), not per platform — so this returns only injected wallets.
+export const getSolanaWallets$ = (store: KheopskitStore = defaultStore) =>
+	createSolanaInjectedWallets$(store);
 
 /**
  * Compare two wallet arrays by their relevant properties (not functions).

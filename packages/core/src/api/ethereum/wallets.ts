@@ -13,11 +13,9 @@ import {
 import type { EIP1193Provider } from "viem";
 import { clearCachedObservable } from "../../utils/getCachedObservable";
 import { getWalletId, type WalletId } from "../../utils/WalletId";
-import { getAppKitWallets$ } from "../appKit";
 import { KheopskitError } from "../errors";
 import { store as defaultStore, type KheopskitStore } from "../store";
-import type { KheopskitConfig } from "../types";
-import type { EthereumInjectedWallet, EthereumWallet } from "./types";
+import type { EthereumInjectedWallet } from "./types";
 
 /**
  * Observable that emits EIP-6963 provider details from injected wallets.
@@ -122,27 +120,10 @@ const createEthereumInjectedWallets$ = (store: KheopskitStore) =>
 		};
 	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
 
-export const getEthereumWallets$ = (
-	config: KheopskitConfig,
-	store: KheopskitStore = defaultStore,
-) => {
-	return new Observable<EthereumWallet[]>((subscriber) => {
-		const subscription = combineLatest([
-			createEthereumInjectedWallets$(store),
-			getAppKitWallets$(config).pipe(map((w) => w.ethereum)),
-		])
-			.pipe(
-				map(([injectedWallets, appKitWallet]) =>
-					appKitWallet ? [...injectedWallets, appKitWallet] : injectedWallets,
-				),
-			)
-			.subscribe(subscriber);
-
-		return () => {
-			subscription.unsubscribe();
-		};
-	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
-};
+// The shared WalletConnect connector is emitted once by core (see
+// `getWallets$`), not per platform — so this returns only injected wallets.
+export const getEthereumWallets$ = (store: KheopskitStore = defaultStore) =>
+	createEthereumInjectedWallets$(store);
 
 /**
  * Compare two wallet arrays by their relevant properties (not functions).

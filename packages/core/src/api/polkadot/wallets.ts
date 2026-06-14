@@ -18,11 +18,9 @@ import {
 	parseWalletId,
 	type WalletId,
 } from "../../utils/WalletId";
-import { getAppKitWallets$ } from "../appKit";
 import { KheopskitError } from "../errors";
 import { store as defaultStore, type KheopskitStore } from "../store";
-import type { KheopskitConfig } from "../types";
-import type { PolkadotInjectedWallet, PolkadotWallet } from "./types";
+import type { PolkadotInjectedWallet } from "./types";
 
 const getInjectedWalletsIds = () =>
 	typeof window === "undefined"
@@ -134,27 +132,10 @@ const createPolkadotInjectedWallets$ = (store: KheopskitStore) =>
 		};
 	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
 
-export const getPolkadotWallets$ = (
-	config: KheopskitConfig,
-	store: KheopskitStore = defaultStore,
-) => {
-	return new Observable<PolkadotWallet[]>((subscriber) => {
-		const subscription = combineLatest([
-			createPolkadotInjectedWallets$(store),
-			getAppKitWallets$(config).pipe(map((w) => w.polkadot)),
-		])
-			.pipe(
-				map(([injectedWallets, appKitWallet]) =>
-					appKitWallet ? [...injectedWallets, appKitWallet] : injectedWallets,
-				),
-			)
-			.subscribe(subscriber);
-
-		return () => {
-			subscription.unsubscribe();
-		};
-	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
-};
+// The shared WalletConnect connector is emitted once by core (see
+// `getWallets$`), not per platform — so this returns only injected wallets.
+export const getPolkadotWallets$ = (store: KheopskitStore = defaultStore) =>
+	createPolkadotInjectedWallets$(store);
 
 /**
  * Compare two wallet arrays by their relevant properties (not functions).

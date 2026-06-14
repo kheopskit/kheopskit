@@ -1,9 +1,11 @@
-import type {
-	BaseWallet,
-	BaseWalletAccount,
-	CachedAccount,
-	CachedWallet,
-	PolkadotAccountType,
+import {
+	type BaseWallet,
+	type BaseWalletAccount,
+	type CachedAccount,
+	type CachedWallet,
+	isWalletConnectWallet,
+	type PolkadotAccountType,
+	type WalletConnectWallet,
 } from "../api/types";
 import { POLKADOT_EXTENSIONS } from "./polkadotExtensions";
 import type { WalletAccountId } from "./WalletAccountId";
@@ -46,16 +48,34 @@ class PendingWalletError extends Error {
  * wallet (with its injected provider/extension/standard-wallet handle) replaces
  * it once it loads. connect/disconnect throw until then.
  */
-export const hydrateWallet = (cached: CachedWallet): BaseWallet => {
-	const { platform, identifier } = parseWalletId(cached.id);
-
+export const hydrateWallet = (
+	cached: CachedWallet,
+): BaseWallet | WalletConnectWallet => {
 	const throwPending = () => {
 		throw new PendingWalletError(cached.id);
 	};
 
+	// The platform-less WalletConnect connector. `appKit`/`platforms` are SDK
+	// state absent until the live connector loads (cast like other placeholder
+	// SDK handles); icon is filled from the localStorage cache by the caller.
+	if (cached.type === "walletconnect") {
+		return {
+			id: cached.id,
+			type: "walletconnect",
+			platforms: [],
+			name: cached.name,
+			icon: "",
+			isConnected: cached.isConnected,
+			connect: throwPending,
+			disconnect: throwPending,
+		} as unknown as WalletConnectWallet;
+	}
+
+	const { platform, identifier } = parseWalletId(cached.id);
+
 	return {
 		id: cached.id,
-		platform: cached.platform,
+		platform: cached.platform as BaseWallet["platform"],
 		type: cached.type,
 		name: cached.name,
 		icon: lookupWalletIcon(platform, identifier),
@@ -95,9 +115,12 @@ export const hydrateAccount = (cached: CachedAccount): BaseWalletAccount => ({
  * Converts a wallet to a CachedWallet for storage.
  * Only extracts the serializable properties needed for hydration.
  */
-export const serializeWallet = (wallet: BaseWallet): CachedWallet => ({
+export const serializeWallet = (
+	wallet: BaseWallet | WalletConnectWallet,
+): CachedWallet => ({
 	id: wallet.id,
-	platform: wallet.platform,
+	// The WalletConnect connector has no platform.
+	platform: isWalletConnectWallet(wallet) ? undefined : wallet.platform,
 	type: wallet.type,
 	name: wallet.name,
 	// Note: icon is NOT stored to save cookie space

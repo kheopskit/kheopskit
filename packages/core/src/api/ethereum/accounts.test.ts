@@ -1,7 +1,7 @@
 import { firstValueFrom, of, take, toArray } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
-import type { WalletId } from "../../utils/WalletId";
-import type { EthereumAppKitWallet } from "../types";
+import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../../utils/WalletId";
+import type { WalletConnectWallet } from "../types";
 import type { EthereumInjectedWallet } from "./types";
 
 // Valid Ethereum address for tests
@@ -60,14 +60,16 @@ const createMockInjectedWallet = (
 	...overrides,
 });
 
+// The single platform-less WalletConnect connector, configured to carry the
+// eip155 namespace.
 const createMockAppKitWallet = (
 	provider: ReturnType<typeof createMockProvider>,
-	overrides: Partial<EthereumAppKitWallet> = {},
-): EthereumAppKitWallet => ({
-	platform: "ethereum",
-	type: "appKit",
-	id: "ethereum:appkit" as WalletId,
-	name: "AppKit",
+	overrides: Partial<WalletConnectWallet> = {},
+): WalletConnectWallet => ({
+	type: "walletconnect",
+	id: WALLET_CONNECT_WALLET_ID,
+	platforms: ["ethereum"],
+	name: "WalletConnect",
 	icon: "data:image/svg+xml,...",
 	isConnected: true,
 	connect: vi.fn(),
@@ -80,15 +82,8 @@ const createMockAppKitWallet = (
 		// WalletConnect 0-accounts bug — if the code starts reading allAccounts
 		// again, every appKit test below loses its accounts.
 		getAccount: vi.fn(() => ({ allAccounts: [] })),
-		getProvider: vi.fn(
-			() =>
-				provider as unknown as EthereumAppKitWallet["appKit"] extends infer T
-					? T extends { getProvider: (...args: never[]) => infer P }
-						? P
-						: never
-					: never,
-		),
-	} as unknown as EthereumAppKitWallet["appKit"],
+		getProvider: vi.fn(() => provider),
+	} as unknown as WalletConnectWallet["appKit"],
 	...overrides,
 });
 

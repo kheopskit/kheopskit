@@ -1,3 +1,4 @@
+import { isWalletConnectWallet } from "@kheopskit/core";
 import type { FC } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,7 +55,11 @@ export const Wallets = () => {
 				<TableBody>
 					{wallets.map((wallet) => (
 						<TableRow key={wallet.id}>
-							<TableCell>{wallet.platform}</TableCell>
+							<TableCell>
+								{isWalletConnectWallet(wallet)
+									? wallet.platforms.join(", ") || "—"
+									: wallet.platform}
+							</TableCell>
 							<TableCell>
 								<div className="flex gap-2 items-center">
 									<WalletIcon icon={wallet.icon} name={wallet.name} />

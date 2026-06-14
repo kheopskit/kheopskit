@@ -9,8 +9,14 @@ import {
 	take,
 } from "rxjs";
 import { sortWallets } from "../utils/sortWallets";
+import { getWalletConnectWallet$ } from "./appKit";
 import { store as defaultStore, type KheopskitStore } from "./store";
-import type { BaseWallet, KheopskitConfig, PlatformContext } from "./types";
+import type {
+	BaseWallet,
+	KheopskitConfig,
+	PlatformContext,
+	WalletConnectWallet,
+} from "./types";
 
 export const getWallets$ = (
 	config: KheopskitConfig,
@@ -23,18 +29,30 @@ export const getWallets$ = (
 		shareReplay({ bufferSize: 1, refCount: true }),
 	);
 
-	return new Observable<BaseWallet[]>((subscriber) => {
+	return new Observable<(BaseWallet | WalletConnectWallet)[]>((subscriber) => {
 		const ctx: PlatformContext = { config, store };
 		const observables = config.platforms.map((plugin) =>
 			plugin.getWallets$(ctx),
 		);
 
-		const wallets$ = observables.length
-			? combineLatest(observables).pipe(
-					map((wallets) => wallets.flat().sort(sortWallets)),
-					// Note: No startWith([]) here - the hydration buffer handles initial state
-				)
+		const platformWallets$ = observables.length
+			? combineLatest(observables).pipe(map((wallets) => wallets.flat()))
 			: of<BaseWallet[]>([]);
+
+		// The single, platform-less WalletConnect connector is appended here (not
+		// emitted per platform). It sorts last (see sortWallets).
+		const wallets$ = combineLatest([
+			platformWallets$,
+			getWalletConnectWallet$(config),
+		]).pipe(
+			map(([platformWallets, walletConnect]) => {
+				const all: (BaseWallet | WalletConnectWallet)[] = walletConnect
+					? [...platformWallets, walletConnect]
+					: platformWallets;
+				return all.sort(sortWallets);
+			}),
+			// Note: No startWith([]) here - the hydration buffer handles initial state
+		);
 
 		// Track wallets currently reconnecting (avoid duplicate concurrent attempts)
 		// and those already reconnected (so we don't fight a later manual disconnect).

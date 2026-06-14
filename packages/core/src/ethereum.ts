@@ -4,5 +4,5 @@ export type {
 	EthereumInjectedWallet,
 	EthereumWallet,
 } from "./api/ethereum/types";
-export type { EthereumAppKitWallet } from "./api/types";
+export { isWalletConnectWallet, type WalletConnectWallet } from "./api/types";
 export { isEthereumAddress } from "./utils/isEthereumAddress";

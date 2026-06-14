@@ -1,16 +1,29 @@
 import { combineLatest, map, Observable, of, shareReplay } from "rxjs";
 import { sortAccounts } from "../utils/sortAccounts";
-import type { BaseWallet, BaseWalletAccount, KheopskitConfig } from "./types";
+import type {
+	BaseWallet,
+	BaseWalletAccount,
+	KheopskitConfig,
+	WalletConnectWallet,
+} from "./types";
+import { isWalletConnectWallet } from "./types";
 
 export const getAccounts$ = (
 	config: KheopskitConfig,
-	wallets: Observable<BaseWallet[]>,
+	wallets: Observable<(BaseWallet | WalletConnectWallet)[]>,
 ) => {
 	return new Observable<BaseWalletAccount[]>((subscriber) => {
+		// Each plugin gets its own platform's (injected) wallets plus the shared
+		// WalletConnect connector; it derives WC accounts only for the namespaces
+		// the session carries.
 		const sources = config.platforms.map((plugin) =>
 			plugin.getAccounts$(
 				wallets.pipe(
-					map((ws) => ws.filter((w) => w.platform === plugin.platform)),
+					map((ws) =>
+						ws.filter(
+							(w) => isWalletConnectWallet(w) || w.platform === plugin.platform,
+						),
+					),
 				),
 			),
 		);

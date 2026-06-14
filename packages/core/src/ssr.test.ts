@@ -54,10 +54,10 @@ describe("SSR safety", () => {
 	});
 
 	it("can import appKit without browser globals", async () => {
-		const { getAppKitWallets$ } = await import("./api/appKit");
+		const { getWalletConnectWallet$ } = await import("./api/appKit");
 
-		expect(getAppKitWallets$).toBeDefined();
-		expect(typeof getAppKitWallets$).toBe("function");
+		expect(getWalletConnectWallet$).toBeDefined();
+		expect(typeof getWalletConnectWallet$).toBe("function");
 	});
 
 	it("can import wallets API without browser globals", async () => {

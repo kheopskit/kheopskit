@@ -6,7 +6,6 @@ import type {
 import type { Wallet as WalletStandardWallet } from "@wallet-standard/base";
 import type { WalletAccountId } from "../../utils/WalletAccountId";
 import type { WalletId } from "../../utils/WalletId";
-import type { SolanaAppKitWallet } from "../types";
 import type { SolanaChainId } from "./chains";
 
 /**
@@ -39,7 +38,7 @@ export type SolanaInjectedWallet = {
 	disconnect: () => Promise<void>;
 };
 
-export type SolanaWallet = SolanaInjectedWallet | SolanaAppKitWallet;
+export type SolanaWallet = SolanaInjectedWallet;
 
 export type SolanaAccount = {
 	id: WalletAccountId;
