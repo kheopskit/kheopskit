@@ -11,11 +11,7 @@
 			"ignore": ["e2e/mocks/**"]
 		},
 		"packages/core": {
-			"ignore": [
-				"src/utils/sleep.ts",
-				"src/utils/throwAfter.ts",
-				"src/utils/storage.ts"
-			]
+			"ignore": ["src/utils/storage.ts"]
 		},
 		"packages/react": {
 			"ignoreDependencies": ["@types/react-dom", "react-dom"]

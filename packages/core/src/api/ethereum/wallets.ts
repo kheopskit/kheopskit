@@ -14,7 +14,7 @@ import type { EIP1193Provider } from "viem";
 import { clearCachedObservable } from "../../utils/getCachedObservable";
 import { getWalletId, type WalletId } from "../../utils/WalletId";
 import { KheopskitError } from "../errors";
-import { store as defaultStore, type KheopskitStore } from "../store";
+import type { KheopskitStore } from "../store";
 import type { EthereumInjectedWallet } from "./types";
 
 /**
@@ -122,7 +122,7 @@ const createEthereumInjectedWallets$ = (store: KheopskitStore) =>
 
 // The shared WalletConnect connector is emitted once by core (see
 // `getWallets$`), not per platform — so this returns only injected wallets.
-export const getEthereumWallets$ = (store: KheopskitStore = defaultStore) =>
+export const getEthereumWallets$ = (store: KheopskitStore) =>
 	createEthereumInjectedWallets$(store);
 
 /**

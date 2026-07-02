@@ -160,21 +160,3 @@ export const getDefaultStore = (): KheopskitStore => {
 	}
 	return g[DEFAULT_STORE_SYMBOL];
 };
-
-/**
- * @deprecated Use createKheopskitStore() or getDefaultStore() instead.
- * This export is kept for backward compatibility but may cause SSR issues
- * if imported at module level in server environments.
- */
-export const store = {
-	get observable() {
-		return getDefaultStore().observable;
-	},
-	addEnabledWalletId: (walletId: WalletId) =>
-		getDefaultStore().addEnabledWalletId(walletId),
-	removeEnabledWalletId: (walletId: WalletId) =>
-		getDefaultStore().removeEnabledWalletId(walletId),
-	getCachedState: () => getDefaultStore().getCachedState(),
-	setCachedState: (wallets: CachedWallet[], accounts: CachedAccount[]) =>
-		getDefaultStore().setCachedState(wallets, accounts),
-};

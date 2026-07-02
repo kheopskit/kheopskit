@@ -1,6 +1,6 @@
 import type { Observable, Subscription } from "rxjs";
 
-export const createStore = <T>(
+export const createExternalStore = <T>(
 	observable$: Observable<T>,
 	initialValue: T,
 	serverValue?: T,
@@ -26,7 +26,7 @@ export const createStore = <T>(
 	// committed passive effect), never during render. React may render a tree and
 	// throw it away without committing — StrictMode double-invokes the initial
 	// render, and concurrent/Suspense can discard renders — so subscribing eagerly
-	// here (createStore runs inside the Provider's render-phase useMemo) would leak
+	// here (createExternalStore runs inside the Provider's render-phase useMemo) would leak
 	// the discarded store's observable subscription. Until the first emission,
 	// getSnapshot falls back to initialValue.
 	const getSnapshot = () => latestValue ?? initialValue;

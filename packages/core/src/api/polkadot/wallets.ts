@@ -19,7 +19,7 @@ import {
 	type WalletId,
 } from "../../utils/WalletId";
 import { KheopskitError } from "../errors";
-import { store as defaultStore, type KheopskitStore } from "../store";
+import type { KheopskitStore } from "../store";
 import type { PolkadotInjectedWallet } from "./types";
 
 const getInjectedWalletsIds = () =>
@@ -134,7 +134,7 @@ const createPolkadotInjectedWallets$ = (store: KheopskitStore) =>
 
 // The shared WalletConnect connector is emitted once by core (see
 // `getWallets$`), not per platform — so this returns only injected wallets.
-export const getPolkadotWallets$ = (store: KheopskitStore = defaultStore) =>
+export const getPolkadotWallets$ = (store: KheopskitStore) =>
 	createPolkadotInjectedWallets$(store);
 
 /**

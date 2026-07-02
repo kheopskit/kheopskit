@@ -1,8 +1,8 @@
 import { BehaviorSubject, Subject } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createStore } from "./createStore";
+import { createExternalStore } from "./createExternalStore";
 
-describe("createStore (React)", () => {
+describe("createExternalStore (React)", () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
 	});
@@ -10,7 +10,7 @@ describe("createStore (React)", () => {
 	describe("initialization", () => {
 		it("returns store with required methods", () => {
 			const subject = new BehaviorSubject({ count: 0 });
-			const store = createStore(subject.asObservable(), { count: 0 });
+			const store = createExternalStore(subject.asObservable(), { count: 0 });
 
 			expect(store.getSnapshot).toBeDefined();
 			expect(store.getServerSnapshot).toBeDefined();
@@ -21,7 +21,7 @@ describe("createStore (React)", () => {
 		it("getSnapshot returns initial value before any emission", () => {
 			const subject = new Subject<{ value: number }>();
 			const initialValue = { value: 42 };
-			const store = createStore(subject.asObservable(), initialValue);
+			const store = createExternalStore(subject.asObservable(), initialValue);
 
 			expect(store.getSnapshot()).toEqual(initialValue);
 		});
@@ -30,7 +30,7 @@ describe("createStore (React)", () => {
 	describe("getSnapshot", () => {
 		it("returns latest emitted value", () => {
 			const subject = new BehaviorSubject({ count: 0 });
-			const store = createStore(subject.asObservable(), { count: 0 });
+			const store = createExternalStore(subject.asObservable(), { count: 0 });
 			// React subscribes (in an effect) before reading snapshots; the
 			// subscription is what tracks live emissions into getSnapshot.
 			store.subscribe(() => {});
@@ -44,7 +44,7 @@ describe("createStore (React)", () => {
 
 		it("returns same reference for unchanged value", () => {
 			const subject = new BehaviorSubject({ count: 0 });
-			const store = createStore(subject.asObservable(), { count: 0 });
+			const store = createExternalStore(subject.asObservable(), { count: 0 });
 
 			subject.next({ count: 5 });
 			const snapshot1 = store.getSnapshot();
@@ -58,7 +58,7 @@ describe("createStore (React)", () => {
 		it("returns initialValue when no serverValue provided", () => {
 			const subject = new BehaviorSubject({ data: "client" });
 			const initialValue = { data: "initial" };
-			const store = createStore(subject.asObservable(), initialValue);
+			const store = createExternalStore(subject.asObservable(), initialValue);
 
 			expect(store.getServerSnapshot()).toEqual(initialValue);
 		});
@@ -67,7 +67,7 @@ describe("createStore (React)", () => {
 			const subject = new BehaviorSubject({ data: "client" });
 			const initialValue = { data: "initial" };
 			const serverValue = { data: "server" };
-			const store = createStore(
+			const store = createExternalStore(
 				subject.asObservable(),
 				initialValue,
 				serverValue,
@@ -79,7 +79,7 @@ describe("createStore (React)", () => {
 		it("getServerSnapshot is stable (does not change with emissions)", () => {
 			const subject = new BehaviorSubject({ count: 0 });
 			const serverValue = { count: 999 };
-			const store = createStore(
+			const store = createExternalStore(
 				subject.asObservable(),
 				{ count: 0 },
 				serverValue,
@@ -96,7 +96,7 @@ describe("createStore (React)", () => {
 	describe("subscribe", () => {
 		it("calls callback with initial value", () => {
 			const subject = new BehaviorSubject({ value: 1 });
-			const store = createStore(subject.asObservable(), { value: 1 });
+			const store = createExternalStore(subject.asObservable(), { value: 1 });
 
 			const callback = vi.fn();
 			const unsubscribe = store.subscribe(callback);
@@ -109,7 +109,7 @@ describe("createStore (React)", () => {
 
 		it("calls callback on each emission", () => {
 			const subject = new BehaviorSubject({ value: 0 });
-			const store = createStore(subject.asObservable(), { value: 0 });
+			const store = createExternalStore(subject.asObservable(), { value: 0 });
 
 			const callback = vi.fn();
 			const unsubscribe = store.subscribe(callback);
@@ -126,7 +126,7 @@ describe("createStore (React)", () => {
 
 		it("unsubscribe stops callbacks", () => {
 			const subject = new BehaviorSubject({ value: 0 });
-			const store = createStore(subject.asObservable(), { value: 0 });
+			const store = createExternalStore(subject.asObservable(), { value: 0 });
 
 			const callback = vi.fn();
 			const unsubscribe = store.subscribe(callback);
@@ -143,7 +143,7 @@ describe("createStore (React)", () => {
 
 		it("multiple subscribers work independently", () => {
 			const subject = new BehaviorSubject({ count: 0 });
-			const store = createStore(subject.asObservable(), { count: 0 });
+			const store = createExternalStore(subject.asObservable(), { count: 0 });
 
 			const callback1 = vi.fn();
 			const callback2 = vi.fn();
@@ -170,7 +170,7 @@ describe("createStore (React)", () => {
 	describe("destroy", () => {
 		it("stops receiving updates from observable", () => {
 			const subject = new BehaviorSubject({ value: 0 });
-			const store = createStore(subject.asObservable(), { value: 0 });
+			const store = createExternalStore(subject.asObservable(), { value: 0 });
 
 			store.destroy();
 
@@ -186,7 +186,7 @@ describe("createStore (React)", () => {
 			// React StrictMode mounts → unmounts → remounts components
 			// This test simulates that pattern
 			const subject = new BehaviorSubject({ value: 0 });
-			const store = createStore(subject.asObservable(), { value: 0 });
+			const store = createExternalStore(subject.asObservable(), { value: 0 });
 
 			// First mount: subscribe
 			const callback1 = vi.fn();
@@ -213,7 +213,7 @@ describe("createStore (React)", () => {
 
 		it("continues working after multiple destroy/resubscribe cycles", () => {
 			const subject = new BehaviorSubject({ count: 0 });
-			const store = createStore(subject.asObservable(), { count: 0 });
+			const store = createExternalStore(subject.asObservable(), { count: 0 });
 
 			// Cycle 1
 			const cb1 = vi.fn();
@@ -239,7 +239,9 @@ describe("createStore (React)", () => {
 
 		it("does not disconnect while subscribers exist", () => {
 			const subject = new BehaviorSubject({ data: "initial" });
-			const store = createStore(subject.asObservable(), { data: "initial" });
+			const store = createExternalStore(subject.asObservable(), {
+				data: "initial",
+			});
 
 			const callback = vi.fn();
 			const unsub = store.subscribe(callback);
@@ -258,7 +260,9 @@ describe("createStore (React)", () => {
 
 		it("getSnapshot returns updated value after reconnection", () => {
 			const subject = new BehaviorSubject({ status: "pending" });
-			const store = createStore(subject.asObservable(), { status: "pending" });
+			const store = createExternalStore(subject.asObservable(), {
+				status: "pending",
+			});
 
 			// Simulate StrictMode: subscribe, unsubscribe, destroy
 			store.subscribe(() => {})();
@@ -282,7 +286,11 @@ describe("createStore (React)", () => {
 		it("server: getServerSnapshot provides consistent value for hydration", () => {
 			const serverData = { wallets: [], accounts: [], config: {} };
 			const subject = new BehaviorSubject(serverData);
-			const store = createStore(subject.asObservable(), serverData, serverData);
+			const store = createExternalStore(
+				subject.asObservable(),
+				serverData,
+				serverData,
+			);
 
 			// On server, getServerSnapshot is called
 			expect(store.getServerSnapshot()).toEqual(serverData);
@@ -293,7 +301,11 @@ describe("createStore (React)", () => {
 			const clientData = { wallets: ["wallet1"], accounts: ["account1"] };
 
 			const subject = new BehaviorSubject(clientData);
-			const store = createStore(subject.asObservable(), serverData, serverData);
+			const store = createExternalStore(
+				subject.asObservable(),
+				serverData,
+				serverData,
+			);
 			// React subscribes on the client (in an effect) before reading
 			// getSnapshot; the subscription is what surfaces the live client value.
 			store.subscribe(() => {});

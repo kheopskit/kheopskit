@@ -40,11 +40,11 @@ describe("SSR safety", () => {
 
 	it("can import hooks without browser globals", async () => {
 		const { useWallets } = await import("./useWallets");
-		const { createStore } = await import("./createStore");
+		const { createExternalStore } = await import("./createExternalStore");
 
 		expect(useWallets).toBeDefined();
-		expect(createStore).toBeDefined();
+		expect(createExternalStore).toBeDefined();
 		expect(typeof useWallets).toBe("function");
-		expect(typeof createStore).toBe("function");
+		expect(typeof createExternalStore).toBe("function");
 	});
 });

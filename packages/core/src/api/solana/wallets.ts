@@ -15,7 +15,7 @@ import {
 import { clearCachedObservablesByPrefix } from "../../utils/getCachedObservable";
 import { getWalletId, type WalletId } from "../../utils/WalletId";
 import { KheopskitError } from "../errors";
-import { store as defaultStore, type KheopskitStore } from "../store";
+import type { KheopskitStore } from "../store";
 import { isSolanaChainId, type SolanaChainId } from "./chains";
 import type { SolanaInjectedWallet } from "./types";
 
@@ -159,7 +159,7 @@ const createSolanaInjectedWallets$ = (store: KheopskitStore) =>
 
 // The shared WalletConnect connector is emitted once by core (see
 // `getWallets$`), not per platform — so this returns only injected wallets.
-export const getSolanaWallets$ = (store: KheopskitStore = defaultStore) =>
+export const getSolanaWallets$ = (store: KheopskitStore) =>
 	createSolanaInjectedWallets$(store);
 
 /**

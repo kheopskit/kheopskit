@@ -15,7 +15,7 @@ import {
 	useSyncExternalStore,
 } from "react";
 import { KheopskitContext } from "./context";
-import { createStore } from "./createStore";
+import { createExternalStore } from "./createExternalStore";
 
 export type KheopskitProviderProps = PropsWithChildren & {
 	/**
@@ -130,7 +130,7 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 
 	const store = useMemo(
 		() =>
-			createStore(
+			createExternalStore(
 				getKheopskit$(config, { ssrCookies, store: kheopskitStore }),
 				initialValue,
 				serverValue,

@@ -326,10 +326,7 @@ export const getEthereumAccounts$ = (
 		return () => {
 			sub.unsubscribe();
 		};
-	}).pipe(
-		// logObservable("ethereumAccounts$", true),
-		shareReplay({ refCount: true, bufferSize: 1 }),
-	);
+	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
 
 const isSameAccountsList = (a: EthereumAccount[], b: EthereumAccount[]) => {
 	if (a.length !== b.length) return false;
