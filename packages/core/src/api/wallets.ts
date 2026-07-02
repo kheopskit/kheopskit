@@ -10,7 +10,8 @@ import {
 } from "rxjs";
 import { sortWallets } from "../utils/sortWallets";
 import { getWalletConnectWallet$ } from "./appKit";
-import { store as defaultStore, type KheopskitStore } from "./store";
+import { createReconnectPolicy } from "./reconnectPolicy";
+import type { KheopskitStore } from "./store";
 import type {
 	BaseWallet,
 	KheopskitConfig,
@@ -18,10 +19,7 @@ import type {
 	WalletConnectWallet,
 } from "./types";
 
-export const getWallets$ = (
-	config: KheopskitConfig,
-	store: KheopskitStore = defaultStore,
-) => {
+export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 	// lock the list of wallets to auto reconnect on first call
 	const autoReconnectWalletIds$ = store.observable.pipe(
 		map((s) => s.autoReconnect ?? []),
@@ -54,20 +52,7 @@ export const getWallets$ = (
 			// Note: No startWith([]) here - the hydration buffer handles initial state
 		);
 
-		// Track wallets currently reconnecting (avoid duplicate concurrent attempts)
-		// and those already reconnected (so we don't fight a later manual disconnect).
-		// A failed attempt is left out of `reconnected`, so it can retry when the
-		// wallet next re-emits (e.g. a late-injecting extension).
-		const reconnectingWallets = new Set<string>();
-		const reconnectedWallets = new Set<string>();
-		// Bounded retry: a wallet whose connect() keeps rejecting (e.g. a permission
-		// permanently denied, or a buggy provider) must not be re-attempted on every
-		// wallets$ emission — the stream re-emits frequently (polkadot polling,
-		// mipd/wallet-standard register events). Allow a few attempts so a
-		// late-injecting extension that isn't ready on first sight still reconnects,
-		// then give up for this session.
-		const MAX_RECONNECT_ATTEMPTS = 3;
-		const failedAttempts = new Map<string, number>();
+		const reconnectPolicy = createReconnectPolicy();
 
 		const subAutoReconnect = combineLatest([wallets$, autoReconnectWalletIds$])
 			.pipe(
@@ -77,28 +62,11 @@ export const getWallets$ = (
 				),
 			)
 			.subscribe(async (wallet) => {
-				if (
-					wallet.isConnected ||
-					reconnectingWallets.has(wallet.id) ||
-					reconnectedWallets.has(wallet.id) ||
-					(failedAttempts.get(wallet.id) ?? 0) >= MAX_RECONNECT_ATTEMPTS
-				) {
-					return;
-				}
-
-				reconnectingWallets.add(wallet.id);
+				if (wallet.isConnected) return;
 				try {
-					await wallet.connect();
-					reconnectedWallets.add(wallet.id);
-					failedAttempts.delete(wallet.id);
+					await reconnectPolicy.attempt(wallet.id, () => wallet.connect());
 				} catch (err) {
-					failedAttempts.set(
-						wallet.id,
-						(failedAttempts.get(wallet.id) ?? 0) + 1,
-					);
 					console.error("Failed to reconnect wallet %s", wallet.id, { err });
-				} finally {
-					reconnectingWallets.delete(wallet.id);
 				}
 			});
 
