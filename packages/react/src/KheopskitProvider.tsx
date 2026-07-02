@@ -1,18 +1,11 @@
 import {
 	createKheopskitStore,
+	getHydratedSnapshot,
 	getKheopskit$,
 	type KheopskitConfig,
 	type KheopskitState,
 	resolveConfig,
 } from "@kheopskit/core";
-import {
-	acceptsCachedAccount,
-	getCachedIcon,
-	hydrateAccount,
-	hydrateWallet,
-	sortAccounts,
-	sortWallets,
-} from "@kheopskit/core/internal";
 import {
 	type FC,
 	type PropsWithChildren,
@@ -95,9 +88,9 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 		[ssrCookies, resolvedConfig.storageKey],
 	);
 
-	// Read cached state from the store for SSR hydration
-	// This produces wallets WITHOUT localStorage icons (Ethereum wallets have no icon)
-	// because localStorage isn't available on server
+	// Read cached state from the store for SSR hydration.
+	// Icons stay OFF: this snapshot must match the server-rendered markup, and the
+	// server never sees the localStorage icon cache (see GetHydratedSnapshotOptions).
 	const serverValue = useMemo<KheopskitState>(() => {
 		if (ssrCookies === undefined) {
 			return {
@@ -107,15 +100,8 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 				isHydrating: true,
 			};
 		}
-		const cached = kheopskitStore.getCachedState();
 		return {
-			wallets: cached.wallets.map(hydrateWallet).sort(sortWallets),
-			accounts: cached.accounts
-				.filter((account) =>
-					acceptsCachedAccount(account, resolvedConfig.platforms),
-				)
-				.map(hydrateAccount)
-				.sort(sortAccounts),
+			...getHydratedSnapshot(kheopskitStore, resolvedConfig.platforms),
 			config: resolvedConfig,
 			isHydrating: true,
 		};
@@ -133,22 +119,10 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 	// getSnapshot, so reading the cache here is safe — and getCachedIcon returns ""
 	// on the server, making the icon enrichment a no-op there.
 	const initialValue = useMemo<KheopskitState>(() => {
-		const cached = kheopskitStore.getCachedState();
 		return {
-			wallets: cached.wallets
-				.map(hydrateWallet)
-				.map((wallet) => {
-					if (wallet.icon) return wallet;
-					const cachedIcon = getCachedIcon(wallet.id);
-					return cachedIcon ? { ...wallet, icon: cachedIcon } : wallet;
-				})
-				.sort(sortWallets),
-			accounts: cached.accounts
-				.filter((account) =>
-					acceptsCachedAccount(account, resolvedConfig.platforms),
-				)
-				.map(hydrateAccount)
-				.sort(sortAccounts),
+			...getHydratedSnapshot(kheopskitStore, resolvedConfig.platforms, {
+				icons: true,
+			}),
 			config: resolvedConfig,
 			isHydrating: true,
 		};

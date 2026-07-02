@@ -12,19 +12,14 @@ import {
 	createAccountHydrationBuffer,
 	createHydrationBuffer,
 } from "../utils/createHydrationBuffer";
-import {
-	hydrateAccount,
-	hydrateWallet,
-	serializeAccount,
-	serializeWallet,
-} from "../utils/hydrateState";
+import { serializeAccount, serializeWallet } from "../utils/hydrateState";
 import { getCachedIcon, setCachedIcons } from "../utils/iconCache";
 import { logObservable } from "../utils/logObservable";
 import { sortAccounts } from "../utils/sortAccounts";
 import { sortWallets } from "../utils/sortWallets";
 import { getAccounts$ } from "./accounts";
 import { resolveConfig } from "./config";
-import { acceptsCachedAccount } from "./platform";
+import { getHydratedSnapshot } from "./hydration";
 import { createKheopskitStore } from "./store";
 import type {
 	BaseWallet,
@@ -76,23 +71,9 @@ export const getKheopskit$ = <
 		);
 	}
 
-	// Get cached state for hydration
-	const cachedState = store.getCachedState();
-	// Hydrate wallets and enrich with icons from localStorage cache
-	const cachedWallets = cachedState.wallets.map((w) => {
-		const wallet = hydrateWallet(w);
-		// If wallet doesn't have icon (e.g., Ethereum), try localStorage cache
-		if (!wallet.icon) {
-			const cachedIcon = getCachedIcon(wallet.id);
-			if (cachedIcon) {
-				return { ...wallet, icon: cachedIcon };
-			}
-		}
-		return wallet;
-	});
-	const cachedAccounts = cachedState.accounts
-		.filter((cached) => acceptsCachedAccount(cached, kc.platforms))
-		.map(hydrateAccount);
+	// Get cached state for hydration (same snapshot the React provider builds)
+	const { wallets: cachedWallets, accounts: cachedAccounts } =
+		getHydratedSnapshot(store, kc.platforms, { icons: true });
 
 	if (kc.debug && cachedWallets.length > 0) {
 		console.debug("[kheopskit] hydrating from cache:", {
