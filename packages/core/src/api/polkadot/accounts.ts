@@ -3,24 +3,20 @@ import {
 	type InjectedExtension,
 	type InjectedPolkadotAccount,
 } from "polkadot-api/pjs-signer";
-import {
-	combineLatest,
-	distinctUntilChanged,
-	map,
-	Observable,
-	of,
-	shareReplay,
-	switchMap,
-} from "rxjs";
+import { Observable, of } from "rxjs";
 import { getWalletAccountId } from "../../utils";
-import { getCachedObservable$ } from "../../utils/getCachedObservable";
 import { KheopskitError } from "../errors";
+import {
+	createPlatformAccounts$,
+	getCaip10Addresses,
+	getSessionCaip10s,
+	getWalletConnectSessionAccounts$,
+} from "../platformAccounts";
 import type {
 	AppKitInstance,
 	PolkadotAccountType,
 	WalletConnectWallet,
 } from "../types";
-import { isWalletConnectWallet } from "../types";
 import type {
 	PolkadotAccount,
 	PolkadotInjectedWallet,
@@ -110,107 +106,53 @@ const getAppKitPolkadotSigner = (appKit: AppKitInstance, address: string) => {
 
 const getWalletConnectAccounts$ = (
 	wallet: WalletConnectWallet,
-): Observable<PolkadotAccount[]> => {
-	const provider = wallet.appKit.getProvider("polkadot");
+): Observable<PolkadotAccount[]> =>
+	getWalletConnectSessionAccounts$({
+		wallet,
+		platform: "polkadot",
+		namespace: "polkadot",
+		cacheKey: `accounts:${wallet.id}:polkadot:`,
+		buildAccounts: (provider) => {
+			const session = provider.session;
+			if (!session) return [];
 
-	if (!wallet.platforms.includes("polkadot") || !provider?.session)
-		return of([]);
+			const addresses = getCaip10Addresses(
+				getSessionCaip10s(session, "polkadot"),
+			);
 
-	return getCachedObservable$(`accounts:${wallet.id}:polkadot:`, () =>
-		new Observable<PolkadotAccount[]>((subscriber) => {
-			// AppKit's getAccount("polkadot").allAccounts is always empty because
-			// AppKit has no native polkadot adapter; the WalletConnect session is the
-			// source of truth. Accounts are CAIP-10 strings
-			// ("polkadot:<chainRef>:<address>"), one entry per chain, so dedupe to
-			// unique addresses.
-			const buildAccounts = (): PolkadotAccount[] => {
-				const session = provider.session;
-				if (!session) return [];
-
-				const addresses = [
-					...new Set(
-						Object.values(session.namespaces)
-							.flatMap((namespace) => namespace.accounts ?? [])
-							.filter((account) => account.startsWith("polkadot:"))
-							.map((account) => account.split(":")[2])
-							.filter((address): address is string => !!address),
-					),
-				];
-
-				return addresses.map(
-					(address): PolkadotAccount => ({
-						id: getWalletAccountId(wallet.id, address),
-						platform: "polkadot",
-						walletName: wallet.name,
-						walletId: wallet.id,
-						address,
-						polkadotSigner: getAppKitPolkadotSigner(wallet.appKit, address),
-						genesisHash: null,
-						name: `${wallet.name} Polkadot`,
-						// WalletConnect (Reown AppKit) doesn't expose account key type;
-						// default to sr25519, which is the most common Polkadot key type.
-						type: "sr25519",
-					}),
-				);
-			};
-
-			subscriber.next(buildAccounts());
-
-			// Re-derive when the WalletConnect session's accounts change, mirroring
-			// the injected extension's subscribe and the Solana AppKit path.
-			const reemit = () => subscriber.next(buildAccounts());
-			provider.on("session_update", reemit);
-			provider.on("accountsChanged", reemit);
-
-			return () => {
-				provider.off("session_update", reemit);
-				provider.off("accountsChanged", reemit);
-			};
-		}).pipe(shareReplay({ refCount: true, bufferSize: 1 })),
-	);
-};
+			return addresses.map(
+				(address): PolkadotAccount => ({
+					id: getWalletAccountId(wallet.id, address),
+					platform: "polkadot",
+					walletName: wallet.name,
+					walletId: wallet.id,
+					address,
+					polkadotSigner: getAppKitPolkadotSigner(wallet.appKit, address),
+					genesisHash: null,
+					name: `${wallet.name} Polkadot`,
+					// WalletConnect (Reown AppKit) doesn't expose account key type;
+					// default to sr25519, which is the most common Polkadot key type.
+					type: "sr25519",
+				}),
+			);
+		},
+	});
 
 export const getPolkadotAccounts$ = (
 	polkadotWallets$: Observable<(PolkadotWallet | WalletConnectWallet)[]>,
 	polkadotAccountTypes: PolkadotAccountType[],
-) =>
-	new Observable<PolkadotAccount[]>((subscriber) => {
-		if (polkadotAccountTypes.length === 0) {
-			console.warn(
-				"[kheopskit] config.polkadotAccountTypes is empty; all Polkadot accounts will be filtered out.",
-			);
-		}
+) => {
+	if (polkadotAccountTypes.length === 0) {
+		console.warn(
+			"[kheopskit] config.polkadotAccountTypes is empty; all Polkadot accounts will be filtered out.",
+		);
+	}
 
-		const sub = polkadotWallets$
-			.pipe(
-				map((wallets) => wallets.filter((w) => w.isConnected)),
-				switchMap((wallets) =>
-					wallets.length
-						? combineLatest([
-								...wallets
-									.filter((w) => w.type === "injected")
-									.map(getInjectedWalletAccounts$),
-								...wallets
-									.filter(isWalletConnectWallet)
-									.map(getWalletConnectAccounts$),
-							])
-						: of([]),
-				),
-				map((accounts) =>
-					accounts
-						.flat()
-						.filter((account) => polkadotAccountTypes.includes(account.type)),
-				),
-				distinctUntilChanged(isSameAccountsList),
-			)
-			.subscribe(subscriber);
-
-		return () => {
-			sub.unsubscribe();
-		};
-	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
-
-const isSameAccountsList = (a: PolkadotAccount[], b: PolkadotAccount[]) => {
-	if (a.length !== b.length) return false;
-	return a.every((account, i) => account.id === b[i]?.id);
+	return createPlatformAccounts$({
+		wallets$: polkadotWallets$,
+		getInjectedAccounts$: getInjectedWalletAccounts$,
+		getWalletConnectAccounts$,
+		mapAccounts: (accounts) =>
+			accounts.filter((account) => polkadotAccountTypes.includes(account.type)),
+	});
 };

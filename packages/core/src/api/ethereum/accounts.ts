@@ -6,7 +6,6 @@ import {
 	of,
 	ReplaySubject,
 	shareReplay,
-	switchMap,
 } from "rxjs";
 import {
 	createWalletClient,
@@ -16,8 +15,12 @@ import {
 } from "viem";
 import { getWalletAccountId } from "../../utils";
 import { getCachedObservable$ } from "../../utils/getCachedObservable";
+import {
+	createPlatformAccounts$,
+	getCaip10Addresses,
+	getSessionCaip10s,
+} from "../platformAccounts";
 import type { WalletConnectWallet } from "../types";
-import { isWalletConnectWallet } from "../types";
 import type {
 	EthereumAccount,
 	EthereumInjectedWallet,
@@ -200,16 +203,13 @@ const getWalletConnectAccounts$ = (
 				const session = provider.session;
 				if (!session) return [];
 				const addresses = new Set<string>();
-				for (const namespace of Object.values(session.namespaces)) {
-					for (const account of namespace.accounts ?? []) {
-						if (!account.startsWith("eip155:")) continue;
-						const raw = account.split(":")[2];
-						if (!raw) continue;
-						try {
-							addresses.add(getAddress(raw));
-						} catch {
-							// skip malformed CAIP-10 address
-						}
+				for (const raw of getCaip10Addresses(
+					getSessionCaip10s(session, "eip155"),
+				)) {
+					try {
+						addresses.add(getAddress(raw));
+					} catch {
+						// skip malformed CAIP-10 address
 					}
 				}
 				return [...addresses];
@@ -220,12 +220,9 @@ const getWalletConnectAccounts$ = (
 			const readCaipNetworkId = (): string | undefined => {
 				const session = provider.session;
 				if (!session) return undefined;
-				for (const namespace of Object.values(session.namespaces)) {
-					for (const account of namespace.accounts ?? []) {
-						if (!account.startsWith("eip155:")) continue;
-						const ref = account.split(":")[1];
-						if (ref) return `eip155:${ref}`;
-					}
+				for (const account of getSessionCaip10s(session, "eip155")) {
+					const ref = account.split(":")[1];
+					if (ref) return `eip155:${ref}`;
 				}
 				return undefined;
 			};
@@ -302,36 +299,10 @@ const getWalletConnectAccounts$ = (
 export const getEthereumAccounts$ = (
 	ethereumWallets: Observable<(EthereumWallet | WalletConnectWallet)[]>,
 ) =>
-	new Observable<EthereumAccount[]>((subscriber) => {
-		const sub = ethereumWallets
-			.pipe(
-				map((wallets) => wallets.filter((w) => w.isConnected)),
-				switchMap((wallets) => {
-					return wallets.length
-						? combineLatest([
-								...wallets
-									.filter((w) => w.type === "injected")
-									.map(getInjectedWalletAccounts$),
-								...wallets
-									.filter(isWalletConnectWallet)
-									.map(getWalletConnectAccounts$),
-							])
-						: of([]);
-				}),
-				map((accounts) => accounts.flat()),
-				distinctUntilChanged(isSameAccountsList),
-			)
-			.subscribe(subscriber);
-
-		return () => {
-			sub.unsubscribe();
-		};
-	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
-
-const isSameAccountsList = (a: EthereumAccount[], b: EthereumAccount[]) => {
-	if (a.length !== b.length) return false;
-	return a.every(
-		(account, i) =>
-			account.id === b[i]?.id && account.chainId === b[i]?.chainId,
-	);
-};
+	createPlatformAccounts$({
+		wallets$: ethereumWallets,
+		getInjectedAccounts$: getInjectedWalletAccounts$,
+		getWalletConnectAccounts$,
+		// Re-emit on chain switches, not just account id changes.
+		accountChangeKey: (account) => `${account.id}|${account.chainId ?? ""}`,
+	});

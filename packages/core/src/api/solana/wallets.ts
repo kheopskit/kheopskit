@@ -4,17 +4,11 @@ import type {
 	StandardConnectFeature,
 	StandardDisconnectFeature,
 } from "@wallet-standard/features";
-import {
-	BehaviorSubject,
-	combineLatest,
-	distinctUntilChanged,
-	map,
-	Observable,
-	shareReplay,
-} from "rxjs";
+import { Observable, shareReplay } from "rxjs";
 import { clearCachedObservablesByPrefix } from "../../utils/getCachedObservable";
-import { getWalletId, type WalletId } from "../../utils/WalletId";
+import { getWalletId } from "../../utils/WalletId";
 import { KheopskitError } from "../errors";
+import { createInjectedWallets$ } from "../injectedWallets";
 import type { KheopskitStore } from "../store";
 import { isSolanaChainId, type SolanaChainId } from "./chains";
 import type { SolanaInjectedWallet } from "./types";
@@ -63,21 +57,13 @@ const walletStandardWallets$ = new Observable<readonly WalletStandardWallet[]>(
 	},
 ).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
 
-const createSolanaInjectedWallets$ = (store: KheopskitStore) =>
-	new Observable<SolanaInjectedWallet[]>((subscriber) => {
-		const enabledWalletIds$ = new BehaviorSubject<Set<WalletId>>(new Set());
-
-		const connect = async (
-			wallet: WalletStandardWallet,
-			walletId: WalletId,
-		) => {
-			if (enabledWalletIds$.value.has(walletId))
-				throw new KheopskitError(
-					"WALLET_ALREADY_CONNECTED",
-					`wallet ${walletId} is already connected`,
-					{ walletId },
-				);
-
+// The shared WalletConnect connector is emitted once by core (see
+// `getWallets$`), not per platform — so this returns only injected wallets.
+export const getSolanaWallets$ = (store: KheopskitStore) =>
+	createInjectedWallets$<WalletStandardWallet, SolanaInjectedWallet>(store, {
+		sources$: walletStandardWallets$,
+		getWalletId: (wallet) => getWalletId("solana", wallet.name),
+		connect: async (wallet, walletId) => {
 			const feature = (wallet.features as Record<string, unknown>)[
 				"standard:connect"
 			] as ConnectApi | undefined;
@@ -89,91 +75,37 @@ const createSolanaInjectedWallets$ = (store: KheopskitStore) =>
 				);
 
 			await feature.connect();
-
-			const newSet = new Set(enabledWalletIds$.value);
-			newSet.add(walletId);
-			enabledWalletIds$.next(newSet);
-
-			store.addEnabledWalletId(walletId);
-		};
-
-		const disconnect = async (
-			wallet: WalletStandardWallet,
-			walletId: WalletId,
-		) => {
-			if (!enabledWalletIds$.value.has(walletId))
-				throw new KheopskitError(
-					"WALLET_NOT_CONNECTED",
-					`wallet ${walletId} is not connected`,
-					{ walletId },
-				);
-
-			// standard:disconnect is an optional feature. Await it when present so a
-			// failed disconnect rejects the returned promise; if absent we still
-			// clear local state below.
+		},
+		// standard:disconnect is an optional feature. Await it when present so a
+		// failed disconnect rejects the returned promise; if absent we still
+		// clear local state.
+		disconnect: async (wallet) => {
 			const feature = (wallet.features as Record<string, unknown>)[
 				"standard:disconnect"
 			] as DisconnectApi | undefined;
 			await feature?.disconnect();
-
-			const newSet = new Set(enabledWalletIds$.value);
-			newSet.delete(walletId);
-			enabledWalletIds$.next(newSet);
-
-			store.removeEnabledWalletId(walletId);
-
-			// Drop cached account observables for this wallet so a later reconnect
-			// rebuilds them against the current wallet handle, not a stale closure.
-			clearCachedObservablesByPrefix(`accounts:${walletId}:`);
-		};
-
-		const sub = combineLatest([walletStandardWallets$, enabledWalletIds$])
-			.pipe(
-				map(([wallets, enabledWalletIds]) =>
-					wallets.map((wallet): SolanaInjectedWallet => {
-						const walletId = getWalletId("solana", wallet.name);
-
-						return {
-							platform: "solana",
-							type: "injected",
-							id: walletId,
-							sourceId: wallet.name,
-							wallet,
-							chains: getSolanaChains(wallet),
-							name: wallet.name,
-							icon: wallet.icon,
-							isConnected: enabledWalletIds.has(walletId),
-							connect: () => connect(wallet, walletId),
-							disconnect: () => disconnect(wallet, walletId),
-						};
-					}),
-				),
-				distinctUntilChanged(walletsEqual),
-			)
-			.subscribe(subscriber);
-
-		return () => {
-			sub.unsubscribe();
-		};
-	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
-
-// The shared WalletConnect connector is emitted once by core (see
-// `getWallets$`), not per platform — so this returns only injected wallets.
-export const getSolanaWallets$ = (store: KheopskitStore) =>
-	createSolanaInjectedWallets$(store);
-
-/**
- * Compare two wallet arrays by their relevant properties (not functions).
- */
-const walletsEqual = (
-	a: SolanaInjectedWallet[],
-	b: SolanaInjectedWallet[],
-): boolean => {
-	if (a.length !== b.length) return false;
-	return a.every(
-		(w, i) =>
-			w.id === b[i]?.id &&
-			w.isConnected === b[i]?.isConnected &&
-			w.name === b[i]?.name,
-	);
-};
+		},
+		// Drop cached account observables for this wallet so a later reconnect
+		// rebuilds them against the current wallet handle, not a stale closure.
+		onDisconnected: (walletId) =>
+			clearCachedObservablesByPrefix(`accounts:${walletId}:`),
+		buildWallet: ({
+			source: wallet,
+			walletId,
+			isConnected,
+			connect,
+			disconnect,
+		}) => ({
+			platform: "solana",
+			type: "injected",
+			id: walletId,
+			sourceId: wallet.name,
+			wallet,
+			chains: getSolanaChains(wallet),
+			name: wallet.name,
+			icon: wallet.icon,
+			isConnected,
+			connect,
+			disconnect,
+		}),
+	});
