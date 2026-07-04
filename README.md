@@ -9,7 +9,7 @@ Kheopskit is a library designed to simplify the development of multi-chain DApps
 
 Try it on the [interactive playground](https://Kheopskit.pages.dev/)
 
-See [Kheopswap](https://github.com/kheopswap/kheopswap) for a production DApp built using Kheopskit.
+See [Kheopswap](https://github.com/kheopswap/kheopswap) (polkadot/ethereum) and [Taohop](https://github.com/0xKheops/taohop) for production DApps built using Kheopskit.
 
 > **Upgrading from v3?** v4 moves platforms to plugins and makes platform SDKs (and WalletConnect) optional peer dependencies. See the [v4 migration guide](./packages/core/MIGRATING_TO_V4.md).
 
