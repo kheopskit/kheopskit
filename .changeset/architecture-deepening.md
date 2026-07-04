@@ -1,7 +1,7 @@
 ---
-"kheopskit": patch
-"@kheopskit/core": patch
-"@kheopskit/react": patch
+"kheopskit": minor
+"@kheopskit/core": minor
+"@kheopskit/react": minor
 ---
 
 Internal architecture refactor (behavior-preserving):
