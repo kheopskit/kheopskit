@@ -14,6 +14,11 @@ export {
 export { resetAppKitCache } from "./appKit";
 export { DEFAULT_STORAGE_KEY, resolveConfig } from "./config";
 export { KheopskitError, type KheopskitErrorCode } from "./errors";
+export {
+	type GetHydratedSnapshotOptions,
+	getHydratedSnapshot,
+	type HydratedSnapshot,
+} from "./hydration";
 export * from "./kheopskit";
 export { createKheopskitStore, getDefaultStore } from "./store";
 export * from "./types";

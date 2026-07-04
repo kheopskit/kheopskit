@@ -2,19 +2,12 @@ import {
 	createStore as createMipdStore,
 	type EIP6963ProviderDetail,
 } from "mipd";
-import {
-	BehaviorSubject,
-	combineLatest,
-	distinctUntilChanged,
-	map,
-	Observable,
-	shareReplay,
-} from "rxjs";
+import { Observable, shareReplay } from "rxjs";
 import type { EIP1193Provider } from "viem";
 import { clearCachedObservable } from "../../utils/getCachedObservable";
-import { getWalletId, type WalletId } from "../../utils/WalletId";
-import { KheopskitError } from "../errors";
-import { store as defaultStore, type KheopskitStore } from "../store";
+import { getWalletId } from "../../utils/WalletId";
+import { createInjectedWallets$ } from "../injectedWallets";
+import type { KheopskitStore } from "../store";
 import type { EthereumInjectedWallet } from "./types";
 
 /**
@@ -46,97 +39,36 @@ const providersDetails$ = new Observable<EIP6963ProviderDetail[]>(
 	},
 ).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
 
-const createEthereumInjectedWallets$ = (store: KheopskitStore) =>
-	new Observable<EthereumInjectedWallet[]>((subscriber) => {
-		const enabledWalletIds$ = new BehaviorSubject<Set<WalletId>>(new Set());
-
-		const connectWallet = async (
-			walletId: WalletId,
-			provider: EIP1193Provider,
-		) => {
-			if (enabledWalletIds$.value.has(walletId))
-				throw new KheopskitError(
-					"WALLET_ALREADY_CONNECTED",
-					`wallet ${walletId} is already connected`,
-					{ walletId },
-				);
-
-			await provider.request({
-				method: "eth_requestAccounts",
-			});
-
-			const newSet = new Set(enabledWalletIds$.value);
-			newSet.add(walletId);
-			enabledWalletIds$.next(newSet);
-
-			store.addEnabledWalletId(walletId);
-		};
-
-		const disconnectWallet = async (walletId: WalletId) => {
-			if (!enabledWalletIds$.value.has(walletId))
-				throw new KheopskitError(
-					"WALLET_NOT_CONNECTED",
-					`wallet ${walletId} is not connected`,
-					{ walletId },
-				);
-			const newSet = new Set(enabledWalletIds$.value);
-			newSet.delete(walletId);
-			enabledWalletIds$.next(newSet);
-
-			store.removeEnabledWalletId(walletId);
-
-			// Drop the cached account observable so a later reconnect rebuilds it
-			// against the current provider, not a stale closure.
-			clearCachedObservable(`accounts:${walletId}`);
-		};
-
-		const sub = combineLatest([providersDetails$, enabledWalletIds$])
-			.pipe(
-				map(([providerDetails, enabledWalletIds]) => {
-					return providerDetails.map((pd): EthereumInjectedWallet => {
-						const walletId = getWalletId("ethereum", pd.info.rdns);
-						const provider = pd.provider as EIP1193Provider;
-
-						return {
-							platform: "ethereum",
-							type: "injected",
-							id: walletId,
-							name: pd.info.name,
-							icon: pd.info.icon,
-							provider,
-							isConnected: enabledWalletIds.has(walletId),
-							sourceId: pd.info.rdns,
-							connect: () => connectWallet(walletId, provider),
-							disconnect: () => disconnectWallet(walletId),
-						};
-					});
-				}),
-				distinctUntilChanged(walletsEqual),
-			)
-			.subscribe(subscriber);
-
-		return () => {
-			sub.unsubscribe();
-		};
-	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
-
 // The shared WalletConnect connector is emitted once by core (see
 // `getWallets$`), not per platform — so this returns only injected wallets.
-export const getEthereumWallets$ = (store: KheopskitStore = defaultStore) =>
-	createEthereumInjectedWallets$(store);
-
-/**
- * Compare two wallet arrays by their relevant properties (not functions).
- */
-const walletsEqual = (
-	a: EthereumInjectedWallet[],
-	b: EthereumInjectedWallet[],
-): boolean => {
-	if (a.length !== b.length) return false;
-	return a.every(
-		(w, i) =>
-			w.id === b[i]?.id &&
-			w.isConnected === b[i]?.isConnected &&
-			w.name === b[i]?.name,
-	);
-};
+export const getEthereumWallets$ = (store: KheopskitStore) =>
+	createInjectedWallets$<EIP6963ProviderDetail, EthereumInjectedWallet>(store, {
+		sources$: providersDetails$,
+		getWalletId: (pd) => getWalletId("ethereum", pd.info.rdns),
+		connect: async (pd) => {
+			await (pd.provider as EIP1193Provider).request({
+				method: "eth_requestAccounts",
+			});
+		},
+		// Drop the cached account observable so a later reconnect rebuilds it
+		// against the current provider, not a stale closure.
+		onDisconnected: (walletId) => clearCachedObservable(`accounts:${walletId}`),
+		buildWallet: ({
+			source: pd,
+			walletId,
+			isConnected,
+			connect,
+			disconnect,
+		}) => ({
+			platform: "ethereum",
+			type: "injected",
+			id: walletId,
+			name: pd.info.name,
+			icon: pd.info.icon,
+			provider: pd.provider as EIP1193Provider,
+			isConnected,
+			sourceId: pd.info.rdns,
+			connect,
+			disconnect,
+		}),
+	});

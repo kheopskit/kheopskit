@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createKheopskitStore, store } from "../api/store";
+import { createKheopskitStore } from "../api/store";
 import type { WalletId } from "../utils/WalletId";
 
 describe("createKheopskitStore", () => {
@@ -399,15 +399,6 @@ describe("createKheopskitStore", () => {
 			const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
 			expect(stored.autoReconnect).toContain("polkadot:talisman");
 		});
-	});
-});
-
-describe("default store export", () => {
-	it("exports a default store instance", () => {
-		expect(store).toBeDefined();
-		expect(store.observable).toBeDefined();
-		expect(store.addEnabledWalletId).toBeDefined();
-		expect(store.removeEnabledWalletId).toBeDefined();
 	});
 });
 

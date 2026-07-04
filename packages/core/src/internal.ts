@@ -5,18 +5,10 @@
  *
  * @internal
  */
-export { acceptsCachedAccount } from "./api/platform";
 export {
 	clearCachedObservable,
 	clearCachedObservablesByPrefix,
 } from "./utils/getCachedObservable";
-export {
-	hydrateAccount,
-	hydrateWallet,
-	serializeAccount,
-	serializeWallet,
-} from "./utils/hydrateState";
-export { getCachedIcon, setCachedIcons } from "./utils/iconCache";
-export { sortAccounts } from "./utils/sortAccounts";
-export { sortWallets } from "./utils/sortWallets";
+export { serializeAccount, serializeWallet } from "./utils/hydrateState";
+export { setCachedIcons } from "./utils/iconCache";
 export { getSafeLocalStorage } from "./utils/storage";

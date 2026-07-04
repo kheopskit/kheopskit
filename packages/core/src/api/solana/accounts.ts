@@ -1,17 +1,14 @@
 import type { StandardEventsFeature } from "@wallet-standard/features";
-import {
-	combineLatest,
-	distinctUntilChanged,
-	map,
-	Observable,
-	of,
-	shareReplay,
-	switchMap,
-} from "rxjs";
+import { Observable, of, shareReplay } from "rxjs";
 import { getWalletAccountId } from "../../utils";
 import { getCachedObservable$ } from "../../utils/getCachedObservable";
+import {
+	createPlatformAccounts$,
+	getCaip10Addresses,
+	getSessionCaip10s,
+	getWalletConnectSessionAccounts$,
+} from "../platformAccounts";
 import type { WalletConnectWallet } from "../types";
-import { isWalletConnectWallet } from "../types";
 import { getSolanaChainIdFromCaip2, type SolanaChainId } from "./chains";
 import {
 	createInjectedSolanaSigner,
@@ -70,118 +67,62 @@ const getInjectedWalletAccounts$ = (
 const getWalletConnectAccounts$ = (
 	wallet: WalletConnectWallet,
 	chain: SolanaChainId,
-): Observable<SolanaAccount[]> => {
-	const provider = wallet.appKit.getProvider("solana");
+): Observable<SolanaAccount[]> =>
+	getWalletConnectSessionAccounts$({
+		wallet,
+		platform: "solana",
+		namespace: "solana",
+		cacheKey: `accounts:${wallet.id}:solana:${chain}`,
+		buildAccounts: (provider) => {
+			const session = provider.session;
+			if (!session) return [];
 
-	if (!wallet.platforms.includes("solana") || !provider?.session) return of([]);
+			const solanaCaip10s = getSessionCaip10s(session, "solana");
+			const addresses = getCaip10Addresses(solanaCaip10s);
 
-	return getCachedObservable$(`accounts:${wallet.id}:solana:${chain}`, () =>
-		new Observable<SolanaAccount[]>((subscriber) => {
-			// AppKit has no native solana adapter, so getAccount("solana").allAccounts
-			// is always empty; the WalletConnect session is the source of truth.
-			// Accounts are CAIP-10 strings ("solana:<chainRef>:<address>"), one entry
-			// per chain, so dedupe to unique addresses.
-			const buildAccounts = (): SolanaAccount[] => {
-				const session = provider.session;
-				if (!session) return [];
+			// Clusters the session actually advertises ("solana:<chainRef>" from
+			// each CAIP-10 entry), mapped back to SolanaChainId. Falls back to the
+			// configured chain when none are recognised.
+			const advertisedChains = [
+				...new Set(
+					solanaCaip10s
+						.map((account) => account.split(":").slice(0, 2).join(":"))
+						.map(getSolanaChainIdFromCaip2)
+						.filter((c): c is SolanaChainId => !!c),
+				),
+			];
+			const chains = advertisedChains.length ? advertisedChains : [chain];
 
-				const solanaCaip10s = Object.values(session.namespaces)
-					.flatMap((namespace) => namespace.accounts ?? [])
-					.filter((account) => account.startsWith("solana:"));
-
-				const addresses = [
-					...new Set(
-						solanaCaip10s
-							.map((account) => account.split(":")[2])
-							.filter((address): address is string => !!address),
+			return addresses.map(
+				(accountAddress): SolanaAccount => ({
+					id: getWalletAccountId(wallet.id, accountAddress),
+					platform: "solana",
+					address: accountAddress,
+					chains,
+					signer: createWalletConnectSolanaSigner(
+						provider,
+						accountAddress,
+						chain,
 					),
-				];
-
-				// Clusters the session actually advertises ("solana:<chainRef>" from
-				// each CAIP-10 entry), mapped back to SolanaChainId. Falls back to the
-				// configured chain when none are recognised.
-				const advertisedChains = [
-					...new Set(
-						solanaCaip10s
-							.map((account) => account.split(":").slice(0, 2).join(":"))
-							.map(getSolanaChainIdFromCaip2)
-							.filter((c): c is SolanaChainId => !!c),
-					),
-				];
-				const chains = advertisedChains.length ? advertisedChains : [chain];
-
-				return addresses.map(
-					(accountAddress): SolanaAccount => ({
-						id: getWalletAccountId(wallet.id, accountAddress),
-						platform: "solana",
-						address: accountAddress,
-						chains,
-						signer: createWalletConnectSolanaSigner(
-							provider,
-							accountAddress,
-							chain,
-						),
-						getSigner: (c) =>
-							createWalletConnectSolanaSigner(provider, accountAddress, c),
-						walletName: wallet.name,
-						walletId: wallet.id,
-					}),
-				);
-			};
-
-			subscriber.next(buildAccounts());
-
-			// Re-derive when the WalletConnect session's accounts change, mirroring
-			// the injected wallet's standard:events "change" subscription.
-			const reemit = () => subscriber.next(buildAccounts());
-			provider.on("session_update", reemit);
-			provider.on("accountsChanged", reemit);
-
-			return () => {
-				provider.off("session_update", reemit);
-				provider.off("accountsChanged", reemit);
-			};
-		}).pipe(shareReplay({ refCount: true, bufferSize: 1 })),
-	);
-};
+					getSigner: (c) =>
+						createWalletConnectSolanaSigner(provider, accountAddress, c),
+					walletName: wallet.name,
+					walletId: wallet.id,
+				}),
+			);
+		},
+	});
 
 export const getSolanaAccounts$ = (
 	solanaWallets$: Observable<(SolanaWallet | WalletConnectWallet)[]>,
 	solanaChain: SolanaChainId,
 ) =>
-	new Observable<SolanaAccount[]>((subscriber) => {
-		const sub = solanaWallets$
-			.pipe(
-				map((wallets) => wallets.filter((w) => w.isConnected)),
-				switchMap((wallets) =>
-					wallets.length
-						? combineLatest([
-								...wallets
-									.filter((w) => w.type === "injected")
-									.map((w) => getInjectedWalletAccounts$(w, solanaChain)),
-								...wallets
-									.filter(isWalletConnectWallet)
-									.map((w) => getWalletConnectAccounts$(w, solanaChain)),
-							])
-						: of([]),
-				),
-				map((accounts) => accounts.flat()),
-				distinctUntilChanged(isSameAccountsList),
-			)
-			.subscribe(subscriber);
-
-		return () => {
-			sub.unsubscribe();
-		};
-	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
-
-const isSameAccountsList = (a: SolanaAccount[], b: SolanaAccount[]) => {
-	if (a.length !== b.length) return false;
-	return a.every((account, i) => {
-		const other = b[i];
-		if (!other || account.id !== other.id) return false;
+	createPlatformAccounts$({
+		wallets$: solanaWallets$,
+		getInjectedAccounts$: (wallet) =>
+			getInjectedWalletAccounts$(wallet, solanaChain),
+		getWalletConnectAccounts$: (wallet) =>
+			getWalletConnectAccounts$(wallet, solanaChain),
 		// Re-emit when the advertised clusters change, not just on id changes.
-		if (account.chains.length !== other.chains.length) return false;
-		return account.chains.every((chain, j) => chain === other.chains[j]);
+		accountChangeKey: (account) => `${account.id}|${account.chains.join(",")}`,
 	});
-};

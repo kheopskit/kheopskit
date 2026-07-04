@@ -4,22 +4,15 @@ import {
 	getInjectedExtensions,
 	type InjectedExtension,
 } from "polkadot-api/pjs-signer";
-import {
-	BehaviorSubject,
-	combineLatest,
-	distinctUntilChanged,
-	map,
-	Observable,
-	shareReplay,
-} from "rxjs";
+import { distinctUntilChanged, Observable, shareReplay } from "rxjs";
 import { POLKADOT_EXTENSIONS } from "../../utils/polkadotExtensions";
 import {
 	getWalletId,
 	parseWalletId,
 	type WalletId,
 } from "../../utils/WalletId";
-import { KheopskitError } from "../errors";
-import { store as defaultStore, type KheopskitStore } from "../store";
+import { createInjectedWallets$ } from "../injectedWallets";
+import type { KheopskitStore } from "../store";
 import type { PolkadotInjectedWallet } from "./types";
 
 const getInjectedWalletsIds = () =>
@@ -61,94 +54,34 @@ const createWalletIdsPoller$ = () => {
 	);
 };
 
-const createPolkadotInjectedWallets$ = (store: KheopskitStore) =>
-	new Observable<PolkadotInjectedWallet[]>((subscriber) => {
-		const enabledExtensions$ = new BehaviorSubject<
-			Map<WalletId, InjectedExtension>
-		>(new Map());
-
-		const connect = async (walletId: WalletId) => {
-			if (enabledExtensions$.value.has(walletId))
-				throw new KheopskitError(
-					"WALLET_ALREADY_CONNECTED",
-					`wallet ${walletId} is already connected`,
-					{ walletId },
-				);
-			const { identifier } = parseWalletId(walletId);
-			const extension = await connectInjectedExtension(identifier);
-
-			const newMap = new Map(enabledExtensions$.value);
-			newMap.set(walletId, extension);
-			enabledExtensions$.next(newMap);
-
-			store.addEnabledWalletId(walletId);
-		};
-
-		const disconnect = async (walletId: WalletId) => {
-			if (!enabledExtensions$.value.has(walletId))
-				throw new KheopskitError(
-					"WALLET_NOT_CONNECTED",
-					`wallet ${walletId} is not connected`,
-					{ walletId },
-				);
-
-			const newMap = new Map(enabledExtensions$.value);
-			newMap.delete(walletId);
-			enabledExtensions$.next(newMap);
-
-			store.removeEnabledWalletId(walletId);
-		};
-
-		const walletIds$ = createWalletIdsPoller$();
-
-		const subscription = combineLatest([walletIds$, enabledExtensions$])
-			.pipe(
-				map(([walletIds, enabledExtensions]) => {
-					return walletIds.map((id): PolkadotInjectedWallet => {
-						const { identifier } = parseWalletId(id);
-						const extension = enabledExtensions.get(id);
-						const extInfo = POLKADOT_EXTENSIONS[identifier];
-
-						return {
-							id,
-							type: "injected",
-							platform: "polkadot",
-							name: extInfo?.name ?? identifier,
-							icon: extInfo?.icon ?? "",
-							sourceId: identifier,
-							extension,
-							isConnected: !!extension,
-							connect: () => connect(id),
-							disconnect: () => disconnect(id),
-						};
-					});
-				}),
-				distinctUntilChanged(walletsEqual),
-			)
-			.subscribe(subscriber);
-
-		return () => {
-			subscription.unsubscribe();
-		};
-	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
-
 // The shared WalletConnect connector is emitted once by core (see
 // `getWallets$`), not per platform — so this returns only injected wallets.
-export const getPolkadotWallets$ = (store: KheopskitStore = defaultStore) =>
-	createPolkadotInjectedWallets$(store);
+export const getPolkadotWallets$ = (store: KheopskitStore) =>
+	createInjectedWallets$<WalletId, PolkadotInjectedWallet, InjectedExtension>(
+		store,
+		{
+			sources$: createWalletIdsPoller$(),
+			getWalletId: (walletId) => walletId,
+			connect: (walletId) => {
+				const { identifier } = parseWalletId(walletId);
+				return connectInjectedExtension(identifier);
+			},
+			buildWallet: ({ walletId, handle, isConnected, connect, disconnect }) => {
+				const { identifier } = parseWalletId(walletId);
+				const extInfo = POLKADOT_EXTENSIONS[identifier];
 
-/**
- * Compare two wallet arrays by their relevant properties (not functions).
- */
-const walletsEqual = (
-	a: PolkadotInjectedWallet[],
-	b: PolkadotInjectedWallet[],
-): boolean => {
-	if (a.length !== b.length) return false;
-	return a.every(
-		(w, i) =>
-			w.id === b[i]?.id &&
-			w.isConnected === b[i]?.isConnected &&
-			w.name === b[i]?.name,
+				return {
+					id: walletId,
+					type: "injected",
+					platform: "polkadot",
+					name: extInfo?.name ?? identifier,
+					icon: extInfo?.icon ?? "",
+					sourceId: identifier,
+					extension: handle,
+					isConnected,
+					connect,
+					disconnect,
+				};
+			},
+		},
 	);
-};

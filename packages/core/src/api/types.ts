@@ -1,7 +1,6 @@
 import type { Observable } from "rxjs";
 import type { WalletAccountId } from "../utils";
 import type { WalletId } from "../utils/WalletId";
-import type { KheopskitStore } from "./store";
 
 export type WalletPlatform = "polkadot" | "ethereum" | "solana";
 
@@ -285,6 +284,28 @@ export type KheopskitState<
 	 * present at runtime — guard all access behind `!isHydrating`.
 	 */
 	isHydrating: boolean;
+};
+
+/** Shape of the persisted store data (localStorage, or cookies in compact form). */
+export type KheopskitStoreData = {
+	autoReconnect?: WalletId[];
+	/** Cached wallet state for SSR hydration to prevent UI flash */
+	cachedWallets?: CachedWallet[];
+	/** Cached account state for SSR hydration to prevent UI flash */
+	cachedAccounts?: CachedAccount[];
+};
+
+/**
+ * The persisted settings store shared between core and framework bindings.
+ * Declared structurally here (implemented by `createKheopskitStore`) so modules
+ * can depend on the interface without importing the implementation.
+ */
+export type KheopskitStore = {
+	observable: Observable<KheopskitStoreData>;
+	addEnabledWalletId: (walletId: WalletId) => void;
+	removeEnabledWalletId: (walletId: WalletId) => void;
+	getCachedState: () => { wallets: CachedWallet[]; accounts: CachedAccount[] };
+	setCachedState: (wallets: CachedWallet[], accounts: CachedAccount[]) => void;
 };
 
 /**
