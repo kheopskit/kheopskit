@@ -96,8 +96,10 @@ describe("createWalletConnectSolanaSigner", () => {
 		// Request side: bytes -> base58 string.
 		expect(calls[0]?.method).toBe("solana_signMessage");
 		expect(calls[0]?.chainId).toBe(MAINNET_CAIP2);
-		expect((calls[0]?.params as { pubkey: string }).pubkey).toBe(ADDRESS);
-		expect((calls[0]?.params as { message: string }).message).toBe(
+		expect((calls[0]?.params as { pubkey: string } | undefined)?.pubkey).toBe(
+			ADDRESS,
+		);
+		expect((calls[0]?.params as { message: string } | undefined)?.message).toBe(
 			base58.encode(content),
 		);
 
@@ -121,9 +123,9 @@ describe("createWalletConnectSolanaSigner", () => {
 
 		// Request side: wire bytes -> base64 string.
 		expect(calls[0]?.method).toBe("solana_signTransaction");
-		expect((calls[0]?.params as { transaction: string }).transaction).toBe(
-			base64.encode(wireBytes(TX)),
-		);
+		expect(
+			(calls[0]?.params as { transaction: string } | undefined)?.transaction,
+		).toBe(base64.encode(wireBytes(TX)));
 
 		// Response side: base64 string -> wire bytes -> decoded Transaction.
 		expect(Array.from((result as Transaction).messageBytes)).toEqual(
@@ -162,9 +164,9 @@ describe("createWalletConnectSolanaSigner", () => {
 		const [signature] = await signer.signAndSendTransactions([TX]);
 
 		expect(calls[0]?.method).toBe("solana_signAndSendTransaction");
-		expect((calls[0]?.params as { transaction: string }).transaction).toBe(
-			base64.encode(wireBytes(TX)),
-		);
+		expect(
+			(calls[0]?.params as { transaction: string } | undefined)?.transaction,
+		).toBe(base64.encode(wireBytes(TX)));
 		expect(new Uint8Array(signature as Uint8Array)).toEqual(sigBytes);
 	});
 

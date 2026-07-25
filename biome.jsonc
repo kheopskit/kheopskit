@@ -18,7 +18,7 @@
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"recommended": true,
+			"preset": "recommended",
 			"suspicious": {
 				// "noConsole": "warn"
 			},
@@ -52,6 +52,17 @@
 		}
 	},
 	"overrides": [
+		{
+			// standalone SVG assets: alt text belongs on the consuming <img>, not the asset
+			"includes": ["**/*.svg"],
+			"linter": {
+				"rules": {
+					"a11y": {
+						"noSvgWithoutTitle": "off"
+					}
+				}
+			}
+		},
 		{
 			// workaround Tailwind CSS false positives
 			"includes": ["**/*.css"],
