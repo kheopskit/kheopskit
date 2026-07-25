@@ -19,17 +19,47 @@ describe("publishedManifest", () => {
 		);
 	});
 
-	it("is insensitive to key order and array entry order", () => {
+	it("is insensitive to key order", () => {
 		expect(
 			publishedManifest({
 				dependencies: { b: "^1", a: "^1" },
-				files: ["README.md", "dist"],
+				files: ["dist"],
 			}),
 		).toBe(
 			publishedManifest({
-				files: ["dist", "README.md"],
+				files: ["dist"],
 				dependencies: { a: "^1", b: "^1" },
 			}),
+		);
+	});
+
+	// Node takes the first condition that matches, so `default` above `types`
+	// changes what consumers resolve without any key or value moving.
+	it("detects a reordered export condition", () => {
+		expect(
+			publishedManifest({
+				exports: {
+					".": { types: "./dist/index.d.ts", default: "./dist/index.mjs" },
+				},
+			}),
+		).not.toBe(
+			publishedManifest({
+				exports: {
+					".": { default: "./dist/index.mjs", types: "./dist/index.d.ts" },
+				},
+			}),
+		);
+	});
+
+	// An `exports` fallback array is resolved in order too.
+	it("detects a reordered array", () => {
+		expect(
+			publishedManifest({ exports: { ".": ["./dist/a.mjs", "./dist/b.mjs"] } }),
+		).not.toBe(
+			publishedManifest({ exports: { ".": ["./dist/b.mjs", "./dist/a.mjs"] } }),
+		);
+		expect(publishedManifest({ files: ["dist", "README.md"] })).not.toBe(
+			publishedManifest({ files: ["README.md", "dist"] }),
 		);
 	});
 
@@ -102,6 +132,12 @@ describe("affectsPublishedArtifact", () => {
 	// Compared field-wise instead, so a devDependency bump is not a change.
 	it("leaves package.json to the manifest comparison", () => {
 		expect(affectsPublishedArtifact("packages/core/package.json")).toBe(false);
+	});
+
+	// Both build tsconfigs extend it, so a compiler option there rewrites the
+	// emitted output of packages whose own files never moved.
+	it("counts shared build inputs", () => {
+		expect(affectsPublishedArtifact("tsconfig.base.json")).toBe(true);
 	});
 
 	it("ignores everything outside the published packages", () => {

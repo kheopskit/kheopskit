@@ -6,8 +6,8 @@
  *
  * "Changes a published package" means anything that alters what npm consumers
  * would get: the source that `dist` is built from, the files listed in `files`,
- * the build configuration, and the manifest itself. Two manifest fields are
- * deliberately excluded:
+ * the build configuration — including the shared one at the repository root —
+ * and the manifest itself. Two manifest fields are deliberately excluded:
  *
  *   - `version`, which Changesets owns.
  *   - `devDependencies`, which npm publishes but never installs for consumers.
@@ -23,8 +23,9 @@
  * workflows, tests — leaves the published artifact byte-identical.
  *
  * The check keys off the diff rather than the PR author or the Dependabot
- * group name, so a package or dependency added later is covered without
- * touching any config.
+ * group name, so a dependency added later is covered without touching any
+ * config. A new published package is the one exception: it must be added to
+ * `PACKAGES` below, or the gate never sees it.
  *
  * Coverage is decided by Changesets itself rather than by looking at filenames:
  * `changeset status` applies the real ignore/fixed rules, so a dot-prefixed
@@ -46,8 +47,34 @@ import { basename, join } from "node:path";
 const BASE = process.env.BASE_REF ?? "origin/main";
 const PACKAGES = ["packages/core", "packages/react"];
 
+/**
+ * Build inputs that live outside the packages yet reach their output: both
+ * `tsconfig.build.json` files extend this one, so a `target` or `importHelpers`
+ * change here rewrites the emitted JavaScript and `.d.ts` of packages whose own
+ * files never moved.
+ *
+ * The lockfile is deliberately absent: tsdown externalises `dependencies` and
+ * `peerDependencies`, so a resolution change cannot alter a published byte, and
+ * a gate that fires on every dependency PR is one everybody learns to bypass.
+ * This knowingly waves through toolchain bumps — a new `typescript` or `tsdown`
+ * resolution rewrites the emitted `dist` and `.d.ts` even though no gated file
+ * moved. Accepted: gating the lockfile would reintroduce the fires-on-every-PR
+ * failure mode for a class of change that is cosmetic in practice.
+ * The per-package tsdown config needs no entry either — it lives in the
+ * manifest, which is compared in full.
+ */
+const SHARED_BUILD_INPUTS = ["tsconfig.base.json"];
+
 /** Owned by Changesets, or published but inert for consumers. */
 const UNPUBLISHED_FIELDS = ["version", "devDependencies"];
+
+/**
+ * Fields whose nesting is order-sensitive. Node walks `exports` and `imports`
+ * in declaration order and takes the first condition that matches, so moving
+ * `default` above `types` changes what consumers resolve while every key and
+ * value stays the same.
+ */
+const ORDERED_FIELDS = ["exports", "imports"];
 
 /**
  * Tracked under a published package, yet cannot reach the npm tarball:
@@ -61,20 +88,18 @@ const IRRELEVANT = [
 ];
 
 /**
- * Key order in package.json and entry order in fields like
- * `bundledDependencies` carry no meaning to npm, so normalise both before
- * comparing — a reformat must not read as a real change.
+ * Key order carries no meaning to npm, so a reformat must not read as a real
+ * change. Arrays are left alone: `files` and `keywords` are unordered in
+ * practice but rarely shuffled, whereas an `exports` fallback array is strictly
+ * ordered — sorting would buy nothing and hide a real change.
  */
-const stable = (value) => {
-	if (Array.isArray(value))
-		return value
-			.map(stable)
-			.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+const sortKeys = (value) => {
+	if (Array.isArray(value)) return value.map(sortKeys);
 	if (value === null || typeof value !== "object") return value;
 	return Object.fromEntries(
 		Object.keys(value)
 			.sort()
-			.map((key) => [key, stable(value[key])]),
+			.map((key) => [key, sortKeys(value[key])]),
 	);
 };
 
@@ -86,12 +111,14 @@ const stable = (value) => {
  */
 export const publishedManifest = (pkg) =>
 	JSON.stringify(
-		stable(
-			Object.fromEntries(
-				Object.entries(pkg).filter(
-					([field]) => !UNPUBLISHED_FIELDS.includes(field),
-				),
-			),
+		Object.fromEntries(
+			Object.entries(pkg)
+				.filter(([field]) => !UNPUBLISHED_FIELDS.includes(field))
+				.sort(([a], [b]) => a.localeCompare(b))
+				.map(([field, value]) => [
+					field,
+					ORDERED_FIELDS.includes(field) ? value : sortKeys(value),
+				]),
 		),
 	);
 
@@ -101,9 +128,10 @@ export const publishedManifest = (pkg) =>
  * shows up as a changed file but not as a changed package.
  */
 export const affectsPublishedArtifact = (file) =>
-	PACKAGES.some((dir) => file.startsWith(`${dir}/`)) &&
-	!file.endsWith("/package.json") &&
-	!IRRELEVANT.some((pattern) => pattern.test(file));
+	SHARED_BUILD_INPUTS.includes(file) ||
+	(PACKAGES.some((dir) => file.startsWith(`${dir}/`)) &&
+		!file.endsWith("/package.json") &&
+		!IRRELEVANT.some((pattern) => pattern.test(file)));
 
 /**
  * Given a Changesets release plan, the ids of changesets that drive a real
@@ -145,10 +173,17 @@ const manifestAt = (ref, path) => {
  */
 const releasePlan = () => {
 	const out = join(mkdtempSync(join(tmpdir(), "changeset-gate-")), "plan.json");
+	// Resolved against this file rather than the cwd, so the gate can be pointed
+	// at another checkout — which is how the provenance tests drive it.
+	const bin = join(
+		import.meta.dirname,
+		"..",
+		"node_modules",
+		".bin",
+		"changeset",
+	);
 	try {
-		execFileSync("node_modules/.bin/changeset", ["status", "--output", out], {
-			stdio: "pipe",
-		});
+		execFileSync(bin, ["status", "--output", out], { stdio: "pipe" });
 		return { plan: JSON.parse(readFileSync(out, "utf-8")), error: null };
 	} catch (cause) {
 		return { plan: null, error: String(cause.stderr ?? cause.message).trim() };
@@ -187,8 +222,19 @@ const main = () => {
 	const publishedNames = PACKAGES.map(
 		(dir) => JSON.parse(readFileSync(`${dir}/package.json`, "utf-8")).name,
 	);
-	const addedIds = changed
-		.filter((file) => file.startsWith(".changeset/") && file.endsWith(".md"))
+	// Added, not merely changed: editing a changeset that already sits on the
+	// base branch must not count as coverage this branch brought, or a breaking
+	// change could ride along on somebody else's patch entry. Untracked files
+	// are added by definition, and are what a local run before committing sees.
+	const addedIds = [
+		...lines(
+			git("diff", "--name-only", "--diff-filter=A", since, "--", ".changeset"),
+		),
+		...lines(
+			git("ls-files", "--others", "--exclude-standard", "--", ".changeset"),
+		),
+	]
+		.filter((file) => file.endsWith(".md"))
 		.map((file) => basename(file, ".md"));
 
 	const { plan, error } = releasePlan();
