@@ -6,38 +6,16 @@ on:
       - main
 
 jobs:
-  # Runs standalone rather than inside `checks`: it needs no install or build,
-  # so a forgotten changeset surfaces in seconds instead of behind the e2e
-  # suite, and a failure here never masks real lint/test signal.
-  changeset:
-    name: Changeset
-    # The release PR rewrites peerDependencies through `sync-peer-deps` while
-    # deleting the changesets it consumed, so the gate can never pass on it.
-    if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
+  quality:
+    name: Quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          # `git show <base>:<path>` and the three-dot diff both need history
-          # past the PR head that the default shallow clone leaves out.
+          # The changeset gate reads `git show <base>:<path>` and diffs
+          # three-dot against the base, neither of which the default shallow
+          # clone has the history for.
           fetch-depth: 0
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-      # Invoked as `node`, not `pnpm check:changeset`: pnpm verifies the
-      # dependency graph before running a script, which drags in a full install
-      # plus the `papi` postinstall for a check that is only git plumbing over
-      # package.json. The pnpm script stays for local runs.
-      - name: Require a changeset for published dependency changes
-        run: |
-          git fetch --no-tags origin "${{ github.base_ref }}"
-          BASE_REF="origin/${{ github.base_ref }}" node scripts/check-changeset-needed.mjs
-
-  checks:
-    name: Lint, typecheck and unit tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -57,6 +35,19 @@ jobs:
         run: pnpm typecheck
       - name: Unit tests
         run: pnpm test
+      # Last, so the real signal above lands first — but `!cancelled()` instead
+      # of the default `success()`, otherwise a lint failure hides a missing
+      # changeset and you discover it only on the next push.
+      #
+      # Gated at the step rather than the job: the release PR must still run
+      # everything above, yet can never satisfy the gate — it rewrites
+      # peerDependencies through `sync-peer-deps` while deleting the changesets
+      # it consumed.
+      - name: Changeset
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main' }}
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          BASE_REF="origin/${{ github.base_ref }}" pnpm check:changeset
 
   e2e:
     name: E2E (production builds, mock wallets)
