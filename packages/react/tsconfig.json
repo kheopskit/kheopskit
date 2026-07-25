@@ -1,10 +1,9 @@
 {
 	"extends": "../../tsconfig.base",
-	"include": ["src", "tests", "../core/src"],
+	"include": ["src", "../core/src"],
 	"compilerOptions": {
 		"jsx": "react-jsx",
 		"composite": true,
-		"declaration": true,
 		"noEmit": true,
 		"paths": {
 			"@kheopskit/core": ["../core/src/index.ts"],

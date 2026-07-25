@@ -29,9 +29,9 @@
 	},
 	"scripts": {
 		"test": "vitest run --root=../.. packages/react",
-		"dev": "tsup --watch",
-		"build": "tsup",
-		"prepack": "tsup",
+		"dev": "tsdown --watch",
+		"build": "tsdown",
+		"prepack": "tsdown",
 		"clean": "rm -rf ./dist && rm -rf ./node_modules",
 		"typecheck": "tsc --noEmit"
 	},
@@ -56,12 +56,12 @@
 		"react-dom": "^19.2.8",
 		"rxjs": "^7.8.2"
 	},
-	"tsup": {
+	"tsdown": {
 		"entry": [
 			"src/index.ts"
 		],
 		"tsconfig": "tsconfig.build.json",
-		"splitting": false,
+		"fixedExtension": false,
 		"sourcemap": true,
 		"clean": true,
 		"dts": true,
@@ -70,8 +70,8 @@
 			"cjs"
 		],
 		"target": "es2020",
-		"banner": {
-			"js": "\"use client\";"
+		"outputOptions": {
+			"banner": "\"use client\";"
 		}
 	}
 }

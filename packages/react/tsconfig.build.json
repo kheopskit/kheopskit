@@ -1,8 +1,13 @@
 {
 	"extends": "./tsconfig.json",
+	"include": ["src"],
 	"compilerOptions": {
 		"composite": false,
 		"declaration": true,
-		"noEmit": false
+		"noEmit": false,
+		// When building for publish, @kheopskit/core is an external dependency, so
+		// resolve it to the built package instead of mapping it back to core's
+		// sources — those sit outside react's rootDir and break declaration emit.
+		"paths": {}
 	}
 }
