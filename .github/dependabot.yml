@@ -14,13 +14,25 @@ updates:
       semver-major-days: 7
     commit-message:
       prefix: "⬆️ "
+    open-pull-requests-limit: 10
     groups:
-      # One PR for everything that stays inside its semver range. Majors are
-      # left ungrouped on purpose: they need review, and the ones in
-      # packages/core `dependencies` also need a changeset.
+      # One PR for the routine minor/patch batch. Majors are left ungrouped on
+      # purpose: they need review, and the ones in packages/core `dependencies`
+      # also need a changeset.
       in-range:
         patterns:
           - "*"
+        # Pre-1.0 packages are excluded: Dependabot classifies by version
+        # segment, so 0.12.2 -> 0.13.0 counts as "minor" even though ^0.12.2
+        # excludes it, and 0.x carries no breakage contract. They get their own
+        # PRs. Dependabot has no "in-range only" selector, so this list is
+        # manual — a new 0.x dependency lands in the batch until added here.
+        exclude-patterns:
+          - "@changesets/changelog-github"
+          - "@solana-program/*"
+          - "class-variance-authority"
+          - "mipd"
+          - "next-themes"
         update-types:
           - "minor"
           - "patch"
