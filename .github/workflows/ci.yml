@@ -6,6 +6,32 @@ on:
       - main
 
 jobs:
+  # Runs standalone rather than inside `checks`: it needs no install or build,
+  # so a forgotten changeset surfaces in seconds instead of behind the e2e
+  # suite, and a failure here never masks real lint/test signal.
+  changeset:
+    name: Changeset
+    # The release PR rewrites peerDependencies through `sync-peer-deps` while
+    # deleting the changesets it consumed, so the gate can never pass on it.
+    if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # `git show <base>:<path>` and the three-dot diff both need history
+          # past the PR head that the default shallow clone leaves out.
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      # No install: the gate is plain git plumbing over package.json, so it
+      # skips the dependency graph entirely.
+      - name: Require a changeset for published dependency changes
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          BASE_REF="origin/${{ github.base_ref }}" pnpm check:changeset
+
   checks:
     name: Lint, typecheck and unit tests
     runs-on: ubuntu-latest
