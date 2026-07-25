@@ -52,8 +52,14 @@ jobs:
       - name: Changeset
         if: ${{ !cancelled() && github.event_name == 'pull_request' && !(github.head_ref == 'changeset-release/main' && github.event.pull_request.head.repo.full_name == github.repository) }}
         run: |
-          git fetch --no-tags origin "${{ github.base_ref }}"
-          BASE_REF="origin/${{ github.base_ref }}" pnpm check:changeset
+          # Fetched into a local branch, not just `origin/<base>`: the gate asks
+          # `changeset status` whether the change is released, and Changesets
+          # resolves the bare `baseBranch` name from .changeset/config.json —
+          # `git merge-base main HEAD` fails where no refs/heads/main exists, and
+          # a checkout of a pull request has none. That failure reaches the gate
+          # as "no release plan", i.e. a bogus "Missing changeset".
+          git fetch --no-tags --force origin "+refs/heads/${{ github.base_ref }}:refs/heads/${{ github.base_ref }}"
+          BASE_REF="${{ github.base_ref }}" pnpm check:changeset
 
   e2e:
     name: E2E (production builds, mock wallets)
