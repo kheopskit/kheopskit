@@ -70,9 +70,9 @@
 	},
 	"scripts": {
 		"test": "vitest run --root=../.. packages/core",
-		"dev": "tsup --watch",
-		"build": "tsup",
-		"prepack": "tsup",
+		"dev": "tsdown --watch",
+		"build": "tsdown",
+		"prepack": "tsdown",
 		"clean": "rm -rf ./dist && rm -rf ./node_modules",
 		"typecheck": "tsc --noEmit"
 	},
@@ -134,7 +134,7 @@
 		"rxjs": "^7.8.2",
 		"viem": "^2.55.5"
 	},
-	"tsup": {
+	"tsdown": {
 		"entry": [
 			"src/index.ts",
 			"src/polkadot.ts",
@@ -143,7 +143,7 @@
 			"src/internal.ts"
 		],
 		"tsconfig": "tsconfig.build.json",
-		"splitting": true,
+		"fixedExtension": false,
 		"sourcemap": true,
 		"clean": true,
 		"dts": true,

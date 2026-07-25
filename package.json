@@ -45,8 +45,8 @@
 		"jsdom": "^29.1.1",
 		"knip": "^6.27.0",
 		"simple-git-hooks": "^2.13.1",
-		"tsup": "^8.5.1",
-		"typescript": "~6.0.3",
+		"tsdown": "^0.22.13",
+		"typescript": "~7.0.2",
 		"vitest": "^4.1.10"
 	},
 	"dependencies": {
