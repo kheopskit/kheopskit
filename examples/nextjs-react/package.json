@@ -17,7 +17,7 @@
 		"@reown/appkit": "^1.8.22",
 		"@scure/base": "^2.2.0",
 		"@solana-program/system": "^0.12.2",
-		"@solana/kit": "^6.10.0",
+		"@solana/kit": "^7.0.0",
 		"@tanstack/react-query": "5.101.0",
 		"@wallet-standard/app": "^1.1.1",
 		"@wallet-standard/base": "^1.1.1",
