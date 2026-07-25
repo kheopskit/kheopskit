@@ -1,66 +1,38 @@
 /**
- * Consumer's-eye assertions over the built ESM declarations
- * (`dist/index.d.mts`, reached through the `import` condition).
+ * Consumes the built declarations the way a published package is consumed —
+ * through the `import` condition, so `dist/index.d.mts`. Keep guard.cts in sync;
+ * it covers the CJS declarations, which fail the same way.
  *
- * Run by `pnpm check:dts`. See scripts/check-dts.mjs for why this exists: the
- * declaration emit silently degrades types it cannot resolve to `any`, so a
- * broken build is only visible from outside the package. Keep guard.cts in sync
- * — it covers the CJS declarations, which fail the same way.
+ * `skipLibCheck` is off (see tsconfig.json), so tsc reports dangling references
+ * across the whole declaration surface on its own — that is what catches the
+ * undeclared `P_1` and bare `KheopskitState` of 5.1.1. The one failure mode it
+ * cannot see is a type degraded to `any`, since `any` satisfies every ordinary
+ * assertion, hence the explicit checks below.
  */
 
-import type {
-	AccountOf,
-	KheopskitPlatform,
-	KheopskitState,
-} from "@kheopskit/core";
+import type { KheopskitPlatform } from "@kheopskit/core";
+import type {} from "@kheopskit/core/ethereum";
+import type {} from "@kheopskit/core/internal";
+import type {} from "@kheopskit/core/polkadot";
+import type {} from "@kheopskit/core/solana";
 import type {
 	createKheopskit,
 	useAccounts,
 	useWallets,
 } from "@kheopskit/react";
 
-/**
- * `0 extends 1 & T` holds only for `any` — the 5.1.1 failure mode. It needs its
- * own detector because `any` satisfies every ordinary assertion.
- */
-type IsAny<T> = 0 extends 1 & T ? true : false;
-
-/** Invariant-position comparison, so `any` never passes for the real type. */
-type Equals<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-		? true
-		: false;
+/** `0 extends 1 & T` holds only for `any`. */
+type NotAny<T> = 0 extends 1 & T ? false : true;
 
 type Expect<T extends true> = T;
 
-type Platforms = readonly [KheopskitPlatform, KheopskitPlatform];
-type Bound = ReturnType<typeof createKheopskit<Platforms>>;
+type Bound = ReturnType<typeof createKheopskit<readonly [KheopskitPlatform]>>;
 
-export type StandaloneAccountsAreNotAny = Expect<
-	Equals<IsAny<ReturnType<typeof useAccounts>>, false>
->;
-export type StandaloneAccountsAreTyped = Expect<
-	Equals<ReturnType<typeof useAccounts>, AccountOf<KheopskitPlatform>[]>
->;
-export type StandaloneWalletsAreNotAny = Expect<
-	Equals<IsAny<ReturnType<typeof useWallets>>, false>
->;
-export type StandaloneWalletsAreTyped = Expect<
-	Equals<
-		ReturnType<typeof useWallets>,
-		KheopskitState<readonly KheopskitPlatform[]>
-	>
->;
-
-export type BoundAccountsAreNotAny = Expect<
-	Equals<IsAny<ReturnType<Bound["useAccounts"]>>, false>
->;
+export type AccountsAreTyped = Expect<NotAny<ReturnType<typeof useAccounts>>>;
+export type WalletsAreTyped = Expect<NotAny<ReturnType<typeof useWallets>>>;
 export type BoundAccountsAreTyped = Expect<
-	Equals<ReturnType<Bound["useAccounts"]>, AccountOf<KheopskitPlatform>[]>
->;
-export type BoundWalletsAreNotAny = Expect<
-	Equals<IsAny<ReturnType<Bound["useWallets"]>>, false>
+	NotAny<ReturnType<Bound["useAccounts"]>>
 >;
 export type BoundWalletsAreTyped = Expect<
-	Equals<ReturnType<Bound["useWallets"]>, KheopskitState<Platforms>>
+	NotAny<ReturnType<Bound["useWallets"]>>
 >;

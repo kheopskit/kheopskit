@@ -21,7 +21,7 @@
 		"postinstall": "pnpm papi && (simple-git-hooks || true)",
 		"clean": "pnpm -F @kheopskit/core -F @kheopskit/react -F vite-react clean && rm -rf ./.papi/descriptors/dist && rm -rf node_modules",
 		"bump": "pnpm changeset version",
-		"publish": "pnpm publish -r --no-git-checks --access public --tag latest",
+		"publish": "pnpm build:packages && pnpm check:dts && pnpm publish -r --no-git-checks --access public --tag latest",
 		"sync-peer-deps": "node scripts/sync-peer-deps.mjs",
 		"changeset-release-pr": "changeset version && pnpm sync-peer-deps && pnpm install && pnpm build:packages",
 		"check": "pnpm biome check --error-on-warnings .",
