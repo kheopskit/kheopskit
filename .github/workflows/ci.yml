@@ -31,6 +31,8 @@ jobs:
         run: pnpm knip
       - name: Bundle isolation
         run: pnpm check:isolation
+      - name: Type declarations
+        run: pnpm check:dts
       - name: Typecheck
         run: pnpm typecheck
       - name: Unit tests

@@ -27,6 +27,7 @@
 		"check": "pnpm biome check --error-on-warnings .",
 		"check:isolation": "node scripts/check-bundle-isolation.mjs",
 		"check:changeset": "node scripts/check-changeset-needed.mjs",
+		"check:dts": "node scripts/check-dts.mjs",
 		"typecheck": "pnpm -r --parallel typecheck",
 		"knip": "knip --treat-config-hints-as-errors --treat-tag-hints-as-errors"
 	},

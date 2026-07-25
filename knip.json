@@ -8,7 +8,7 @@
 				"e2e/playwright.config.ts",
 				"e2e/tests/**/*.spec.ts"
 			],
-			"ignore": ["e2e/mocks/**"]
+			"ignore": ["e2e/mocks/**", "scripts/dts-guard/**"]
 		},
 		"packages/core": {
 			"ignore": ["src/utils/storage.ts"]
