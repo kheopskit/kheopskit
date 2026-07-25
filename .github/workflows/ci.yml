@@ -21,16 +21,17 @@ jobs:
           # `git show <base>:<path>` and the three-dot diff both need history
           # past the PR head that the default shallow clone leaves out.
           fetch-depth: 0
-      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      # No install: the gate is plain git plumbing over package.json, so it
-      # skips the dependency graph entirely.
+      # Invoked as `node`, not `pnpm check:changeset`: pnpm verifies the
+      # dependency graph before running a script, which drags in a full install
+      # plus the `papi` postinstall for a check that is only git plumbing over
+      # package.json. The pnpm script stays for local runs.
       - name: Require a changeset for published dependency changes
         run: |
           git fetch --no-tags origin "${{ github.base_ref }}"
-          BASE_REF="origin/${{ github.base_ref }}" pnpm check:changeset
+          BASE_REF="origin/${{ github.base_ref }}" node scripts/check-changeset-needed.mjs
 
   checks:
     name: Lint, typecheck and unit tests
