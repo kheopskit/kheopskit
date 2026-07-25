@@ -25,7 +25,7 @@
 		"clsx": "^2.1.1",
 		"lucide-react": "^1.17.0",
 		"mipd": "^0.0.7",
-		"next": "^16.2.7",
+		"next": "^16.2.11",
 		"next-themes": "^0.4.6",
 		"polkadot-api": "^2.1.6",
 		"react": "^19.2.7",
