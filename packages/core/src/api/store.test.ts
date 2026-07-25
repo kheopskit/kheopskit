@@ -292,18 +292,16 @@ describe("createKheopskitStore", () => {
 			expect(cached.accounts).toEqual([]);
 		});
 
-		it.each([
-			"null",
-			"[]",
-			"42",
-			'"a string"',
-		])("does not throw when the stored value is %s", (raw) => {
-			localStorage.setItem(STORAGE_KEY, raw);
+		it.each(["null", "[]", "42", '"a string"'])(
+			"does not throw when the stored value is %s",
+			(raw) => {
+				localStorage.setItem(STORAGE_KEY, raw);
 
-			const kstore = createKheopskitStore();
-			expect(() => kstore.getCachedState()).not.toThrow();
-			expect(kstore.getCachedState().wallets).toEqual([]);
-		});
+				const kstore = createKheopskitStore();
+				expect(() => kstore.getCachedState()).not.toThrow();
+				expect(kstore.getCachedState().wallets).toEqual([]);
+			},
+		);
 
 		it("ignores legacy data that only has autoReconnect", () => {
 			localStorage.setItem(
