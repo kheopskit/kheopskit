@@ -31,6 +31,7 @@ Once your PR is reviewed and merged, the CI will automatically create (or update
 #### 3. Merge the "Version Packages" PR
 
 When you're ready to release, merge the "Version Packages" PR. This triggers the publish workflow which:
+- Builds the packages and checks the emitted type declarations (`pnpm check:dts`)
 - Publishes packages to npm
 - Creates a GitHub Release with the changelog
 
@@ -69,3 +70,4 @@ When you're ready to release, merge the "Version Packages" PR. This triggers the
 - If you merge multiple PRs with changesets before merging the "Version Packages" PR, they will all be batched into a single release.
 - The root `kheopskit` package is private and won't be published, but its version is used for GitHub release tags.
 - The `vite-react` example app is ignored from changesets.
+- Packages are built once, up front, before anything is published — by the publish workflow, and by the root `publish` script for a manual release. Don't give `packages/*` a `prepack`/`prepare`/`prepublishOnly` build script: `changeset publish` runs `pnpm publish` for every package concurrently, so core's build would wipe `packages/core/dist` while react's declaration emit is still reading it — which is how `@kheopskit/react@5.1.1` shipped `useAccounts(): any`. `pnpm check:dts` fails if one is reintroduced.

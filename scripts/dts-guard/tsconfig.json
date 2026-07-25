@@ -1,0 +1,20 @@
+{
+	// Type-checks the guard fixtures against the *built* declarations in
+	// packages/*/dist, resolved exactly like a consumer does — through each
+	// package's `exports` map, with no workspace `paths` mapping back to source.
+	// `nodenext` is what makes guard.mts hit the `import` condition (.d.mts) and
+	// guard.cts the `require` condition (.d.ts), so both published outputs are
+	// covered by one run. `skipLibCheck` is off on purpose: checking the emitted
+	// declarations is the entire point.
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
+		"lib": ["DOM", "ES2023"],
+		"strict": true,
+		"noEmit": true,
+		"skipLibCheck": false,
+		"types": []
+	},
+	"include": ["guard.mts", "guard.cts"]
+}

@@ -26,6 +26,10 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build packages
         run: pnpm build:packages
+      # Nothing rebuilds after this point (no prepack scripts), so what is
+      # checked here is what gets published.
+      - name: Check type declarations
+        run: pnpm check:dts
       - name: Publish Packages
         id: publish
         run: pnpm exec changeset publish

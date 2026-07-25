@@ -72,7 +72,6 @@
 		"test": "vitest run --root=../.. packages/core",
 		"dev": "tsdown --watch",
 		"build": "tsdown",
-		"prepack": "tsdown",
 		"clean": "rm -rf ./dist && rm -rf ./node_modules",
 		"typecheck": "tsc --noEmit"
 	},
