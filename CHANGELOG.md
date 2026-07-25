@@ -1,5 +1,23 @@
 # kheopskit
 
+## 5.1.1
+
+### Patch Changes
+
+- [#71](https://github.com/kheopskit/kheopskit/pull/71) [`8da651c`](https://github.com/kheopskit/kheopskit/commit/8da651c1bd8d4bf5b698df4ba6784f786820d11c) Thanks [@dependabot](https://github.com/apps/dependabot)! - Bump `@noble/hashes` to `^2.2.0`. The 2.x export map dropped extensionless subpaths, so the internal address validators now import from `@noble/hashes/sha3.js` and `@noble/hashes/blake2.js` (`blake2b` no longer has its own module). No API or behavior change.
+
+- [#68](https://github.com/kheopskit/kheopskit/pull/68) [`f1e8049`](https://github.com/kheopskit/kheopskit/commit/f1e804978b807fdfff1126d54431a642fbc4f83b) Thanks [@dependabot](https://github.com/apps/dependabot)! - Bump `@scure/base` to `^2.2.0`, aligning core with the range the examples already use. The `base58`/`base64` coders used by the address validators and the Solana signer are unchanged; no API or behavior change.
+
+- [#77](https://github.com/kheopskit/kheopskit/pull/77) [`6f225b7`](https://github.com/kheopskit/kheopskit/commit/6f225b7e2396437da20d30c3dfd96ceb36795ae7) Thanks [@0xKheops](https://github.com/0xKheops)! - Build both packages with [tsdown](https://tsdown.dev) instead of tsup, and move the toolchain to TypeScript 7.
+
+  TypeScript 7 only ships a stable `tsc` binary — its main entry now exports just `version`, and the compiler API moved to `typescript/unstable/*`. Every tool that reaches for `require('typescript')` breaks, including the `rollup-plugin-dts` that tsup uses for declaration emit. tsdown declares support for TypeScript 7 and is tsup's successor.
+
+  The published layout is unchanged: `dist/index.mjs` + `dist/index.d.mts` for ESM and `dist/index.js` + `dist/index.d.ts` for CJS (`fixedExtension: false` preserves tsup's extensions), all `exports` entries resolve, the `"use client"` banner is still emitted for `@kheopskit/react`, and the per-entry bundle isolation check still passes for all 16 entry bundles. Chunk file names differ, since the bundler differs.
+
+- Updated dependencies [[`8da651c`](https://github.com/kheopskit/kheopskit/commit/8da651c1bd8d4bf5b698df4ba6784f786820d11c), [`f1e8049`](https://github.com/kheopskit/kheopskit/commit/f1e804978b807fdfff1126d54431a642fbc4f83b), [`6f225b7`](https://github.com/kheopskit/kheopskit/commit/6f225b7e2396437da20d30c3dfd96ceb36795ae7)]:
+  - @kheopskit/core@5.1.1
+  - @kheopskit/react@5.1.1
+
 ## 5.1.0
 
 ### Minor Changes
