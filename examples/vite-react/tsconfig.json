@@ -1,12 +1,9 @@
 {
+	// Solution-style config: `files: []` means these compilerOptions would apply to
+	// no files, so `paths` lives in tsconfig.app.json (which includes src/).
 	"files": [],
 	"references": [
 		{ "path": "./tsconfig.app.json" },
 		{ "path": "./tsconfig.node.json" }
-	],
-	"compilerOptions": {
-		"paths": {
-			"@/*": ["./src/*"]
-		}
-	}
+	]
 }

@@ -1,26 +1,20 @@
 {
 	"compilerOptions": {
-		"ignoreDeprecations": "6.0",
 		"target": "ES2022",
 		"module": "ESNext",
 		"lib": ["DOM", "DOM.Iterable", "ES2023"],
-		"skipLibCheck": true,
+		"moduleResolution": "Bundler",
+		"esModuleInterop": true,
 		"importHelpers": true,
-		"declaration": false,
-		"sourceMap": false,
+		"skipLibCheck": true,
+		// `strict` already implies noImplicitAny, strictNullChecks,
+		// strictFunctionTypes, strictPropertyInitialization, noImplicitThis and
+		// alwaysStrict, so those are not restated here.
 		"strict": true,
-		"noImplicitAny": true,
-		"strictNullChecks": true,
-		"strictFunctionTypes": true,
-		"strictPropertyInitialization": true,
-		"noImplicitThis": true,
-		"alwaysStrict": true,
+		"noUncheckedIndexedAccess": true,
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
 		"noImplicitReturns": true,
-		"noFallthroughCasesInSwitch": true,
-		"moduleResolution": "Bundler",
-		"esModuleInterop": true,
-		"noUncheckedIndexedAccess": true
+		"noFallthroughCasesInSwitch": true
 	}
 }
