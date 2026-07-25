@@ -1,4 +1,4 @@
-import { keccak_256 } from "@noble/hashes/sha3";
+import { keccak_256 } from "@noble/hashes/sha3.js";
 
 const HEX_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const encoder = new TextEncoder();
