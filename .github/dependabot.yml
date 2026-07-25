@@ -6,7 +6,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "monday"
+      day: "saturday"
     # Mirrors `minimumReleaseAge: 4320` in pnpm-workspace.yaml (3 days), so
     # Dependabot never proposes a version pnpm would refuse to install.
     cooldown:
@@ -29,7 +29,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "monday"
+      day: "saturday"
     commit-message:
       prefix: "⬆️ "
     groups:
