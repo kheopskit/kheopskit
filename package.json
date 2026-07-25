@@ -26,6 +26,7 @@
 		"changeset-release-pr": "changeset version && pnpm sync-peer-deps && pnpm install && pnpm build:packages",
 		"check": "pnpm biome check --error-on-warnings .",
 		"check:isolation": "node scripts/check-bundle-isolation.mjs",
+		"check:changeset": "node scripts/check-changeset-needed.mjs",
 		"typecheck": "pnpm -r --parallel typecheck",
 		"knip": "knip --treat-config-hints-as-errors --treat-tag-hints-as-errors"
 	},

@@ -24,6 +24,23 @@ updates:
         update-types:
           - "version-update:semver-major"
     groups:
+      # Listed first because a dependency joins the first group it matches.
+      #
+      # These are packages/core's `dependencies` — the only deps that ship in a
+      # published manifest, so bumping them always needs a changeset and a
+      # release. Split out of the in-range batch so that changeset rides on a
+      # small, obvious PR instead of alongside five unrelated devDep bumps.
+      # The list is manual (Dependabot has no "production deps of publishable
+      # workspaces" selector, and `dependency-type: production` would also
+      # scoop up every examples/* runtime dep). Forgetting to extend it is not
+      # a correctness problem: `pnpm check:changeset` gates on the diff, not on
+      # this list, so a new core dependency is still caught.
+      runtime:
+        patterns:
+          - "@noble/hashes"
+          - "@scure/base"
+          - "lodash-es"
+
       # One PR for the routine minor/patch batch. Majors are left ungrouped on
       # purpose: they need review, and the ones in packages/core `dependencies`
       # also need a changeset.
