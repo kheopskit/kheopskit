@@ -174,7 +174,7 @@ const manifestAt = (ref, path) => {
 const releasePlan = () => {
 	const out = join(mkdtempSync(join(tmpdir(), "changeset-gate-")), "plan.json");
 	// Resolved against this file rather than the cwd, so the gate can be pointed
-	// at another checkout — which is how the provenance tests drive it.
+	// at another checkout.
 	const bin = join(
 		import.meta.dirname,
 		"..",
