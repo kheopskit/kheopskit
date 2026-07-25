@@ -1,5 +1,15 @@
 # kheopskit
 
+## 5.1.2
+
+### Patch Changes
+
+- [#81](https://github.com/kheopskit/kheopskit/pull/81) [`55e7091`](https://github.com/kheopskit/kheopskit/commit/55e70912343763a8ee31a981f6332b06b6293f8e) Thanks [@0xKheops](https://github.com/0xKheops)! - Fix broken type declarations published in `@kheopskit/react@5.1.1`, where `useAccounts()` collapsed to `any` and `useWallets()` referenced undeclared identifiers. Consumers saw a wave of `TS7006: Parameter implicitly has an 'any' type` errors on accounts and wallets.
+
+- Updated dependencies [[`55e7091`](https://github.com/kheopskit/kheopskit/commit/55e70912343763a8ee31a981f6332b06b6293f8e)]:
+  - @kheopskit/core@5.1.2
+  - @kheopskit/react@5.1.2
+
 ## 5.1.1
 
 ### Patch Changes
