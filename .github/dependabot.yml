@@ -15,6 +15,14 @@ updates:
     commit-message:
       prefix: "⬆️ "
     open-pull-requests-limit: 10
+    ignore:
+      # @types/node majors track the Node major they describe, so they must stay
+      # on the runtime line pinned in .nvmrc/.node-version/CI (24) — newer types
+      # would typecheck against APIs that are absent at runtime. Majors only;
+      # 24.x minors and patches (including security ones) still come through.
+      - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
     groups:
       # One PR for the routine minor/patch batch. Majors are left ungrouped on
       # purpose: they need review, and the ones in packages/core `dependencies`
