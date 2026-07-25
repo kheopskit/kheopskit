@@ -1,17 +1,29 @@
 #!/usr/bin/env node
 
 /**
- * Fails a pull request that changes what npm consumers install from a
- * published package without adding a changeset that actually releases it.
+ * Fails a pull request that changes a published package without adding a
+ * changeset that actually releases it.
  *
- * Only the dependency-related manifest fields are compared. They ship verbatim
- * to npm and dictate the install contract; everything else a dependency PR
- * usually touches — devDependencies, the lockfile, examples, workflows — leaves
- * the published artifact byte-identical. Requiring a changeset there would fail
- * nearly every PR and train everyone to bypass the gate.
+ * "Changes a published package" means anything that alters what npm consumers
+ * would get: the source that `dist` is built from, the files listed in `files`,
+ * the build configuration, and the manifest itself. Two manifest fields are
+ * deliberately excluded:
+ *
+ *   - `version`, which Changesets owns.
+ *   - `devDependencies`, which npm publishes but never installs for consumers.
+ *     Requiring a changeset for every Dependabot devDep bump is the failure
+ *     mode this gate exists to avoid: a check that fails on nearly every PR is
+ *     one everybody learns to bypass. This holds only while no devDep-only
+ *     package reaches the build output — today every such import in
+ *     packages/core is `import type` and none appear in the emitted `.d.ts`, so
+ *     a bump cannot change a published byte. A future *value* import of a
+ *     devDep would be bundled into `dist` and would break that assumption.
+ *
+ * Everything else a dependency PR usually touches — the lockfile, examples,
+ * workflows, tests — leaves the published artifact byte-identical.
  *
  * The check keys off the diff rather than the PR author or the Dependabot
- * group name, so a dependency added to `packages/core` later is covered without
+ * group name, so a package or dependency added later is covered without
  * touching any config.
  *
  * Coverage is decided by Changesets itself rather than by looking at filenames:
@@ -19,8 +31,8 @@
  * file, an `--empty` changeset, or one naming only an ignored example is
  * correctly seen as releasing nothing. The gate additionally requires the
  * release to be driven by a changeset *this branch added*, so an unrelated
- * changeset already sitting on main cannot silently cover a new dependency
- * change that would then ship with no changelog entry.
+ * changeset already sitting on the base branch cannot silently cover a change
+ * that would then ship with no changelog entry.
  *
  * Run on pull requests only, and skip the Changesets release PR — it rewrites
  * peerDependencies via `sync-peer-deps` while deleting the changesets it
@@ -32,27 +44,26 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
 const BASE = process.env.BASE_REF ?? "origin/main";
-const PUBLISHED = ["packages/core/package.json", "packages/react/package.json"];
+const PACKAGES = ["packages/core", "packages/react"];
+
+/** Owned by Changesets, or published but inert for consumers. */
+const UNPUBLISHED_FIELDS = ["version", "devDependencies"];
 
 /**
- * Every manifest field npm reads when deciding what to install alongside the
- * package. `peerDependenciesMeta` earns its place: dropping an `optional: true`
- * turns a peer into a hard install requirement without any version range
- * changing. The rest are absent today but would ship the moment they appear.
+ * Tracked under a published package, yet cannot reach the npm tarball:
+ * CHANGELOG.md is written by Changesets during the release itself, tests are
+ * never built into `dist`, and the tsbuildinfo is a local build cache.
  */
-const DEPENDENCY_FIELDS = [
-	"dependencies",
-	"peerDependencies",
-	"peerDependenciesMeta",
-	"optionalDependencies",
-	"bundledDependencies",
-	"bundleDependencies",
+const IRRELEVANT = [
+	/(^|\/)CHANGELOG\.md$/,
+	/\.test\.[cm]?tsx?$/,
+	/(^|\/)tsconfig\.tsbuildinfo$/,
 ];
 
 /**
- * Key order in package.json and entry order in `bundledDependencies` carry no
- * meaning to npm, so normalise both before comparing — a reformat must not read
- * as a dependency change.
+ * Key order in package.json and entry order in fields like
+ * `bundledDependencies` carry no meaning to npm, so normalise both before
+ * comparing — a reformat must not read as a real change.
  */
 const stable = (value) => {
 	if (Array.isArray(value))
@@ -67,17 +78,32 @@ const stable = (value) => {
 	);
 };
 
-/** The part of a manifest that changes what consumers install. */
-export const dependencyContract = (pkg) =>
+/**
+ * The part of a manifest that consumers can observe. Comparing everything but
+ * the two excluded fields means new fields are covered by default — `exports`,
+ * `files`, `engines` and the `tsdown` build config all change the published
+ * package, and none of them need to be enumerated here to be caught.
+ */
+export const publishedManifest = (pkg) =>
 	JSON.stringify(
 		stable(
 			Object.fromEntries(
-				DEPENDENCY_FIELDS.filter((field) => pkg[field] !== undefined).map(
-					(field) => [field, pkg[field]],
+				Object.entries(pkg).filter(
+					([field]) => !UNPUBLISHED_FIELDS.includes(field),
 				),
 			),
 		),
 	);
+
+/**
+ * Whether a changed path feeds the published artifact. package.json is
+ * excluded because it is compared field-wise instead — a devDependency bump
+ * shows up as a changed file but not as a changed package.
+ */
+export const affectsPublishedArtifact = (file) =>
+	PACKAGES.some((dir) => file.startsWith(`${dir}/`)) &&
+	!file.endsWith("/package.json") &&
+	!IRRELEVANT.some((pattern) => pattern.test(file));
 
 /**
  * Given a Changesets release plan, the ids of changesets that drive a real
@@ -94,9 +120,10 @@ export const planCoverage = (plan, publishedNames) => {
 };
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf-8" });
+const lines = (out) => out.split("\n").filter(Boolean);
 
-/** Dependency contract of `path`, at `ref` or on disk when `ref` is null. */
-const contractAt = (ref, path) => {
+/** Published manifest at `ref`, or from disk when `ref` is null. */
+const manifestAt = (ref, path) => {
 	let raw;
 	try {
 		raw =
@@ -107,7 +134,7 @@ const contractAt = (ref, path) => {
 		// Absent at this ref (new package, or deleted) — treat as a change.
 		return null;
 	}
-	return dependencyContract(JSON.parse(raw));
+	return publishedManifest(JSON.parse(raw));
 };
 
 /**
@@ -128,52 +155,47 @@ const releasePlan = () => {
 	}
 };
 
-const fail = (lines) => {
-	console.error(lines.join("\n"));
+const fail = (message) => {
+	console.error(message.join("\n"));
 	process.exit(1);
 };
 
 const main = () => {
-	const affected = PUBLISHED.filter((path) => {
-		const before = contractAt(BASE, path);
-		const after = contractAt(null, path);
-		return before === null || after === null || before !== after;
-	});
+	// Everything this branch changed, including work not yet committed, against
+	// the point it diverged — so a base branch that moved on cannot make an
+	// unrelated PR look like it touched a published package.
+	const since = git("merge-base", BASE, "HEAD").trim();
+	const changed = [
+		...lines(git("diff", "--name-only", since)),
+		...lines(git("ls-files", "--others", "--exclude-standard")),
+	];
+
+	const affected = [
+		...PACKAGES.map((dir) => `${dir}/package.json`).filter((path) => {
+			const before = manifestAt(since, path);
+			const after = manifestAt(null, path);
+			return before === null || after === null || before !== after;
+		}),
+		...changed.filter(affectsPublishedArtifact),
+	].sort();
 
 	if (affected.length === 0) {
-		console.log(
-			"No published dependency contract changed — no changeset required.",
-		);
+		console.log("No published package changed — no changeset required.");
 		return;
 	}
 
-	const publishedNames = PUBLISHED.map(
-		(path) => JSON.parse(readFileSync(path, "utf-8")).name,
+	const publishedNames = PACKAGES.map(
+		(dir) => JSON.parse(readFileSync(`${dir}/package.json`, "utf-8")).name,
 	);
-	const addedIds = git(
-		"diff",
-		"--name-only",
-		"--diff-filter=A",
-		`${BASE}...HEAD`,
-	)
-		.split("\n")
-		// Untracked too, so a local run matches the working-tree manifests it
-		// just compared against. CI only ever sees the committed set.
-		.concat(
-			git("ls-files", "--others", "--exclude-standard", ".changeset").split(
-				"\n",
-			),
-		)
+	const addedIds = changed
 		.filter((file) => file.startsWith(".changeset/") && file.endsWith(".md"))
 		.map((file) => basename(file, ".md"));
 
 	const { plan, error } = releasePlan();
 	const { releasesPublished, drivingIds } = planCoverage(plan, publishedNames);
-	const covered = addedIds.some((id) => drivingIds.has(id));
 
 	const why = [
-		"These published manifests changed what consumers install, so the change",
-		"needs a release:",
+		"These changes reach the published packages, so they need a release:",
 		...affected.map((path) => `  - ${path}`),
 		"",
 	];
@@ -186,21 +208,21 @@ const main = () => {
 			'Run `pnpm changeset` and include the root "kheopskit" package in the',
 			"selection — the fixed group needs it or the release tag reuses the",
 			"previous version.",
-			...(error ? ["", `changeset status said:`, error] : []),
+			...(error ? ["", "changeset status said:", error] : []),
 		]);
 
-	if (!covered)
+	if (!addedIds.some((id) => drivingIds.has(id)))
 		return fail([
 			"Missing changeset on this branch.",
 			"",
 			...why,
 			"A changeset already on the base branch would release these packages,",
-			"but this branch adds none — the dependency change would ship with no",
-			"changelog entry of its own. Run `pnpm changeset`.",
+			"but this branch adds none — the change would ship with no changelog",
+			"entry of its own. Run `pnpm changeset`.",
 		]);
 
 	console.log(
-		`Published dependency contract changed in ${affected.join(", ")}, released by ${addedIds.filter((id) => drivingIds.has(id)).join(", ")}.`,
+		`${affected.length} published change(s), released by ${addedIds.filter((id) => drivingIds.has(id)).join(", ")}.`,
 	);
 };
 

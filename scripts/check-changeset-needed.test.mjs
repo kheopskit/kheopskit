@@ -1,29 +1,33 @@
 import { describe, expect, it } from "vitest";
-import { dependencyContract, planCoverage } from "./check-changeset-needed.mjs";
+import {
+	affectsPublishedArtifact,
+	planCoverage,
+	publishedManifest,
+} from "./check-changeset-needed.mjs";
 
-describe("dependencyContract", () => {
-	it("ignores fields that never reach npm", () => {
+describe("publishedManifest", () => {
+	it("ignores the fields consumers never observe", () => {
 		const base = {
 			name: "@kheopskit/core",
 			dependencies: { "lodash-es": "^4" },
 		};
 		expect(
-			dependencyContract({ ...base, devDependencies: { viem: "^2" } }),
-		).toBe(dependencyContract({ ...base, devDependencies: { viem: "^3" } }));
-		expect(dependencyContract({ ...base, version: "1.0.0" })).toBe(
-			dependencyContract({ ...base, version: "2.0.0" }),
+			publishedManifest({ ...base, devDependencies: { viem: "^2" } }),
+		).toBe(publishedManifest({ ...base, devDependencies: { viem: "^3" } }));
+		expect(publishedManifest({ ...base, version: "1.0.0" })).toBe(
+			publishedManifest({ ...base, version: "2.0.0" }),
 		);
 	});
 
-	it("is insensitive to key order and bundled entry order", () => {
+	it("is insensitive to key order and array entry order", () => {
 		expect(
-			dependencyContract({
+			publishedManifest({
 				dependencies: { b: "^1", a: "^1" },
-				bundledDependencies: ["b", "a"],
+				files: ["README.md", "dist"],
 			}),
 		).toBe(
-			dependencyContract({
-				bundledDependencies: ["a", "b"],
+			publishedManifest({
+				files: ["dist", "README.md"],
 				dependencies: { a: "^1", b: "^1" },
 			}),
 		);
@@ -31,29 +35,84 @@ describe("dependencyContract", () => {
 
 	it("detects a dependency range change", () => {
 		expect(
-			dependencyContract({ dependencies: { "@scure/base": "^1" } }),
-		).not.toBe(dependencyContract({ dependencies: { "@scure/base": "^2" } }));
+			publishedManifest({ dependencies: { "@scure/base": "^1" } }),
+		).not.toBe(publishedManifest({ dependencies: { "@scure/base": "^2" } }));
 	});
 
-	// The case that motivated widening beyond `dependencies`/`peerDependencies`:
-	// no version string moves, but the peer stops being optional.
+	// No version string moves here, but the peer stops being optional.
 	it("detects an optional peer becoming required", () => {
 		const peerDependencies = { viem: ">=2.0.0" };
 		expect(
-			dependencyContract({
+			publishedManifest({
 				peerDependencies,
 				peerDependenciesMeta: { viem: { optional: true } },
 			}),
-		).not.toBe(dependencyContract({ peerDependencies }));
+		).not.toBe(publishedManifest({ peerDependencies }));
 	});
 
-	it("detects added optional and bundled dependencies", () => {
-		expect(dependencyContract({})).not.toBe(
-			dependencyContract({ optionalDependencies: { fsevents: "^2" } }),
+	// Comparing everything but the excluded fields means these need no
+	// enumeration to be caught.
+	it("detects changes to fields nobody enumerated", () => {
+		expect(
+			publishedManifest({ exports: { ".": "./dist/index.mjs" } }),
+		).not.toBe(publishedManifest({ exports: { ".": "./dist/main.mjs" } }));
+		expect(publishedManifest({ files: ["dist"] })).not.toBe(
+			publishedManifest({ files: ["dist", "README.md"] }),
 		);
-		expect(dependencyContract({})).not.toBe(
-			dependencyContract({ bundledDependencies: ["lodash-es"] }),
+		expect(publishedManifest({ engines: { node: ">=22" } })).not.toBe(
+			publishedManifest({ engines: { node: ">=24" } }),
 		);
+		expect(publishedManifest({ tsdown: { target: "es2020" } })).not.toBe(
+			publishedManifest({ tsdown: { target: "es2022" } }),
+		);
+		expect(publishedManifest({})).not.toBe(
+			publishedManifest({ optionalDependencies: { fsevents: "^2" } }),
+		);
+	});
+});
+
+describe("affectsPublishedArtifact", () => {
+	it("counts source and shipped docs", () => {
+		expect(affectsPublishedArtifact("packages/core/src/index.ts")).toBe(true);
+		expect(affectsPublishedArtifact("packages/react/src/nested/deep.tsx")).toBe(
+			true,
+		);
+		expect(affectsPublishedArtifact("packages/core/README.md")).toBe(true);
+		expect(affectsPublishedArtifact("packages/core/MIGRATING_TO_V4.md")).toBe(
+			true,
+		);
+		expect(affectsPublishedArtifact("packages/core/tsconfig.build.json")).toBe(
+			true,
+		);
+	});
+
+	it("skips what cannot reach the tarball", () => {
+		expect(affectsPublishedArtifact("packages/core/src/ssr.test.ts")).toBe(
+			false,
+		);
+		expect(affectsPublishedArtifact("packages/react/src/store.test.tsx")).toBe(
+			false,
+		);
+		expect(affectsPublishedArtifact("packages/core/CHANGELOG.md")).toBe(false);
+		expect(affectsPublishedArtifact("packages/core/tsconfig.tsbuildinfo")).toBe(
+			false,
+		);
+	});
+
+	// Compared field-wise instead, so a devDependency bump is not a change.
+	it("leaves package.json to the manifest comparison", () => {
+		expect(affectsPublishedArtifact("packages/core/package.json")).toBe(false);
+	});
+
+	it("ignores everything outside the published packages", () => {
+		for (const file of [
+			"examples/vite-react/src/main.tsx",
+			".github/workflows/ci.yml",
+			"pnpm-lock.yaml",
+			"scripts/check-changeset-needed.mjs",
+			"packages-not-really/core/src/index.ts",
+		])
+			expect(affectsPublishedArtifact(file)).toBe(false);
 	});
 });
 
@@ -111,8 +170,9 @@ describe("planCoverage", () => {
 				{ name: "@kheopskit/core", type: "patch", changesets: [] },
 			],
 		};
-		const { releasesPublished, drivingIds } = planCoverage(plan, published);
-		expect(releasesPublished).toBe(true);
-		expect(drivingIds).toEqual(new Set(["root-only"]));
+		expect(planCoverage(plan, published)).toEqual({
+			releasesPublished: true,
+			drivingIds: new Set(["root-only"]),
+		});
 	});
 });
