@@ -43,8 +43,12 @@ jobs:
       # everything above, yet can never satisfy the gate — it rewrites
       # peerDependencies through `sync-peer-deps` while deleting the changesets
       # it consumed.
+      #
+      # The exemption also checks the head repo, because `head_ref` is just a
+      # branch name the PR author picks: a fork could otherwise call its branch
+      # `changeset-release/main` and skip the gate entirely.
       - name: Changeset
-        if: ${{ !cancelled() && github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main' }}
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && !(github.head_ref == 'changeset-release/main' && github.event.pull_request.head.repo.full_name == github.repository) }}
         run: |
           git fetch --no-tags origin "${{ github.base_ref }}"
           BASE_REF="origin/${{ github.base_ref }}" pnpm check:changeset
