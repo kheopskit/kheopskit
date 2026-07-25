@@ -1,4 +1,4 @@
-import { blake2b } from "@noble/hashes/blake2b";
+import { blake2b } from "@noble/hashes/blake2.js";
 import { base58 } from "@scure/base";
 
 // The "SS58PRE" prefix used in the SS58 checksum preimage.
