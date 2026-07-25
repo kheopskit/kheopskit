@@ -18,6 +18,14 @@
  *
  * 1. neither package rebuilds during `pnpm publish` — see NO_BUILD_ON_PACK;
  * 2. a fixture consuming the built declarations type-checks (scripts/dts-guard/).
+ *
+ * TODO: delete this once rolldown-plugin-dts reports unresolvable types itself.
+ * As of rolldown-plugin-dts@0.27.12 the emit substitutes `any`, prints no
+ * warning at all and exits 0, so `failOnWarn` has nothing to act on. Its
+ * `dts: { resolver: "tsc" }` mode would surface the real TS2307, but crashes on
+ * typescript@7.0.2 with `ts.parseJsonConfigFileContent is not a function`. When
+ * that resolver works, tsc fails the build on its own and this check is
+ * redundant.
  */
 
 import { spawnSync } from "node:child_process";
