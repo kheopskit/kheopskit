@@ -36,16 +36,16 @@
 	"license": "ISC",
 	"packageManager": "pnpm@11.6.0+sha512.9a36518224080c6fe5165afdcfe79bfa118c29be703f3f462b1e32efe1e98e47e8750b148e08286250aad4113cc7993ca413c4e2cd447752708c2ee5751bc95f",
 	"devDependencies": {
-		"@biomejs/biome": "^2.5.6",
+		"@biomejs/biome": "^2.5.7",
 		"@changesets/changelog-github": "^0.7.0",
 		"@changesets/cli": "^2.31.1",
-		"@playwright/test": "^1.62.0",
+		"@playwright/test": "^1.62.1",
 		"@testing-library/dom": "^10.4.1",
 		"@testing-library/jest-dom": "^7.0.0",
 		"@testing-library/react": "^16.3.2",
 		"happy-dom": "^20.11.1",
 		"jsdom": "^29.1.1",
-		"knip": "^6.29.0",
+		"knip": "^6.31.0",
 		"simple-git-hooks": "^2.13.1",
 		"tsdown": "^0.22.14",
 		"typescript": "~7.0.2",
@@ -55,7 +55,7 @@
 		"@kheopskit/core": "workspace:*",
 		"@kheopskit/react": "workspace:*",
 		"@polkadot-api/descriptors": "file:.papi/descriptors",
-		"polkadot-api": "^2.2.1"
+		"polkadot-api": "^2.2.2"
 	},
 	"simple-git-hooks": {
 		"pre-commit": "pnpm biome check --staged --error-on-warnings --no-errors-on-unmatched"
