@@ -21,12 +21,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Create Release Pull Request or Log No Changes
         id: changesets
-        uses: changesets/action@v2
+        uses: changesets/action@v1
         with:
-          version-script: pnpm changeset-release-pr
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-        # The action reads the token from its input, but the version script
-        # still needs it in the environment: @changesets/changelog-github calls
-        # the GitHub API to resolve each changeset to its PR and author.
+          version: pnpm changeset-release-pr
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
