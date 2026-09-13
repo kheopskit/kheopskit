@@ -19,7 +19,7 @@
 		"@reown/appkit": "^1.8.23",
 		"@scure/base": "^2.4.0",
 		"@solana-program/system": "^0.13.0",
-		"@solana/kit": "^7.0.0",
+		"@solana/kit": "^8.2.0",
 		"@tanstack/react-query": "5.102.8",
 		"@tanstack/react-router": "1.170.34",
 		"@tanstack/react-start": "1.168.51",
