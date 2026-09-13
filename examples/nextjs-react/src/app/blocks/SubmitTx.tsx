@@ -270,26 +270,34 @@ const SubmitTxDot: FC<{
 	useEffect(() => {
 		if (!tx) return;
 
-		const sub = tx.subscribe((status) => {
-			setTxStatus(status);
+		let toastId: string | undefined;
 
-			const id = status.txHash; // for toasts
+		const sub = tx.subscribe({
+			error: (err) => {
+				console.error("Transaction failed", { err });
+				toast.error(`Error: ${(err as Error).message}`, { id: toastId });
+				setTx(undefined);
+			},
+			next: (status) => {
+				setTxStatus(status);
 
-			switch (status.type) {
-				case "signed": {
-					toast.loading(`Transaction signed: ${status.txHash}`, {
-						id,
-					});
-					break;
-				}
-				case "broadcasted": {
-					toast.loading(`Transaction broadcasted: ${status.txHash}`, {
-						id,
-					});
-					break;
-				}
-				case "txBestBlocksState": {
-					if (status.found) {
+				const id = status.txHash; // for toasts
+				toastId = id;
+
+				switch (status.type) {
+					case "created": {
+						toast.loading(`Transaction created: ${status.txHash}`, {
+							id,
+						});
+						break;
+					}
+					case "broadcasted": {
+						toast.loading(`Transaction broadcasted: ${status.txHash}`, {
+							id,
+						});
+						break;
+					}
+					case "inBestBlock": {
 						if (status.ok) {
 							toast.success("Transaction successful", {
 								id,
@@ -300,10 +308,10 @@ const SubmitTxDot: FC<{
 							});
 						}
 						setTx(undefined);
+						break;
 					}
-					break;
 				}
-			}
+			},
 		});
 
 		return () => {
@@ -319,7 +327,7 @@ const SubmitTxDot: FC<{
 			const tx$ = api.tx.Balances.transfer_keep_alive({
 				dest: MultiAddress.Id(recipient.address),
 				value: 0n,
-			}).signSubmitAndWatch(account.polkadotSigner);
+			}).createSubmitAndWatch(account.txCreator);
 
 			setTx(tx$);
 		} catch (err) {

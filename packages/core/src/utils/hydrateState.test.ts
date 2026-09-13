@@ -79,7 +79,7 @@ describe("serializeAccount (polkadot cached type)", () => {
 			genesisHash: null,
 			walletId: WALLET_ID,
 			walletName: "Talisman",
-			polkadotSigner: {} as never,
+			txCreator: {} as never,
 		};
 
 		const cached = serializeAccount(account);

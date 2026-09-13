@@ -1,8 +1,10 @@
-import {
-	getPolkadotSignerFromPjs,
-	type InjectedExtension,
-	type InjectedPolkadotAccount,
+import type {
+	InjectedExtension,
+	InjectedPolkadotAccount,
+	SignPayload,
+	SignRaw,
 } from "polkadot-api/pjs-signer";
+import * as pjs from "polkadot-api/pjs-signer";
 import { Observable, of } from "rxjs";
 import { getWalletAccountId } from "../../utils";
 import { KheopskitError } from "../errors";
@@ -54,13 +56,47 @@ const getInjectedWalletAccounts$ = (
 	});
 };
 
+type PjsSignerFactory = (
+	address: string,
+	signPayload: SignPayload,
+	signRaw: SignRaw,
+) => unknown;
+
+type PjsSignerModule = {
+	getTxCreatorFromPjs?: PjsSignerFactory;
+	getPolkadotSignerFromPjs?: PjsSignerFactory;
+};
+
+/**
+ * polkadot-api v3 replaced `polkadotSigner` (PolkadotSigner) with `txCreator`
+ * (TxCreator). Which one the app's installed version provides is detected at
+ * runtime so a single @kheopskit/core release supports both.
+ */
+const getPjsSignerField = (): {
+	field: "txCreator" | "polkadotSigner";
+	factory: PjsSignerFactory;
+} => {
+	const { getTxCreatorFromPjs, getPolkadotSignerFromPjs } =
+		pjs as PjsSignerModule;
+	if (getTxCreatorFromPjs)
+		return { field: "txCreator", factory: getTxCreatorFromPjs };
+	if (getPolkadotSignerFromPjs)
+		return { field: "polkadotSigner", factory: getPolkadotSignerFromPjs };
+	throw new KheopskitError(
+		"UNSUPPORTED_VERSION",
+		"Unsupported polkadot-api/pjs-signer version",
+	);
+};
+
 const getAppKitPolkadotSigner = (appKit: AppKitInstance, address: string) => {
 	const provider = appKit.getProvider("polkadot");
 	if (!provider) throw new KheopskitError("NO_PROVIDER", "No provider found");
 	if (!provider.session)
 		throw new KheopskitError("NO_SESSION", "No session found");
 
-	return getPolkadotSignerFromPjs(
+	const { field, factory } = getPjsSignerField();
+
+	const signer = factory(
 		address,
 		(transactionPayload) => {
 			if (!provider.session)
@@ -102,6 +138,8 @@ const getAppKitPolkadotSigner = (appKit: AppKitInstance, address: string) => {
 			});
 		},
 	);
+
+	return { [field]: signer };
 };
 
 const getWalletConnectAccounts$ = (
@@ -121,19 +159,20 @@ const getWalletConnectAccounts$ = (
 			);
 
 			return addresses.map(
-				(address): PolkadotAccount => ({
-					id: getWalletAccountId(wallet.id, address),
-					platform: "polkadot",
-					walletName: wallet.name,
-					walletId: wallet.id,
-					address,
-					polkadotSigner: getAppKitPolkadotSigner(wallet.appKit, address),
-					genesisHash: null,
-					name: `${wallet.name} Polkadot`,
-					// WalletConnect (Reown AppKit) doesn't expose account key type;
-					// default to sr25519, which is the most common Polkadot key type.
-					type: "sr25519",
-				}),
+				(address) =>
+					({
+						id: getWalletAccountId(wallet.id, address),
+						platform: "polkadot",
+						walletName: wallet.name,
+						walletId: wallet.id,
+						address,
+						...getAppKitPolkadotSigner(wallet.appKit, address),
+						genesisHash: null,
+						name: `${wallet.name} Polkadot`,
+						// WalletConnect (Reown AppKit) doesn't expose account key type;
+						// default to sr25519, which is the most common Polkadot key type.
+						type: "sr25519",
+					}) as PolkadotAccount,
 			);
 		},
 	});

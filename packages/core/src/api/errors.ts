@@ -15,6 +15,8 @@ export type KheopskitErrorCode =
 	| "NO_SESSION"
 	/** No provider available for the requested namespace. */
 	| "NO_PROVIDER"
+	/** The installed polkadot-api version exposes neither `getTxCreatorFromPjs` (v3) nor `getPolkadotSignerFromPjs` (v2). */
+	| "UNSUPPORTED_VERSION"
 	/** The requested chain cannot be used for this operation (e.g. a Solana cluster with no CAIP-2 id over WalletConnect). */
 	| "UNSUPPORTED_CHAIN";
 
