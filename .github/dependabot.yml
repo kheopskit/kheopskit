@@ -7,11 +7,14 @@ updates:
     schedule:
       interval: "weekly"
       day: "saturday"
-    # Mirrors `minimumReleaseAge: 4320` in pnpm-workspace.yaml (3 days), so
-    # Dependabot never proposes a version pnpm would refuse to install.
+    # One day more than `minimumReleaseAge: 4320` in pnpm-workspace.yaml (3
+    # days), so Dependabot never proposes a version pnpm would refuse to
+    # install. The margin is the point: Dependabot counts whole days while
+    # pnpm counts minutes, so an exact mirror loses every tie and the PR fails
+    # install with ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION.
     cooldown:
-      default-days: 3
-      semver-major-days: 7
+      default-days: 4
+      semver-major-days: 8
     commit-message:
       prefix: "⬆️ "
     open-pull-requests-limit: 10
