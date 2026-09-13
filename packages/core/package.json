@@ -122,7 +122,7 @@
 	},
 	"devDependencies": {
 		"@reown/appkit": "^1.8.23",
-		"@solana/kit": "^7.0.0",
+		"@solana/kit": "^8.3.0",
 		"@solana/wallet-standard-features": "^1.4.0",
 		"@types/lodash-es": "^4.17.12",
 		"@wallet-standard/app": "^1.1.1",
