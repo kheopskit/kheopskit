@@ -1,5 +1,11 @@
 # @kheopskit/core
 
+## 5.2.1
+
+### Patch Changes
+
+- [#91](https://github.com/kheopskit/kheopskit/pull/91) [`1450f7a`](https://github.com/kheopskit/kheopskit/commit/1450f7a474c22e15139264b8cfa66e1d8d2d2d02) Thanks [@dependabot](https://github.com/apps/dependabot)! - Bump `@noble/hashes` to 2.4.0 and `@scure/base` to 2.4.0.
+
 ## 5.2.0
 
 ### Minor Changes
