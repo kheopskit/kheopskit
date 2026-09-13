@@ -23,6 +23,10 @@ jobs:
         id: changesets
         uses: changesets/action@v2
         with:
-          version: pnpm changeset-release-pr
+          version-script: pnpm changeset-release-pr
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        # The action reads the token from its input, but the version script
+        # still needs it in the environment: @changesets/changelog-github calls
+        # the GitHub API to resolve each changeset to its PR and author.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
