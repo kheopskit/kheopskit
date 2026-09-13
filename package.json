@@ -44,12 +44,12 @@
 		"@testing-library/jest-dom": "^7.0.1",
 		"@testing-library/react": "^16.3.3",
 		"happy-dom": "^20.14.3",
-		"jsdom": "^29.1.1",
+		"jsdom": "^30.0.1",
 		"knip": "^6.35.1",
 		"simple-git-hooks": "^2.14.0",
 		"tsdown": "^0.23.0",
 		"typescript": "~7.0.2",
-		"vitest": "^4.1.11"
+		"vitest": "^5.0.0"
 	},
 	"dependencies": {
 		"@kheopskit/core": "workspace:*",
