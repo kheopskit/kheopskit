@@ -69,7 +69,7 @@ const AccountRow: FC<{ account: WalletAccount }> = ({ account }) => {
 };
 
 const SignButton: FC<{ account: WalletAccount }> = ({ account }) => {
-	// SDK fields (signer/client/polkadotSigner) are absent while hydrating;
+	// SDK fields (signer/client/txCreator) are absent while hydrating;
 	// disable signing until hydration completes. See MIGRATING_TO_V4.md.
 	const { isHydrating } = useWallets();
 	const MESSAGE = "Kheopskit rocks!";
@@ -79,7 +79,7 @@ const SignButton: FC<{ account: WalletAccount }> = ({ account }) => {
 			case "polkadot": {
 				const bytes = Binary.fromText(MESSAGE);
 				try {
-					const signature = await account.polkadotSigner.signBytes(bytes);
+					const signature = await account.txCreator.signBytes(bytes);
 					const hexSignature = Binary.toHex(signature);
 					toast.success(`Signature: ${hexSignature}`);
 				} catch (err) {

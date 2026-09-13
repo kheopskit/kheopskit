@@ -10,7 +10,7 @@ type ExtensionAccount = {
 	name?: string;
 	type: PolkadotAccountType;
 	genesisHash: string | null;
-	polkadotSigner: unknown;
+	txCreator: unknown;
 };
 
 const createMockExtension = (accounts: ExtensionAccount[]) => {
@@ -50,14 +50,14 @@ describe("getPolkadotAccounts$", () => {
 				name: "Alice",
 				type: "sr25519",
 				genesisHash: null,
-				polkadotSigner: {} as never,
+				txCreator: {} as never,
 			},
 			{
 				address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
 				name: "Eth Key",
 				type: "ethereum",
 				genesisHash: null,
-				polkadotSigner: {} as never,
+				txCreator: {} as never,
 			},
 		]);
 
@@ -77,7 +77,7 @@ describe("getPolkadotAccounts$", () => {
 				name: "Ethereum Key",
 				type: "ethereum",
 				genesisHash: null,
-				polkadotSigner: {} as never,
+				txCreator: {} as never,
 			},
 		]);
 
@@ -97,7 +97,7 @@ describe("getPolkadotAccounts$", () => {
 				name: "Alice",
 				type: "sr25519",
 				genesisHash: null,
-				polkadotSigner: {} as never,
+				txCreator: {} as never,
 			},
 		]);
 
@@ -247,6 +247,55 @@ describe("getPolkadotAccounts$", () => {
 			);
 
 			expect(accounts).toHaveLength(0);
+		});
+
+		it("exposes txCreator with polkadot-api v3", async () => {
+			const { clearAllCachedObservables } = await import(
+				"../../utils/getCachedObservable"
+			);
+			clearAllCachedObservables();
+
+			const { wallet } = createMockAppKitWallet([
+				`polkadot:${GENESIS}:${ALICE}`,
+			]);
+
+			const accounts = await firstValueFrom(
+				getPolkadotAccounts$(of([wallet]), ["sr25519"]),
+			);
+
+			expect(accounts[0]).toHaveProperty("txCreator");
+			expect(accounts[0]).not.toHaveProperty("polkadotSigner");
+		});
+
+		it("falls back to polkadotSigner with polkadot-api v2", async () => {
+			vi.resetModules();
+			vi.doMock("polkadot-api/pjs-signer", () => ({
+				getTxCreatorFromPjs: undefined,
+				getPolkadotSignerFromPjs: vi.fn(() => ({
+					publicKey: new Uint8Array(),
+				})),
+			}));
+			const { clearAllCachedObservables } = await import(
+				"../../utils/getCachedObservable"
+			);
+			clearAllCachedObservables();
+			const { getPolkadotAccounts$: getV2PolkadotAccounts$ } = await import(
+				"./accounts"
+			);
+
+			const { wallet } = createMockAppKitWallet([
+				`polkadot:${GENESIS}:${ALICE}`,
+			]);
+
+			const accounts = await firstValueFrom(
+				getV2PolkadotAccounts$(of([wallet]), ["sr25519"]),
+			);
+
+			expect(accounts[0]).toHaveProperty("polkadotSigner");
+			expect(accounts[0]).not.toHaveProperty("txCreator");
+
+			vi.doUnmock("polkadot-api/pjs-signer");
+			vi.resetModules();
 		});
 	});
 });

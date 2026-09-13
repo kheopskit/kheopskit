@@ -226,7 +226,7 @@ cross-platform signer, by design (the SDKs differ). Guard access behind
 |----------|-----------------|
 | Ethereum | `account.client` — a viem `WalletClient` (switch chains via the client) |
 | Solana | `account.signer` (bound to the configured cluster) and `account.getSigner(chain)` for another cluster |
-| Polkadot | `account.polkadotSigner` — a polkadot-api signer |
+| Polkadot | `account.txCreator` (polkadot-api v3) or `account.polkadotSigner` (v2) |
 
 ## 11. New public exports
 

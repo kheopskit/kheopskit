@@ -92,7 +92,7 @@ export const hydrateWallet = (
  * plain, serializable platform data that lives in the cache — Ethereum `chainId`
  * and the Polkadot key `type`. Those render immediately on reload (no blank →
  * value flicker) and match what the live account will report. Only the SDK
- * handles (`client`/`signer`/`polkadotSigner`) are absent until the real account
+ * handles (`client`/`signer`/`txCreator`) are absent until the real account
  * replaces this placeholder; signing stays gated on `isHydrating` until then.
  */
 export const hydrateAccount = (cached: CachedAccount): BaseWalletAccount => ({

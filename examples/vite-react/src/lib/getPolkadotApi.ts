@@ -42,7 +42,7 @@ export const getPolkadotApi = <ChainId extends PolkadotChainId>(
 		);
 		const descriptors = DESCRIPTORS[chainId] as Descriptors<ChainId>;
 		const api = client.getTypedApi(descriptors);
-		CACHE.set(chainId, api);
+		CACHE.set(chainId, api as PolkadotApi<PolkadotChainId>);
 	}
 
 	return CACHE.get(chainId) as PolkadotApi<ChainId>;
