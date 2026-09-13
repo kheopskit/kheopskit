@@ -1,5 +1,15 @@
 # @kheopskit/react
 
+## 5.2.0
+
+### Minor Changes
+
+- [#105](https://github.com/kheopskit/kheopskit/pull/105) [`eb0c430`](https://github.com/kheopskit/kheopskit/commit/eb0c430ccfe09a90d7076aaeae07c0170fa808a8) Thanks [@0xKheops](https://github.com/0xKheops)! - Support polkadot-api v3 alongside v2.
+
+  polkadot-api v3 replaced the `PolkadotSigner` interface with `TxCreator`: injected accounts now expose `txCreator` instead of `polkadotSigner`, and `getPolkadotSignerFromPjs` became `getTxCreatorFromPjs`. `@kheopskit/core` detects which one the installed `polkadot-api/pjs-signer` provides at runtime, so `PolkadotAccount` carries `txCreator` on v3 and `polkadotSigner` on v2, for both injected and WalletConnect accounts. The `polkadot-api` peer range stays `>=2.0.0`; apps on v2 are unaffected.
+
+  Adds the `UNSUPPORTED_VERSION` error code, thrown when neither factory is found.
+
 ## 5.1.2
 
 ### Patch Changes
