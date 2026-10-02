@@ -6,7 +6,10 @@
 			"entry": [
 				".papi/whitelist.ts",
 				"e2e/playwright.config.ts",
-				"e2e/tests/**/*.spec.ts"
+				"e2e/tests/**/*.spec.ts",
+				".claude/skills/verify/playwright.config.ts",
+				".claude/skills/verify/helpers.ts",
+				".claude/skills/verify/specs/**/*.spec.ts"
 			],
 			"ignore": ["e2e/mocks/**", "scripts/dts-guard/**"]
 		},

@@ -16,3 +16,6 @@ app.config.timestamp*.js
 # Playwright
 test-results
 playwright-report
+
+# Verification skill scratch + evidence
+.verify
