@@ -49,13 +49,13 @@
 		"simple-git-hooks": "^2.14.0",
 		"tsdown": "^0.23.0",
 		"typescript": "~7.0.2",
-		"vitest": "^5.0.1"
+		"vitest": "^5.0.2"
 	},
 	"dependencies": {
 		"@kheopskit/core": "workspace:*",
 		"@kheopskit/react": "workspace:*",
 		"@polkadot-api/descriptors": "file:.papi/descriptors",
-		"polkadot-api": "^3.1.0"
+		"polkadot-api": "^3.2.0"
 	},
 	"simple-git-hooks": {
 		"pre-commit": "pnpm biome check --staged --error-on-warnings --no-errors-on-unmatched"
