@@ -45,6 +45,7 @@ const kheopskit$ = getKheopskit$({
     ethereum(),
     solana({ chain: "solana:mainnet" }),
   ],
+  appName: "My Dapp", // shown by Polkadot extensions; defaults to walletConnect.metadata.name, then the hostname
   autoReconnect: true,
 });
 

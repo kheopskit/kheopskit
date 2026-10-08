@@ -231,6 +231,14 @@ export type KheopskitConfig<
 	 */
 	platforms: P;
 	walletConnect?: WalletConnectConfig;
+	/**
+	 * Dapp name sent to Polkadot injected extensions on connect. Some
+	 * extensions (e.g. polkadot.js) warn about a suspicious origin when it's
+	 * empty.
+	 *
+	 * @default walletConnect.metadata.name, then window.location.hostname
+	 */
+	appName?: string;
 	debug: boolean;
 	/**
 	 * Custom storage key for persisting wallet connection state.

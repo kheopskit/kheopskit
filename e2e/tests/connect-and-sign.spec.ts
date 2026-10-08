@@ -68,6 +68,11 @@ test.describe("polkadot mock wallet", () => {
 		await expect(
 			walletRow.getByRole("cell", { name: "1", exact: true }),
 		).toBeVisible();
+		expect(
+			await page.evaluate(
+				() => (window as { __dotEnableDappName?: string }).__dotEnableDappName,
+			),
+		).toBe("Kheopskit Demo");
 
 		// Account appears with the name reported by the extension
 		const accountRow = getAccountsTable(page).getByRole("row", {

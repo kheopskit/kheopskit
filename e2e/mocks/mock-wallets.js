@@ -71,19 +71,22 @@ const dotAccounts = [
 window.injectedWeb3 = window.injectedWeb3 || {};
 window.injectedWeb3["mock-polkadot-wallet"] = {
 	version: "1.0.0",
-	enable: async () => ({
-		accounts: {
-			get: async () => dotAccounts,
-			subscribe: (cb) => {
-				cb(dotAccounts);
-				return () => {};
+	enable: async (dappName) => {
+		window.__dotEnableDappName = dappName;
+		return {
+			accounts: {
+				get: async () => dotAccounts,
+				subscribe: (cb) => {
+					cb(dotAccounts);
+					return () => {};
+				},
 			},
-		},
-		signer: {
-			signRaw: async () => ({ id: 1, signature: DOT_SIGNATURE }),
-			signPayload: async () => ({ id: 1, signature: DOT_SIGNATURE }),
-		},
-	}),
+			signer: {
+				signRaw: async () => ({ id: 1, signature: DOT_SIGNATURE }),
+				signPayload: async () => ({ id: 1, signature: DOT_SIGNATURE }),
+			},
+		};
+	},
 };
 
 // ---------------------------------------------------------------------------
