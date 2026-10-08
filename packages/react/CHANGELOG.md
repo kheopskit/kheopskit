@@ -1,5 +1,11 @@
 # @kheopskit/react
 
+## 5.3.0
+
+### Minor Changes
+
+- [#126](https://github.com/kheopskit/kheopskit/pull/126) [`8d5fe21`](https://github.com/kheopskit/kheopskit/commit/8d5fe21d97026dfebd0a4c2c06312a030a607326) Thanks [@0xKheops](https://github.com/0xKheops)! - Add `appName` config, sent as the dapp name to Polkadot injected extensions so polkadot.js no longer flags a suspicious origin ([#125](https://github.com/kheopskit/kheopskit/issues/125)).
+
 ## 5.2.1
 
 ### Patch Changes
