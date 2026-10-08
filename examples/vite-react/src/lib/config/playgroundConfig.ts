@@ -60,6 +60,7 @@ const walletConnect =
 		: undefined;
 
 export const kheopskitConfig = {
+	appName: "Kheopskit Demo",
 	autoReconnect: true,
 	platforms,
 	debug: true,

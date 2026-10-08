@@ -150,6 +150,10 @@ const config = {
 };
 ```
 
+### Polkadot app name
+
+Set `appName` in the config to name your dapp to Polkadot extensions on connect. When it's unset, kheopskit sends `walletConnect.metadata.name`, then `window.location.hostname`, because polkadot.js warns about a suspicious origin when the name is empty.
+
 ### Solana
 
 Add the `solana()` plugin to `platforms` to surface Solana wallets. Injected wallets are discovered via the [Wallet Standard](https://github.com/anza-xyz/wallet-standard); WalletConnect is supported through Reown AppKit.

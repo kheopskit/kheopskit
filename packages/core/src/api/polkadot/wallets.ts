@@ -13,6 +13,7 @@ import {
 } from "../../utils/WalletId";
 import { createInjectedWallets$ } from "../injectedWallets";
 import type { KheopskitStore } from "../store";
+import type { KheopskitConfig } from "../types";
 import type { PolkadotInjectedWallet } from "./types";
 
 const getInjectedWalletsIds = () =>
@@ -56,7 +57,10 @@ const createWalletIdsPoller$ = () => {
 
 // The shared WalletConnect connector is emitted once by core (see
 // `getWallets$`), not per platform — so this returns only injected wallets.
-export const getPolkadotWallets$ = (store: KheopskitStore) =>
+export const getPolkadotWallets$ = (
+	store: KheopskitStore,
+	config: Pick<KheopskitConfig, "appName" | "walletConnect">,
+) =>
 	createInjectedWallets$<WalletId, PolkadotInjectedWallet, InjectedExtension>(
 		store,
 		{
@@ -64,7 +68,12 @@ export const getPolkadotWallets$ = (store: KheopskitStore) =>
 			getWalletId: (walletId) => walletId,
 			connect: (walletId) => {
 				const { identifier } = parseWalletId(walletId);
-				return connectInjectedExtension(identifier);
+				return connectInjectedExtension(
+					identifier,
+					config.appName ||
+						config.walletConnect?.metadata.name ||
+						window.location.hostname,
+				);
 			},
 			buildWallet: ({ walletId, handle, isConnected, connect, disconnect }) => {
 				const { identifier } = parseWalletId(walletId);
