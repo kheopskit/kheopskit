@@ -129,9 +129,9 @@
 		"@wallet-standard/base": "^1.1.1",
 		"@wallet-standard/features": "^1.1.1",
 		"mipd": "^0.0.7",
-		"polkadot-api": "^3.2.0",
+		"polkadot-api": "^3.2.1",
 		"rxjs": "^7.8.2",
-		"viem": "^2.57.0"
+		"viem": "^2.57.3"
 	},
 	"tsdown": {
 		"entry": [
