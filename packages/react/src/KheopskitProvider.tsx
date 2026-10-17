@@ -98,12 +98,14 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 				accounts: [],
 				config: resolvedConfig,
 				isHydrating: true,
+				isDiscovering: true,
 			};
 		}
 		return {
 			...getHydratedSnapshot(kheopskitStore, resolvedConfig.platforms),
 			config: resolvedConfig,
 			isHydrating: true,
+			isDiscovering: true,
 		};
 	}, [ssrCookies, kheopskitStore, resolvedConfig]);
 
@@ -125,6 +127,7 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 			}),
 			config: resolvedConfig,
 			isHydrating: true,
+			isDiscovering: true,
 		};
 	}, [kheopskitStore, resolvedConfig]);
 
