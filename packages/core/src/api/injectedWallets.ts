@@ -86,6 +86,7 @@ type Connecting = {
 	promise: Promise<void>;
 	anchored: boolean;
 	waiting: number;
+	answered: boolean;
 	abort: () => void;
 };
 
@@ -105,6 +106,7 @@ const join = (
 	connecting.waiting++;
 	return new Promise<void>((resolve, reject) => {
 		const leave = () => {
+			if (connecting.answered) return;
 			reject(abortedError(walletId));
 			connecting.waiting--;
 			if (!connecting.anchored && connecting.waiting === 0) connecting.abort();
@@ -135,6 +137,7 @@ export const createInjectedWallets$ = <
 		const connections$ = new BehaviorSubject<
 			ReadonlyMap<WalletId, Connection<THandle>>
 		>(new Map());
+		let closed = false;
 
 		const setConnection = (
 			walletId: WalletId,
@@ -165,6 +168,7 @@ export const createInjectedWallets$ = <
 					res(adapter.connect(source, walletId)),
 				).then(
 					(handle) => {
+						connecting.answered = true;
 						if (controller.signal.aborted) {
 							adapter.releaseAbandonedHandle?.(handle, walletId);
 							return;
@@ -174,6 +178,7 @@ export const createInjectedWallets$ = <
 						resolve();
 					},
 					(error) => {
+						connecting.answered = true;
 						if (controller.signal.aborted) return;
 						setConnection(walletId, undefined);
 						reject(
@@ -191,6 +196,7 @@ export const createInjectedWallets$ = <
 				promise,
 				anchored: false,
 				waiting: 0,
+				answered: false,
 				abort: () => {
 					if (connections$.value.get(walletId) === connecting)
 						controller.abort();
@@ -205,6 +211,7 @@ export const createInjectedWallets$ = <
 			walletId: WalletId,
 			options?: ConnectOptions,
 		): Promise<void> => {
+			if (closed) return Promise.reject(abortedError(walletId));
 			const current = connections$.value.get(walletId);
 			if (current?.status === "connected") {
 				if (!current.disconnecting) return Promise.resolve();
@@ -231,14 +238,16 @@ export const createInjectedWallets$ = <
 				try {
 					await adapter.disconnect?.(source, walletId);
 				} catch (error) {
-					setConnection(walletId, {
-						status: "connected",
-						handle: current.handle,
-					});
+					if (!closed)
+						setConnection(walletId, {
+							status: "connected",
+							handle: current.handle,
+						});
 					throw error;
 				}
-				setConnection(walletId, undefined);
 				store.removeEnabledWalletId(walletId);
+				if (closed) return;
+				setConnection(walletId, undefined);
 				adapter.onDisconnected?.(walletId);
 			})();
 			setConnection(walletId, { ...current, disconnecting });
@@ -268,6 +277,7 @@ export const createInjectedWallets$ = <
 			.subscribe(subscriber);
 
 		return () => {
+			closed = true;
 			for (const connection of connections$.value.values())
 				if (connection.status === "connecting") connection.abort();
 			sub.unsubscribe();
