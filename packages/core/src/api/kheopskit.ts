@@ -306,8 +306,8 @@ export const getKheopskit$ = <
 				// keeps the same account id but changes the cached chainId, so an
 				// id-only comparator would skip persisting it.
 				distinctUntilChanged((prev, curr) => {
-					const prevWalletKeys = prev.wallets.items.map(walletPersistKey);
-					const currWalletKeys = curr.wallets.items.map(walletPersistKey);
+					const prevWalletKeys = prev.wallets.items.map(persistedWalletKey);
+					const currWalletKeys = curr.wallets.items.map(persistedWalletKey);
 					const prevAccountKeys = prev.accounts.items.map(accountChangeKey);
 					const currAccountKeys = curr.accounts.items.map(accountChangeKey);
 					return (
@@ -484,6 +484,14 @@ const walletPlatforms = (wallet: BaseWallet | WalletConnectWallet): string =>
 /** Fields persisted to the cache for a wallet (icon is stored separately). */
 const walletPersistKey = (wallet: BaseWallet | WalletConnectWallet): string =>
 	`${wallet.id}|${wallet.isConnected ? 1 : 0}|${wallet.name}`;
+
+/**
+ * What decides a cache write: the persisted fields plus `status`, because a
+ * wallet whose kept entry was written while connecting must be rewritten live
+ * once its reconnect fails, and `isConnected` reads false on both sides.
+ */
+const persistedWalletKey = (wallet: BaseWallet | WalletConnectWallet): string =>
+	`${walletPersistKey(wallet)}|${wallet.status}`;
 
 /**
  * UI-significant signature of a wallet: the persisted fields plus icon and the
