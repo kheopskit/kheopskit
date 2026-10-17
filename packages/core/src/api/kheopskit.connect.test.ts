@@ -1266,6 +1266,45 @@ describe("getKheopskit$ connect semantics", () => {
 		sub.unsubscribe();
 	});
 
+	it("a wallet that reconnects with a new address while a sibling's eth_accounts is pending shows only the new address, and the sibling stays pending", async () => {
+		const OLD = "0x2222222222222222222222222222222222222222";
+		const NEW = "0x3333333333333333333333333333333333333333";
+		const { a, b } = installTwoEthereumProviders(OLD);
+		a.holdAccounts();
+		const { emissions, sub } = await subscribeEthereum();
+
+		await walletIn(emissions.at(-1), b.walletId).connect();
+		await walletIn(emissions.at(-1), a.walletId).connect();
+		await settleMicrotasks();
+		expect(addressesIn(emissions.at(-1))).toEqual([OLD]);
+		expect(a.pendingAccountRequests()).toBe(1);
+
+		const from = emissions.length;
+		await walletIn(emissions.at(-1), b.walletId).disconnect();
+		b.changeAddress(NEW);
+		await walletIn(emissions.at(-1), b.walletId).connect();
+		expect(
+			ethFramesFrom(emissions, from, b.walletId).map((frame) => frame.accounts),
+		).not.toContainEqual([OLD]);
+
+		await settleMicrotasks();
+		expect(ethFramesFrom(emissions, from, b.walletId)).toEqual([
+			{ status: "disconnected", isConnected: false, accounts: [] },
+			{ status: "connecting", isConnected: false, accounts: [] },
+			{ status: "connected", isConnected: true, accounts: [] },
+			{ status: "connected", isConnected: true, accounts: [NEW] },
+		]);
+		expect(addressesIn(emissions.at(-1))).toEqual([NEW]);
+		expect(a.accountRequests()).toBe(1);
+		expect(a.pendingAccountRequests()).toBe(1);
+
+		a.releaseAccounts();
+		await settleMicrotasks();
+		expect(addressesIn(emissions.at(-1))).toEqual([a.address, NEW].sort());
+
+		sub.unsubscribe();
+	});
+
 	it("a Polkadot wallet disconnecting and reconnecting does not make a connected Ethereum wallet re-read eth_accounts", async () => {
 		const eth = installFakeEthereumProvider();
 		const emissions: KheopskitState[] = [];
