@@ -1,6 +1,11 @@
 /// <reference types="@testing-library/jest-dom/vitest" />
+import { createKheopskitStore } from "@kheopskit/core";
 import { polkadot } from "@kheopskit/core/polkadot";
-import { render, screen } from "@testing-library/react";
+import {
+	createFakePolkadotExtension,
+	createMemoryStorage,
+} from "@kheopskit/core/testing";
+import { act, render, screen } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KheopskitProvider } from "./KheopskitProvider";
@@ -86,5 +91,47 @@ describe("KheopskitProvider lifecycle", () => {
 		);
 
 		expect(screen.getByTestId("wallet-names")).toHaveTextContent("Talisman");
+	});
+
+	it("stops the pipeline when it unmounts", async () => {
+		vi.useFakeTimers();
+		const fake = createFakePolkadotExtension({ name: "talisman" });
+		const storage = createMemoryStorage();
+		const store = createKheopskitStore({ storage });
+		store.rememberWallet(fake.walletId);
+		const writes = vi.spyOn(storage, "setItem");
+		const alice = {
+			address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+		};
+
+		const { unmount } = render(
+			<KheopskitProvider config={config} store={store}>
+				<WalletNames />
+			</KheopskitProvider>,
+		);
+		await act(() => vi.advanceTimersByTimeAsync(1000));
+		writes.mockClear();
+		fake.setAccounts([alice]);
+		await act(() => vi.advanceTimersByTimeAsync(5000));
+		const writesWhileMounted = writes.mock.calls.length;
+
+		unmount();
+		await Promise.resolve();
+		store.destroy();
+		writes.mockClear();
+		fake.setAccounts([]);
+		await vi.advanceTimersByTimeAsync(5000);
+
+		expect({
+			writesWhileMounted,
+			writesAfterUnmount: writes.mock.calls.length,
+			timersAfterUnmount: vi.getTimerCount(),
+		}).toEqual({
+			writesWhileMounted: 1,
+			writesAfterUnmount: 0,
+			timersAfterUnmount: 0,
+		});
+		fake.uninstall();
+		vi.useRealTimers();
 	});
 });

@@ -1,0 +1,47 @@
+import type { KheopskitState } from "@kheopskit/core";
+import { useMemo, useSyncExternalStore } from "react";
+import { useKheopskitExternalStore } from "./context";
+
+const isSameItemIgnoringClosures = (a: object, b: object) => {
+	const previous = a as Record<string, unknown>;
+	const next = b as Record<string, unknown>;
+	const keys = Object.keys(previous);
+	return (
+		keys.length === Object.keys(next).length &&
+		keys.every(
+			(key) =>
+				Object.hasOwn(next, key) &&
+				(Object.is(previous[key], next[key]) ||
+					(typeof previous[key] === "function" &&
+						typeof next[key] === "function")),
+		)
+	);
+};
+
+export const useStateItem = <K, T extends object>(
+	hookName: string,
+	key: K,
+	select: (state: KheopskitState, key: K) => T | undefined,
+): T | undefined => {
+	const store = useKheopskitExternalStore(hookName);
+	const snapshots = useMemo(() => {
+		let cached: T | undefined;
+		return {
+			getSnapshot: () => {
+				const item = select(store.getSnapshot(), key);
+				const reusable =
+					cached !== undefined &&
+					item !== undefined &&
+					isSameItemIgnoringClosures(cached, item);
+				if (!reusable) cached = item;
+				return cached;
+			},
+			getServerSnapshot: () => select(store.getServerSnapshot(), key),
+		};
+	}, [store, key, select]);
+	return useSyncExternalStore(
+		store.subscribe,
+		snapshots.getSnapshot,
+		snapshots.getServerSnapshot,
+	);
+};

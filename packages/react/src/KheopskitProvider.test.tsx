@@ -3,7 +3,7 @@ import type { KheopskitConfig } from "@kheopskit/core";
 import { ethereum } from "@kheopskit/core/ethereum";
 import { polkadot } from "@kheopskit/core/polkadot";
 import { render, screen } from "@testing-library/react";
-import { useContext } from "react";
+import { useContext, useSyncExternalStore } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KheopskitContext } from "./context";
 import {
@@ -12,16 +12,21 @@ import {
 } from "./KheopskitProvider";
 import { useWallets } from "./useWallets";
 
-// Helper component to access context
+const noSubscription = () => () => {};
+const noState = () => null;
+
 const ContextConsumer = () => {
-	const ctx = useContext(KheopskitContext);
+	const store = useContext(KheopskitContext);
+	const state = useSyncExternalStore(
+		store?.subscribe ?? noSubscription,
+		store?.getSnapshot ?? noState,
+		store?.getServerSnapshot ?? noState,
+	);
 	return (
 		<div>
-			<span data-testid="wallets-count">{ctx?.state.wallets.length ?? -1}</span>
-			<span data-testid="accounts-count">
-				{ctx?.state.accounts.length ?? -1}
-			</span>
-			<span data-testid="has-context">{ctx ? "yes" : "no"}</span>
+			<span data-testid="wallets-count">{state?.wallets.length ?? -1}</span>
+			<span data-testid="accounts-count">{state?.accounts.length ?? -1}</span>
+			<span data-testid="has-context">{store ? "yes" : "no"}</span>
 		</div>
 	);
 };

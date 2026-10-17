@@ -54,7 +54,10 @@ import type {
 import type { walletConnect } from "@kheopskit/core/walletconnect";
 import type {
 	createKheopskit,
+	useAccount,
 	useAccounts,
+	useConnect,
+	useWallet,
 	useWallets,
 } from "@kheopskit/react";
 
@@ -131,6 +134,43 @@ export const polkadotTxCreator = (account: PolkadotAccount) => {
 	const unnarrowed: Present<PolkadotAccount["txCreator"]> = account.txCreator;
 	if (account.isPlaceholder) return unnarrowed;
 	const narrowed: Present<PolkadotAccount["txCreator"]> = account.txCreator;
+	return narrowed;
+};
+
+type PolkadotBound = ReturnType<
+	typeof createKheopskit<readonly [ReturnType<typeof polkadot>]>
+>;
+
+export type SharedInstanceIsTyped = Expect<
+	NoneAny<
+		[
+			PolkadotBound["kheopskit$"],
+			PolkadotBound["store"],
+			ReturnType<typeof useWallet>,
+			ReturnType<typeof useAccount>,
+			ReturnType<typeof useConnect>,
+		]
+	>
+>;
+export type BoundWalletIsPlatformPrecise = Expect<
+	Equal<
+		ReturnType<PolkadotBound["useWallet"]>,
+		PolkadotWallet | WalletConnectWallet | undefined
+	>
+>;
+export type BoundAccountIsPlatformPrecise = Expect<
+	Equal<ReturnType<PolkadotBound["useAccount"]>, PolkadotAccount | undefined>
+>;
+
+declare const boundAccount: ReturnType<PolkadotBound["useAccount"]>;
+export const boundAccountTxCreator = () => {
+	if (!boundAccount) return;
+	// @ts-expect-error a placeholder has no txCreator
+	const unnarrowed: Present<PolkadotAccount["txCreator"]> =
+		boundAccount.txCreator;
+	if (boundAccount.isPlaceholder) return unnarrowed;
+	const narrowed: Present<PolkadotAccount["txCreator"]> =
+		boundAccount.txCreator;
 	return narrowed;
 };
 
