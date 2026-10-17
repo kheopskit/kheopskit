@@ -82,22 +82,4 @@ describe("createReconnectPolicy settlement", () => {
 		expect(connect).toHaveBeenCalledTimes(1);
 		expect(policy.shouldAttempt("w2")).toBe(true);
 	});
-
-	it("ignores a settle while its own attempt is pending, so the attempt's failure still allows a retry", async () => {
-		const policy = createReconnectPolicy({ maxAttempts: 3 });
-		let reject = (_: Error) => {};
-		const connect = vi.fn(
-			() =>
-				new Promise<void>((_, rej) => {
-					reject = rej;
-				}),
-		);
-
-		const first = policy.attempt("w1", connect);
-		policy.settle("w1");
-		reject(new Error("locked"));
-		await expect(first).rejects.toThrow("locked");
-
-		expect(policy.shouldAttempt("w1")).toBe(true);
-	});
 });

@@ -44,7 +44,6 @@ export const createReconnectPolicy = ({
 	};
 
 	const settle = (walletId: string) => {
-		if (states.get(walletId)?.kind === "pending") return;
 		states.set(walletId, { kind: "settled" });
 	};
 
