@@ -107,7 +107,7 @@ const join = (
 	return new Promise<void>((resolve, reject) => {
 		const leave = () => {
 			if (connecting.answered) return;
-			reject(abortedError(walletId));
+			reject(abortedError(walletId, "connect"));
 			connecting.waiting--;
 			if (!connecting.anchored && connecting.waiting === 0) connecting.abort();
 		};
@@ -160,7 +160,7 @@ export const createInjectedWallets$ = <
 					"abort",
 					() => {
 						setConnection(walletId, undefined);
-						reject(abortedError(walletId));
+						reject(abortedError(walletId, "connect"));
 					},
 					{ once: true },
 				);
@@ -215,7 +215,8 @@ export const createInjectedWallets$ = <
 				const signals = signal ? [teardown.signal, signal] : [teardown.signal];
 				const settle = () => {
 					for (const s of signals) s.removeEventListener("abort", settle);
-					if (signals.some((s) => s.aborted)) reject(abortedError(walletId));
+					if (signals.some((s) => s.aborted))
+						reject(abortedError(walletId, "connect"));
 					else resolve();
 				};
 				if (signals.some((s) => s.aborted)) return settle();
@@ -230,7 +231,7 @@ export const createInjectedWallets$ = <
 			options?: ConnectOptions,
 		): Promise<void> => {
 			if (teardown.signal.aborted)
-				return Promise.reject(abortedError(walletId));
+				return Promise.reject(abortedError(walletId, "connect"));
 			const current = connections$.value.get(walletId);
 			if (current?.status === "connected") {
 				if (!current.disconnecting) return Promise.resolve();
@@ -241,7 +242,7 @@ export const createInjectedWallets$ = <
 				).then(() => connect(source, walletId, options));
 			}
 			if (options?.signal?.aborted)
-				return Promise.reject(abortedError(walletId));
+				return Promise.reject(abortedError(walletId, "connect"));
 			if (current?.status === "connecting")
 				return join(current, walletId, options?.signal);
 			return startConnect(source, walletId, options?.signal);

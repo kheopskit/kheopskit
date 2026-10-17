@@ -61,10 +61,15 @@ export class KheopskitError extends Error {
 	}
 }
 
-export const abortedError = (walletId: WalletId): KheopskitError =>
-	new KheopskitError("ABORTED", `connect to wallet ${walletId} was aborted`, {
-		walletId,
-	});
+export const abortedError = (
+	walletId: WalletId,
+	operation: "connect" | "disconnect",
+): KheopskitError =>
+	new KheopskitError(
+		"ABORTED",
+		`${operation} of wallet ${walletId} was aborted`,
+		{ walletId },
+	);
 
 export const toConnectError = (
 	error: unknown,

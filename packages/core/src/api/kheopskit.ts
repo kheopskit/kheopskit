@@ -100,7 +100,8 @@ export const getKheopskit$ = <
 
 		const abandon = (waiter: StateWaiter) => {
 			waiters.delete(waiter);
-			if (waiter.isConnected) waiter.reject(abortedError(waiter.walletId));
+			if (waiter.isConnected)
+				waiter.reject(abortedError(waiter.walletId, "connect"));
 			else waiter.resolve();
 		};
 
@@ -128,13 +129,13 @@ export const getKheopskit$ = <
 			const settled: BaseWallet = {
 				...wallet,
 				connect: async (options) => {
-					if (closed) throw abortedError(wallet.id);
+					if (closed) throw abortedError(wallet.id, "connect");
 					await wallet.connect(options);
 					supersede(wallet.id, true);
 					await whenState(wallet.id, true);
 				},
 				disconnect: async () => {
-					if (closed) throw abortedError(wallet.id);
+					if (closed) throw abortedError(wallet.id, "disconnect");
 					await wallet.disconnect();
 					supersede(wallet.id, false);
 					await whenState(wallet.id, false);

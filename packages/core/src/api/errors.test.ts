@@ -74,9 +74,14 @@ describe("connect rejection classification", () => {
 		expect(toConnectError(original, walletId, isRefusalMessage)).toBe(original);
 	});
 
-	it("abortedError carries the code and names the wallet", () => {
-		const error = abortedError(walletId);
-		expect(error).toMatchObject({ code: "ABORTED", walletId });
-		expect(error.message).toContain(walletId);
+	it("abortedError carries the code and names the wallet and the operation", () => {
+		expect(abortedError(walletId, "connect")).toMatchObject({
+			code: "ABORTED",
+			walletId,
+			message: `[kheopskit] connect of wallet ${walletId} was aborted`,
+		});
+		expect(abortedError(walletId, "disconnect").message).toBe(
+			`[kheopskit] disconnect of wallet ${walletId} was aborted`,
+		);
 	});
 });
