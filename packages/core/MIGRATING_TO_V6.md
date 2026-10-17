@@ -124,12 +124,16 @@ try {
 - **A wallet that disappears.** A `connect()` whose wallet leaves the list (an
   extension removed, a Wallet Standard wallet unregistered) before the platform
   grants it rejects `ABORTED`. Granted first, it resolves and the wallet stays
-  remembered. A pending `disconnect()` resolves, since the wallet is no longer
-  connected.
-- **`disconnect()` during a pending `connect()`** aborts the connect (its
-  promise rejects `ABORTED`) and resolves. It never waits for the prompt. The
-  same holds when the connect has been granted by the platform and is still
-  waiting for `kheopskit$` to show it. In the other direction, `connect()`
+  remembered. A `disconnect()` waiting for the state resolves, since the wallet
+  is no longer connected. One still waiting for the platform settles when the
+  platform answers.
+- **`disconnect()` during a pending `connect()`** that the platform has not
+  granted aborts the connect (its promise rejects `ABORTED`) and resolves. It
+  never waits for the prompt. A `disconnect()` that completes while a granted
+  `connect()` still waits for `kheopskit$` to show it rejects that connect
+  `ABORTED`. If the platform's disconnect is still pending or refuses, the
+  connect resolves once the state shows the wallet connected (today only
+  Solana has a platform disconnect). In the other direction, `connect()`
   resolves a `disconnect()` still waiting for the state, since that disconnect
   did complete.
 - **`disconnect()` forgets first.** The wallet leaves the remembered list
