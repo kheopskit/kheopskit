@@ -157,6 +157,125 @@ The store holds that subscription only while `store.observable` has subscribers.
 `store.rememberWallet(walletId)` and `store.forgetWallet(walletId)` edit the
 remembered list directly.
 
+## Testing
+
+`@kheopskit/core/testing` runs kheopskit in a test without a browser
+extension. It has no test-runner dependency, so it works with vitest and jest.
+
+- `createFakePolkadotExtension(options?)` installs a fake extension on
+  `window.injectedWeb3[name]`. `options.name` defaults to `"fake-extension"`.
+  `options.accounts` is the account list. `options.enable` sets how `enable()`
+  answers: `"resolve"` (the default) at once, `"reject"` at once with
+  `new Error("Rejected")` (what Talisman rejects with), or `"hold"` until the
+  test calls `resolveEnable()` or `rejectEnable(error?)`.
+- The fake returns `{ name, walletId, setAccounts, resolveEnable, rejectEnable,
+  enableCalls, signRawCalls, uninstall }`. `setAccounts(accounts)` pushes the
+  list to every `accounts.subscribe` listener. `enableCalls()` lists the app
+  name of each `enable()` call. `signRaw` and `signPayload` resolve
+  `FAKE_SIGNATURE`, and `signRawCalls()` lists what `signRaw` received.
+- `createMemoryStorage()` returns a `SyncableStorage` held in memory, for
+  `createKheopskitStore({ storage })`. Stores created on the same instance see
+  each other's writes, the way tabs share `localStorage`.
+- `cachedWalletOf(walletId, name)` and `cachedAccountOf(wallet, address,
+  name?)` build the entries `store.setCachedState(wallets, accounts)` takes, so
+  a test seeds a previous session without writing the persisted shape.
+
+A vitest test that seeds a remembered wallet and checks that it reconnects:
+
+```ts
+import {
+  createKheopskitStore,
+  getKheopskit$,
+  type KheopskitState,
+  type KheopskitStore,
+} from "@kheopskit/core";
+import { polkadot } from "@kheopskit/core/polkadot";
+import {
+  cachedAccountOf,
+  cachedWalletOf,
+  createFakePolkadotExtension,
+  createMemoryStorage,
+  type FakePolkadotExtension,
+} from "@kheopskit/core/testing";
+import type { Subscription } from "rxjs";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+
+const alice = {
+  address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+  name: "Alice",
+  type: "sr25519" as const,
+};
+
+let talisman: FakePolkadotExtension;
+let store: KheopskitStore;
+let subscription: Subscription;
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  talisman = createFakePolkadotExtension({ name: "talisman", accounts: [alice] });
+  store = createKheopskitStore({ storage: createMemoryStorage() });
+});
+
+afterEach(() => {
+  talisman.uninstall();
+  subscription.unsubscribe();
+  store.destroy();
+  vi.useRealTimers();
+});
+
+it("reconnects the wallet the user connected last time", async () => {
+  const wallet = cachedWalletOf(talisman.walletId, "Talisman");
+  store.rememberWallet(talisman.walletId);
+  store.setCachedState([wallet], [cachedAccountOf(wallet, alice.address, alice.name)]);
+
+  let state: KheopskitState | undefined;
+  subscription = getKheopskit$({ platforms: [polkadot()] }, { store }).subscribe(
+    (next) => {
+      state = next;
+    },
+  );
+  await vi.advanceTimersByTimeAsync(1000);
+
+  expect(talisman.enableCalls()).toHaveLength(1);
+  expect(state?.wallets.map((w) => [w.id, w.isConnected])).toEqual([
+    ["polkadot:talisman", true],
+  ]);
+  expect(state?.accounts.map((a) => a.name)).toEqual(["Alice"]);
+});
+```
+
+
+Tear down with three calls:
+
+```ts
+talisman.uninstall();
+subscription.unsubscribe();
+store.destroy();
+```
+
+Unsubscribing from `getKheopskit$` stops every timer it started, among them
+discovery polling, the hydration grace period and the 1 second debounced
+persist. Without it, a persist can write to storage after the test ended. `store.destroy()` ends
+the store's storage subscription. `uninstall()` removes the fake from
+`window.injectedWeb3`, and removes `window.injectedWeb3` once it is empty.
+
+With fake timers, advance time with `vi.advanceTimersByTimeAsync` (jest:
+`jest.advanceTimersByTimeAsync`). Kheopskit settles connects and reconnects in
+promises, and the async variants run those microtasks between timers. The
+synchronous variants leave them pending.
+
+When the code under test calls `getKheopskit$` without a `store`, it uses
+`localStorage`. Seed it through a store on the same storage, then destroy that
+store:
+
+```ts
+const seed = createKheopskitStore();
+seed.rememberWallet("polkadot:talisman");
+seed.destroy();
+```
+
+The kit fakes Polkadot extensions only.
+
 ## License
 
 ISC
