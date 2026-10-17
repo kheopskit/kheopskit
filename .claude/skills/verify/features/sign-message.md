@@ -4,7 +4,7 @@ Each Accounts row has a `Sign` button that signs the text `Kheopskit rocks!` wit
 
 ## Sub-features
 
-- `sign-polkadot` signs bytes through `account.txCreator.signBytes`. The toast shows a hex signature.
+- `sign-polkadot` signs bytes through `account.txCreator.signBytes` (`polkadotSigner.signBytes` on polkadot-api 2). The toast shows a hex signature.
 - `sign-in-polkadot` signs a Sign-In With Substrate text through `account.signRaw` with the `Sign in` button that Polkadot rows have next to `Sign`. The toast shows a hex signature.
 - `sign-ethereum` signs through `account.client.signMessage` (viem → `personal_sign`). The toast shows a hex signature.
 - `sign-solana` signs through `account.signer.modifyAndSignMessages` (Wallet Standard `solana:signMessage`). The toast shows a base58 signature.

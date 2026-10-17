@@ -53,6 +53,7 @@ export const kheopskitConfig = {
 	debug: true,
 	storageKey: "kheopskit",
 	hydrationGracePeriod: 500,
+	hydrationTimeout: 3000,
 	walletConnect:
 		process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID && networks
 			? walletConnect({

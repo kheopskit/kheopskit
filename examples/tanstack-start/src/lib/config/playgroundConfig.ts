@@ -54,6 +54,7 @@ export const kheopskitConfig = {
 	debug: true,
 	storageKey: "kheopskit",
 	hydrationGracePeriod: 500,
+	hydrationTimeout: 3000,
 	walletConnect:
 		import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID && networks
 			? walletConnect({

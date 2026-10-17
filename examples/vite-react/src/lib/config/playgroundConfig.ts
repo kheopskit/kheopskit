@@ -67,6 +67,7 @@ export const kheopskitConfig = {
 	debug: true,
 	storageKey: "kheopskit",
 	hydrationGracePeriod: 500,
+	hydrationTimeout: 3000,
 	walletConnect: walletConnectPlugin,
 } satisfies CreateKheopskitConfig<Platforms>;
 

@@ -42,6 +42,12 @@ Recipes executed against the live app when this map was created (2026-10-02), ea
 - `persist-cookie`, `auto-reconnect` on nextjs-react and tanstack-start (`persistence.spec.ts`).
 - `discovery-*`, `discovery-count`, `wagmi-active`, `wagmi-sign` on vite-react (`discovery-wagmi.spec.ts`).
 
+Driven since then:
+
+- `sign-in-polkadot` on vite-react (`sign-message.spec.ts`, #138).
+- The `auto-reconnect` `Connecting…` label (`persistence.spec.ts`, #140; `e2e/tests/reconnect-status.spec.ts` on every app).
+- `discovery-settled` on every app (`e2e/tests/discovery-at-load.spec.ts`, #134).
+
 Everything else, including all of [submit-tx](./submit-tx.md), was written from source and has not been driven. Treat it as a draft until a run confirms it.
 
 ## Features

@@ -15,9 +15,11 @@ pnpm changeset
 ```
 
 This will prompt you to:
-- Select which packages changed (`@kheopskit/core`, `@kheopskit/react`)
+- Select the packages: always all three of `kheopskit`, `@kheopskit/core` and `@kheopskit/react`
 - Choose the semver bump type (patch, minor, or major)
 - Write a summary of the changes
+
+The three packages form one fixed group in `.changeset/config.json`, so they always release under one version. Select the private root package `kheopskit` in every changeset, even when only one published package changed. The publish workflow names the GitHub release tag after the root package version. If the root version did not move, the tag already exists and the workflow fails after npm publish, with no GitHub release. `pnpm check:changeset` fails a pull request that changes a published package without a changeset. Run it locally with `BASE_REF=origin/main`, or after `git fetch origin main:main` in a worktree.
 
 A markdown file will be created in `.changeset/` — commit it along with your code changes.
 

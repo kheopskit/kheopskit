@@ -444,6 +444,31 @@ describe("getKheopskit$ placeholders", () => {
 			]);
 		});
 
+		it("connect() on a merged wallet joins its reconnect and settles connected", async () => {
+			const states = record(seedStore(true));
+			await vi.advanceTimersByTimeAsync(100);
+			const merged = walletIn(states.at(-1));
+			expect([merged?.isPlaceholder, merged?.status]).toEqual([
+				false,
+				"connecting",
+			]);
+
+			let settledIn: KheopskitState | undefined;
+			const connecting = merged?.connect().then(() => {
+				settledIn = states.at(-1);
+			});
+			talisman.resolveEnable();
+			await vi.advanceTimersByTimeAsync(300);
+			await connecting;
+
+			expect(talisman.enableCalls()).toHaveLength(1);
+			expect(walletIn(settledIn)).toMatchObject({
+				isPlaceholder: false,
+				status: "connected",
+				isConnected: true,
+			});
+		});
+
 		it("live accounts identical to their placeholders emit before hydration ends", async () => {
 			talisman.setAccounts([]);
 			const states = record(seedStore(true));

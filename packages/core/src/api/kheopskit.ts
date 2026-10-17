@@ -53,8 +53,7 @@ export type GetKheopskitOptions = {
 	 */
 	ssrCookies?: string;
 	/**
-	 * An existing store to reuse instead of creating one. Advanced escape hatch —
-	 * most callers omit it. (`@kheopskit/react` passes its provider-scoped store.)
+	 * An existing store to reuse instead of creating one.
 	 */
 	store?: ReturnType<typeof createKheopskitStore>;
 };

@@ -1,14 +1,15 @@
 {
 	"name": "@kheopskit/core",
 	"version": "5.3.0",
-	"description": "",
+	"description": "Framework-agnostic wallet and account discovery for Polkadot, Ethereum and Solana dapps. Upgrading from v5? Read MIGRATING_TO_V6.md, shipped in this package.",
 	"private": false,
 	"sideEffects": false,
 	"files": [
 		"dist",
 		"README.md",
 		"MIGRATING_TO_V4.md",
-		"MIGRATING_TO_V6.md"
+		"MIGRATING_TO_V6.md",
+		"CHANGELOG.md"
 	],
 	"main": "./dist/index.js",
 	"module": "./dist/index.mjs",

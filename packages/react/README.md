@@ -1,7 +1,7 @@
 # @kheopskit/react
 
-React bindings for [Kheopskit](https://github.com/kheopskit/kheopskit) — list
-wallets and accounts across Polkadot, Ethereum and Solana, with injected wallets
+React bindings for [Kheopskit](https://github.com/kheopskit/kheopskit). They
+list wallets and accounts across Polkadot, Ethereum and Solana, with injected wallets
 and WalletConnect (Reown AppKit).
 
 The framework-agnostic core lives in
@@ -13,10 +13,17 @@ https://github.com/kheopskit/kheopskit
 > (and WalletConnect) optional peer dependencies. See
 > [MIGRATING_TO_V4.md](../core/MIGRATING_TO_V4.md).
 
+> **Upgrading from v5?** v6 makes `connect()` shared, idempotent and
+> abortable, types its rejections, adds `status`, `isDiscovering`,
+> `isPlaceholder` and `signRaw`, and moves WalletConnect to a plugin. See
+> [MIGRATING_TO_V6.md](https://github.com/kheopskit/kheopskit/blob/main/packages/core/MIGRATING_TO_V6.md).
+> The [core README](https://github.com/kheopskit/kheopskit/blob/main/packages/core/README.md#wallet-lifecycle)
+> explains the wallet lifecycle that `useWallets()` reflects.
+
 ## Install
 
-`rxjs` is always required; every platform SDK (and WalletConnect) is an optional
-peer dependency — install only what you use:
+`rxjs` is always required. Every platform SDK (and WalletConnect) is an
+optional peer dependency, so install only what you use:
 
 ```bash
 pnpm add @kheopskit/core @kheopskit/react rxjs
@@ -58,7 +65,7 @@ export const { KheopskitProvider, useWallets, useAccounts } = createKheopskit({
 ## Usage
 
 Recommended: bind your platform tuple once with `createKheopskit` and get a
-provider plus hooks already typed to those platforms — no generic to repeat.
+provider plus hooks already typed to those platforms, with no generic to repeat.
 
 ```ts
 // kheopskit.ts
@@ -115,8 +122,9 @@ const { accounts } = useWallets<typeof platforms>();
 | `useAccount(accountId)` | the account with this id, or `undefined` | when that account changes |
 | `useConnect(walletId)` | `{ connect, disconnect, status, error }` for one wallet | when that wallet changes |
 
-`useWallet` and `useAccount` compare every field of the item, and SDK handles by
-identity. Another wallet connecting does not re-render them.
+`useWallet` and `useAccount` compare the item's fields, SDK handles by identity
+and any two functions as equal. Another wallet connecting does not re-render
+them.
 
 A connect button with `useConnect`:
 
@@ -149,7 +157,8 @@ const ConnectButton = ({ walletId }: { walletId: WalletId }) => {
   nothing. Only a real unmount, an `<Activity>` hide or a `walletId` change
   does.
 - Every other failure rejects with the wallet's `KheopskitError`, such as
-  `USER_REJECTED`, and also shows in `error`.
+  `USER_REJECTED`, and also shows in `error`. When the state lists no wallet
+  with this id, `connect` rejects with a plain `Error`.
 - `connect` and `disconnect` keep their identity while `walletId` stays the
   same. A `useEffect(() => { connect() }, [connect])` connects on mount and
   again after every `<Activity>` reveal.
@@ -165,7 +174,9 @@ pipeline stops; an action called then rejects `ABORTED` and starts no pipeline.
 An `<Activity>` hide of the only provider stops the pipeline and a reveal
 restarts it. An action called in between, from a layout effect, a mount effect
 or a click during the reveal, waits for the restarted pipeline's first emission
-and then acts on the live wallet. An action pending when the pipeline stops
+and then acts on the live wallet. When the live state lists no wallet with the
+action's id, the action rejects with a plain `Error`, not a `KheopskitError`.
+An action pending when the pipeline stops
 with an error or completes rejects `ABORTED` with that reason. Account actions
 such as `signRaw` bind to the extension, not to the pipeline, and work either
 way. Only `useConnect`'s `connect` is scoped to its component, as described
@@ -245,10 +256,11 @@ const ssrCookies = cookieStore
 <KheopskitProvider ssrCookies={ssrCookies}>{children}</KheopskitProvider>;
 ```
 
-> While `state.isHydrating` is `true`, wallets/accounts are cached placeholders
-> carrying only the base fields — SDK fields (`signer`, `client`,
-> provider/extension handles) are absent until hydration completes. Guard access
-> behind `!isHydrating`.
+> While `state.isHydrating` is `true`, wallets and accounts restored from the
+> cache are placeholders with `isPlaceholder: true` and no SDK handle
+> (`txCreator`, `signer`, `client`, `provider`, `extension`). Narrow on
+> `isPlaceholder` before you read one, as in `if (account.isPlaceholder) return;`.
+> `isHydrating` can still disable a button.
 
 ## Testing
 
