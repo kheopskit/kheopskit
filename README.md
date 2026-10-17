@@ -132,7 +132,7 @@ export const App = () => (
 );
 ```
 
-> **What `useWallets()` returns.** The whole state. `isDiscovering` is `true` until the page has loaded and the wallet list is complete; wait for it before you tell the user a wallet is missing. Each wallet has `status` (`disconnected`, `connecting` or `connected`) and `error`, so a button can show `Connecting…` without local state. While `isHydrating` is `true`, wallets and accounts restored from the cache carry `isPlaceholder: true` and no SDK handle. Check `!account.isPlaceholder` before you sign.
+> **What `useWallets()` returns.** The whole state. `isDiscovering` is `true` until the page has loaded and kheopskit has read the Polkadot extensions again; wait for it before you tell the user a wallet is missing. Each wallet has `status` (`disconnected`, `connecting` or `connected`) and `error`, so a button can show `Connecting…` without local state. While `isHydrating` is `true`, wallets and accounts restored from the cache carry `isPlaceholder: true` and no SDK handle. Check `!account.isPlaceholder` before you sign.
 
 > **Prefer the component directly?** Use `<KheopskitProvider config={{ platforms }}>` and recover platform-precise account types (e.g. `account.signer` on Solana, `account.client` on Ethereum) with a type argument, `useWallets<typeof platforms>()`. React context can't be generic, so the bare `useWallets()` returns the SDK-free base shapes. Pass a **referentially stable** `config` (module scope, `useMemo`, or `createKheopskit`); a new object each render recreates the store and re-subscribes.
 
@@ -397,7 +397,7 @@ function RootComponent() {
 
 On every page load kheopskit runs the same steps. The [core README](./packages/core/README.md#wallet-lifecycle) gives each rule with its numbers and source file.
 
-1. **Discovery.** Polkadot extensions are read from `window.injectedWeb3` at subscribe, 100, 300, 600 and 1100 ms later, and at `load` and 100 ms after. `isDiscovering` turns `false` after the `load` read. Nothing looks again later.
+1. **Discovery.** Polkadot extensions are read from `window.injectedWeb3` at subscribe, 100, 300, 600 and 1100 ms later, and at `load` and 100 ms after. `isDiscovering` turns `false` after the `load` read. Nothing looks again after the last of these reads.
 2. **Hydration.** The first frame shows the previous visit's wallets and accounts from the cache as placeholders (`isPlaceholder: true`). `isHydrating` ends after the 500 ms grace period, the `load` read and the reconnect of every cached connected wallet have settled, and at 3000 ms (`hydrationTimeout`) at the latest.
 3. **Reconnect.** Wallets the user connected last time reconnect, without a prompt while the site stays authorised, and show `status: "connecting"` meanwhile. A refusal forgets the wallet; other failures set `error`.
 4. **Connect.** An injected wallet's `connect()` is shared between concurrent calls, resolves at once on a connected wallet, takes an `AbortSignal`, has no timeout, rejects with a typed `KheopskitError`, and resolves once the state shows the wallet connected.

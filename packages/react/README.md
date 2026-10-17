@@ -157,7 +157,8 @@ const ConnectButton = ({ walletId }: { walletId: WalletId }) => {
   nothing. Only a real unmount, an `<Activity>` hide or a `walletId` change
   does.
 - Every other failure rejects with the wallet's `KheopskitError`, such as
-  `USER_REJECTED`, and also shows in `error`.
+  `USER_REJECTED`, and also shows in `error`. When the state lists no wallet
+  with this id, `connect` rejects with a plain `Error`.
 - `connect` and `disconnect` keep their identity while `walletId` stays the
   same. A `useEffect(() => { connect() }, [connect])` connects on mount and
   again after every `<Activity>` reveal.
@@ -173,7 +174,9 @@ pipeline stops; an action called then rejects `ABORTED` and starts no pipeline.
 An `<Activity>` hide of the only provider stops the pipeline and a reveal
 restarts it. An action called in between, from a layout effect, a mount effect
 or a click during the reveal, waits for the restarted pipeline's first emission
-and then acts on the live wallet. An action pending when the pipeline stops
+and then acts on the live wallet. When the live state lists no wallet with the
+action's id, the action rejects with a plain `Error`, not a `KheopskitError`.
+An action pending when the pipeline stops
 with an error or completes rejects `ABORTED` with that reason. Account actions
 such as `signRaw` bind to the extension, not to the pipeline, and work either
 way. Only `useConnect`'s `connect` is scoped to its component, as described

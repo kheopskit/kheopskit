@@ -120,9 +120,12 @@ event, so kheopskit reads that registry on a fixed schedule:
 - When `window` fires `load`, and again 100 ms after `load`. A subscription
   that starts after `load` skips these two reads.
 
-Nothing reads the registry after that. Wallets inject `injectedWeb3` while the
-page loads, so a wallet that injects later is not listed until the next
-subscription, usually the next page load. Kheopskit has no
+Nothing reads the registry after the last of these reads. A wallet that
+injects after `load` is listed only when a read still runs after it, the one
+100 ms after `load` or a subscribe read still pending, so its discovery is not
+guaranteed. Wallets inject `injectedWeb3` while the page loads, so a wallet
+that injects after the last read is not listed until the next subscription,
+usually the next page load. Kheopskit has no
 `refreshWallets()` and does not read again on focus or on connect.
 
 Ethereum (EIP-6963, through `mipd`) and Solana (Wallet Standard) wallets
@@ -223,11 +226,11 @@ present, the reloaded row read `Connecting…` at 176 ms and `Disconnect` at
 default, so raise `hydrationTimeout` if your users' wallets start slower.
 
 The cache is written after hydration ends, 1 second after the state stops
-changing (a debounce), and only when a persisted field or a wallet's `status`
-changed. A wallet still
-`connecting` at that moment keeps its previous cached entry and accounts, so a
-slow reconnect never writes an empty cache. Every other wallet is written as it
-is, with the accounts of connected wallets only. See
+changing (a debounce). The first write after hydration always happens; later
+writes happen only when a persisted field or a wallet's `status` changed. A
+wallet still `connecting` at that moment keeps its previous cached entry and
+accounts, so a slow reconnect never writes an empty cache. Every other wallet is
+written as it is, with the accounts of connected wallets only. See
 [Persistence](#persistence) for the format.
 
 ### Reconnect
@@ -280,8 +283,9 @@ wallet stays remembered for the next load.
 Every wallet carries `status` (`disconnected`, `connecting` or `connected`) and
 `error`. `isConnected` is `status === "connected"`. `error` is the last
 `connect()` or reconnect that the platform refused (`USER_REJECTED`) or failed
-(`CONNECT_FAILED`). The next attempt clears it, and an aborted attempt sets
-nothing. With `debug: true`, a failed reconnect is logged with
+(`CONNECT_FAILED`, or `FEATURE_NOT_SUPPORTED` for a Wallet Standard wallet
+without `standard:connect`). The next attempt clears it, and an aborted
+attempt sets nothing. With `debug: true`, a failed reconnect is logged with
 `console.debug`.
 
 The WalletConnect connector is not governed by `autoReconnect`. AppKit restores

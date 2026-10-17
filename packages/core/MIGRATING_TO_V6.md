@@ -173,8 +173,9 @@ try {
   answers it. Pass `AbortSignal.timeout(ms)` to cap your wait for the platform's
   answer. The wait for the state after a grant is not capped. Aborting ends
   your wait; it cannot close the extension's own prompt. Once no caller waits
-  any more, a handle the extension returns afterwards is released, and the
-  wallet is neither connected nor remembered.
+  any more, kheopskit drops a handle the extension returns afterwards without
+  revoking the extension's grant, and the wallet is neither connected nor
+  remembered.
 - **A wallet that disappears.** A `connect()` whose wallet leaves the list (an
   extension removed, a Wallet Standard wallet unregistered) before the platform
   grants it rejects `ABORTED`. Granted first, it resolves and the wallet stays
@@ -204,8 +205,9 @@ try {
 - **Wallet objects are stable.** An emission that only changes accounts keeps
   the same wallet object, with the same `connect` and `disconnect` functions,
   so effects and memos keyed on them do not re-run.
-- **WalletConnect is unchanged.** The connector's `connect()` opens the modal
-  and resolves once it is open; `isConnected` follows when the user approves.
+- **WalletConnect still resolves when the modal opens.** The connector's
+  `connect()` opens the modal and resolves once it is open; `isConnected`
+  follows when the user approves.
 - **No throttle on the stream.** `throttleTime(16)` is replaced by a microtask
   coalesce. A synchronous burst (wallets, then accounts) becomes one emission,
   so no emission shows a disconnected wallet still listing live accounts. A
@@ -271,8 +273,9 @@ The compact cookie format is unchanged. The list stays under the key `r`.
 Data written by v5 under `autoReconnect` is read as `remembered`, from
 `localStorage`, from cookies (compact or legacy verbose JSON) and from changes
 made by other tabs. The old key disappears on the next write. Users keep their
-remembered wallets, and test fixtures that seed
-`{ autoReconnect: [...] }` keep working.
+remembered wallets, and test fixtures that write `{ autoReconnect: [...] }`
+into storage keep working. A literal typed as `KheopskitStoreData` must rename
+the key to `remembered`, since `autoReconnect` is no longer a field of it.
 
 ### New: `storage` option and `destroy()`
 
@@ -300,8 +303,9 @@ changed for another reason.
 
 - signet: the `remembered$` read of `store.observable.autoReconnect` and the
   `store.removeEnabledWalletId` call in the extension domain. If the code stays
-  for now, rename them to `remembered` and `forgetWallet`. Test seeds of
-  `{ autoReconnect: [...] }` keep working through the migration.
+  for now, rename them to `remembered` and `forgetWallet`. Test seeds that
+  write `{ autoReconnect: [...] }` into storage keep working through the
+  migration.
 - talisman-web: the `walletOrder` re-sort, which restored the extension's
   account order inside a wallet. The `injectionOrder` re-sort orders wallets by
   injection order; kheopskit still orders wallets Talisman first, then by name.
@@ -369,13 +373,15 @@ if (account.isPlaceholder) return;
 const signature = await account.signRaw(siwsMessage);
 ```
 
-`txCreator.signBytes` is unchanged.
+On a live account, `txCreator.signBytes` still sends hex with
+`type: "bytes"`. Reading `txCreator` needs the same `isPlaceholder` narrowing
+([section 7](#7-placeholders-carry-isplaceholder)).
 
 ### `ethereum` accounts sign as `ecdsa`
 
 For an account whose `type` is `"ethereum"`, kheopskit builds the `txCreator`
 with the `ecdsa` signature type. On polkadot-api v2, `getPolkadotSignerFromPjs`
-ignores the signature type, so `polkadotSigner` is unchanged.
+ignores the signature type, so this change does not reach `polkadotSigner`.
 pjs-signer's own map knows `ed25519`, `sr25519` and `ecdsa` only, so an
 `ethereum` type got a 64-byte mock signature where ecdsa needs 65. Fee
 estimation and dry runs for ethereum-format accounts no longer use the wrong
@@ -415,8 +421,11 @@ booleans and are absent for other origins and other wallets.
 
 ### polkadot-api v2
 
-v2 still works, and apps on it change nothing in their signing code. The
-account keeps carrying `polkadotSigner` instead of `txCreator`. The fourth
+v2 still works. Apart from the `isPlaceholder` narrowing of
+[section 7](#7-placeholders-carry-isplaceholder), apps on it change nothing in
+their signing code. An un-narrowed `account.polkadotSigner` is possibly
+`undefined` and no longer compiles where a signer is required. The account
+keeps carrying `polkadotSigner` instead of `txCreator`. The fourth
 factory argument (the signature type) is ignored by `getPolkadotSignerFromPjs`
 at runtime.
 
@@ -440,7 +449,7 @@ at runtime.
 | Field | Type | Meaning |
 |-------|------|---------|
 | `wallet.status` | `"disconnected" \| "connecting" \| "connected"` | `connecting` while a `connect()` call or an auto-reconnect waits for the platform. On the WalletConnect connector, while `connect()` opens the modal. |
-| `wallet.error` | `KheopskitError \| undefined` | The last `connect()` or auto-reconnect that the platform refused (`USER_REJECTED`) or failed (`CONNECT_FAILED`). Cleared when the next attempt starts. An aborted attempt sets nothing. |
+| `wallet.error` | `KheopskitError \| undefined` | The last `connect()` or auto-reconnect that the platform refused (`USER_REJECTED`) or failed (`CONNECT_FAILED`, or `FEATURE_NOT_SUPPORTED` for a Wallet Standard wallet without `standard:connect`). Cleared when the next attempt starts. An aborted attempt sets nothing. |
 | `wallet.isConnected` | `boolean` | Unchanged, now defined as `status === "connected"`. No emission shows `isConnected: true` with another status. |
 
 Test code that builds wallet objects by hand needs `status`.
@@ -550,9 +559,9 @@ getKheopskit$({
 `AppKitInstance` stay in `@kheopskit/core`. The Polkadot `appName` fallback
 still reads the plugin's `metadata.name`.
 
-Dapps that never set `walletConnect` change nothing in their code. Their bundle
-shrinks. A Polkadot-only Vite app built against 5.3.0 and against 6.0.0, with
-`@reown/appkit` installed (as it is when another dependency pulls it in):
+Dapps that never set `walletConnect` need no change for this section. Their
+bundle shrinks. A Polkadot-only Vite app built against 5.3.0 and against
+6.0.0, with `@reown/appkit` installed (as it is when another dependency pulls it in):
 
 | | 5.3.0 | 6.0.0 |
 |---|---|---|
@@ -673,8 +682,10 @@ by then. It is `false` from the first emission when you subscribe after
 Kheopskit now reads the Polkadot registry at `load` and 100 ms after `load`, on
 top of the reads at subscribe and 100, 300, 600 and 1100 ms after it. An
 extension that injects after the 1100 ms read but before `load` is listed
-without a reload. Nothing reads the registry after that. Wallets that inject
-after `load` are not looked for.
+without a reload. Nothing reads the registry after the last of these reads. A
+wallet that injects after `load` is listed only when a read still runs after
+it, the one 100 ms after `load` or a subscribe read still pending, so its
+discovery is not guaranteed.
 
 A state literal or test mock typed as `KheopskitState` must add the field:
 

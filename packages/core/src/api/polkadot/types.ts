@@ -115,8 +115,8 @@ export type PolkadotWallet = PolkadotInjectedWallet;
  * The signing surface follows the installed polkadot-api version:
  * **`txCreator`** (a `TxCreator`) on v3+, **`polkadotSigner`** (a
  * `PolkadotSigner`) on v2. For `ethereum` accounts the signer is built with the
- * `ecdsa` signature type, so fee estimation and dry runs use a 65-byte mock
- * signature.
+ * `ecdsa` signature type, so on v3 and later fee estimation and dry runs use a
+ * 65-byte mock signature. v2's `getPolkadotSignerFromPjs` ignores that type.
  *
  * Per-platform signing surfaces differ: Ethereum exposes `client` (viem),
  * Solana `signer`/`getSigner(chain)`. The Polkadot signing surface, `signRaw`
