@@ -27,6 +27,8 @@ This guide grows with each v6 change. Each section covers one area.
 | Refused prompt | the extension's plain `Error` | `KheopskitError` `USER_REJECTED` with `cause` |
 | Other connect failure | platform error passed through | `KheopskitError` `CONNECT_FAILED` with `cause` |
 | When `connect()` resolves | when the platform call returned | after `kheopskit$` emitted the wallet with `isConnected: true`; accounts a platform lists asynchronously (Ethereum `eth_accounts`) may follow in a later emission |
+| Hydration end | `isHydrating` stays `true` until every cached connected wallet reconnected, capped at six times the grace period | `isHydrating` ends when the grace period elapsed, discovery settled and every remembered wallet settled, capped by `hydrationTimeout` (default 3000 ms) |
+| Cache during a slow reconnect | a reconnect slower than the persistence debounce wrote `isConnected: false` and no accounts | a wallet still `connecting` keeps its previous cached entry and accounts |
 | Intermediate emissions | a wallet could show connected with the previous connection's accounts for one frame | a synchronous burst is one emission; no emission shows a disconnected wallet still listing accounts. Until a fix tracked for 6.0.0 lands, an Ethereum wallet that reconnects while another connected Ethereum wallet's `eth_accounts` request is pending may show the accounts of its previous connection for as long as that request goes unanswered, and `connect()` may resolve on that emission. |
 
 ---
@@ -288,3 +290,52 @@ so the snapshot applies the same reconnect rule as the live stream.
   forget-on-refusal branch. Set `autoReconnect: true`.
 - A "reconnect only this wallet" rule implemented by reading storage before
   calling `connect()`. Pass it as the `autoReconnect` function.
+
+---
+
+## 4. Hydration end and persistence
+
+### New option: `hydrationTimeout`
+
+```ts
+hydrationTimeout: number // default 3000
+```
+
+The upper bound in milliseconds on `isHydrating`. It replaces the implicit cap
+of six times `hydrationGracePeriod`. `hydrationGracePeriod` is now only the
+minimum time placeholders are shown; `0` still disables them.
+
+### New end rule
+
+`isHydrating` turns `false` as soon as all of these hold: the grace period
+elapsed, `isDiscovering` is `false`, and every cached connected wallet the
+reconnect rule accepts is settled. A wallet is settled when it is connected
+with its accounts read, failed with `error` set, no longer remembered, or
+absent from the discovered wallets. When `hydrationTimeout` elapses first,
+hydration ends anyway; a reconnect still pending goes on past hydration end
+with `status: "connecting"` visible.
+
+In practice: with the extension removed, hydration ends at the grace period
+(500 ms by default) instead of 3 s. With `autoReconnect: false` it ends at the
+grace period. A remembered wallet whose site authorisation was revoked opens a
+prompt on reload; `isHydrating` then stays `true` until the user answers or
+`hydrationTimeout` elapses, once. After a refusal the wallet is forgotten and
+the next reload shows no prompt and hydrates at the grace period.
+
+### Persistence guarantee
+
+The cache is written after hydration ends, one second after the state
+stabilises, as before. When it is written, a wallet whose `status` is
+`connecting` keeps its previous cached entry and its previous cached accounts;
+every other wallet is written from live data. A reconnect slower than the
+debounce no longer overwrites a connected cache with `isConnected: false` and
+no accounts, and a wallet the user connects while another wallet's prompt is
+still open is persisted.
+
+### What downstream apps delete
+
+- A wait for `isHydrating` padded for the 3 s cap, or a `hydrationGracePeriod:
+  0` chosen to avoid it. The default grace period ends hydration when the facts
+  allow.
+- A guard that re-seeds the cache after a reload because kheopskit could write
+  it empty.

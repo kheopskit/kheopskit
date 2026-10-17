@@ -133,6 +133,24 @@ extension prompts once; a refusal forgets the wallet and the next load stays
 silent. Any other failure sets `error`, keeps the wallet remembered and is
 retried up to three times when discovery changes.
 
+### Hydration end
+
+`isHydrating` turns `false` as soon as the facts allow: `hydrationGracePeriod`
+(default 500 ms) elapsed, `isDiscovering` is `false`, and every remembered
+wallet kheopskit reconnects is settled (connected with its accounts read,
+failed with `error`, or absent from the discovered wallets). `hydrationTimeout`
+(default 3000 ms) is the upper bound: when it elapses first, hydration ends
+and a wallet whose reconnect is still pending stays `connecting`. With the
+extension gone, hydration ends at the grace period, not at the timeout. A
+prompt the extension opens for a revoked site holds hydration until the user
+answers or the timeout elapses, once; after a refusal the wallet is forgotten
+and the next load hydrates at the grace period.
+
+The cache is written after hydration ends, one second after the state
+stabilises. A wallet still `connecting` at that time keeps its previous cached
+entry and accounts, so a slow reconnect never writes an empty cache, while
+every other wallet is written as it is.
+
 `autoReconnect` is `true` by default. Pass `false` to reconnect nothing, or a
 synchronous, pure function to choose per wallet (it runs on the server and on
 the client against the cached placeholder, so key on `wallet.id`):
