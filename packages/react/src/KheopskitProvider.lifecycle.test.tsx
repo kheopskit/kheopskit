@@ -56,7 +56,7 @@ describe("KheopskitProvider lifecycle", () => {
 		);
 		unmount();
 
-		expect(added.length).toBeGreaterThan(0);
+		expect(added).toHaveLength(1);
 		expect(removed).toEqual(added);
 	});
 
