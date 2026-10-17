@@ -65,6 +65,10 @@ This guide grows with each v6 change. Each section covers one area.
   user.`, for SubWallet `Rejected` or `Cancelled`.
 - `CONNECT_FAILED`: any other platform failure. `cause` holds the platform
   error.
+- `INVALID_CONFIG`: `getKheopskit$` throws it synchronously when
+  `config.walletConnect` is not a plugin created by `walletConnect()` from
+  `@kheopskit/core/walletconnect` (see section 4). It is not a rejection and
+  carries no `walletId`.
 
 Every rejection is a `KheopskitError` carrying `walletId`.
 
