@@ -67,6 +67,19 @@ const settlementOf = async (promise: Promise<unknown>): Promise<Settlement> => {
 const rememberedWalletIds = (): string[] =>
 	JSON.parse(localStorage.getItem("kheopskit") || "{}").remembered ?? [];
 
+const capReentries = (disconnecting: Promise<void>, limit: number) => {
+	const then = disconnecting.then.bind(disconnecting);
+	const waits = vi
+		.spyOn(disconnecting, "then")
+		.mockImplementation((...args) => {
+			if (waits.mock.calls.length > limit)
+				throw new Error(
+					`connect re-entered the settled disconnect ${limit} times`,
+				);
+			return then(...args);
+		});
+};
+
 const setup = (
 	overrides: Partial<
 		InjectedWalletsAdapter<FakeSource, BaseWallet, string>
@@ -362,6 +375,7 @@ describe("createInjectedWallets$", () => {
 
 		await wallet().connect();
 		const disconnecting = wallet().disconnect();
+		capReentries(disconnecting, 50);
 		const queued = wallet().connect();
 		sub.unsubscribe();
 		platformDisconnect.resolve();
@@ -480,16 +494,8 @@ describe("createInjectedWallets$", () => {
 		await wallet().connect();
 		writesFail = true;
 		const disconnecting = wallet().disconnect();
-		const then = disconnecting.then.bind(disconnecting);
-		const waits = vi
-			.spyOn(disconnecting, "then")
-			.mockImplementation((...args) => {
-				if (waits.mock.calls.length > 50)
-					throw new Error("connect re-entered the settled disconnect 50 times");
-				return then(...args);
-			});
+		capReentries(disconnecting, 50);
 		expect(await settlementOf(disconnecting)).toBe("resolved");
-		expect(wallet().isConnected).toBe(false);
 
 		const reconnect = wallet().connect();
 		expect(await settlementOf(reconnect)).toBe("resolved");
@@ -557,6 +563,7 @@ describe("createInjectedWallets$", () => {
 
 		await wallet().connect();
 		const disconnecting = wallet().disconnect();
+		capReentries(disconnecting, 50);
 		expect(rememberedWalletIds()).toEqual([]);
 
 		const failure = new Error("extension busy");

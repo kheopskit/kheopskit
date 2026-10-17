@@ -106,6 +106,16 @@ try {
   waiting for `kheopskit$` to show it. In the other direction, `connect()`
   resolves a `disconnect()` still waiting for the state, since that disconnect
   did complete.
+- **`disconnect()` forgets first.** The wallet leaves the remembered list
+  before the extension is asked, so a disconnect still pending when the page
+  unloads does not reconnect on the next load. If the extension refuses, the
+  wallet is remembered again and stays connected. A `connect()` queued behind
+  a pending `disconnect()` rejects `ABORTED` as soon as its `signal` fires or
+  the last `kheopskit$` subscriber unsubscribes, even if the extension never
+  answers.
+- **Persistence is best-effort.** A storage write that throws
+  (`QuotaExceededError`, a denied write) keeps the in-memory state, and
+  neither `connect()` nor `disconnect()` rejects because of it.
 - **Wallet objects are stable.** An emission that only changes accounts keeps
   the same wallet object, with the same `connect` and `disconnect` functions,
   so effects and memos keyed on them do not re-run.
