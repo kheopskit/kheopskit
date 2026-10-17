@@ -211,11 +211,13 @@ export const createInjectedWallets$ = <
 			walletId: WalletId,
 			options?: ConnectOptions,
 		): Promise<void> => {
-			if (closed) return Promise.reject(abortedError(walletId));
 			const current = connections$.value.get(walletId);
 			if (current?.status === "connected") {
 				if (!current.disconnecting) return Promise.resolve();
-				const retry = () => connect(source, walletId, options);
+				const retry = () =>
+					closed
+						? Promise.reject(abortedError(walletId))
+						: connect(source, walletId, options);
 				return current.disconnecting.then(retry, retry);
 			}
 			if (options?.signal?.aborted)
