@@ -102,8 +102,9 @@ export const resetAppKitCache = (): void => {
  * Drops a WalletConnect namespace's cached account observables. Called when a
  * namespace transitions to disconnected — including external disconnects (from
  * the wallet app), which flip status via `subscribeProviders` without ever
- * calling `disconnect()` — so a later reconnect rebuilds the account observables
- * against the fresh session instead of a stale closure.
+ * calling `disconnect()` — and when the connector is observed again, so a later
+ * reconnect rebuilds the account observables against the fresh session instead
+ * of a stale closure.
  *
  * Keys are `accounts:<walletId>:...`; the trailing colon scopes the prefix to
  * this wallet and avoids matching a sibling whose id is a string prefix.
@@ -229,8 +230,10 @@ const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
 	);
 
 	return new Observable<WalletConnectWallet>((subscriber) => {
-		// AppKit's subscribeProviders only reports later changes, so read the
-		// state that may have changed while nobody observed.
+		// The session may have changed while nobody observed, and AppKit's
+		// subscribeProviders only reports later changes: drop the account caches
+		// built for the previous session and re-read the providers.
+		for (const platform of allPlatforms) dropAccountsCache(platform);
 		syncProviders({
 			polkadot: appKit.getProvider("polkadot"),
 			eip155: appKit.getProvider("eip155"),
@@ -247,8 +250,9 @@ const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
 
 /**
  * @remarks
- * The AppKit instance is a process-wide singleton (Reown AppKit itself cannot
- * be instantiated twice). The **first** call with a `walletConnect` config wins;
+ * The AppKit instance is a process-wide singleton: a second instance would
+ * share AppKit's module-level controller state with the first, so it is
+ * created once. The **first** call with a `walletConnect` config wins;
  * later calls with a *different* `walletConnect` config reuse that first
  * instance. Call {@link resetAppKitCache} before re-initialising if the
  * WalletConnect config must change.
