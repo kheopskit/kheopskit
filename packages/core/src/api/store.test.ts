@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createKheopskitStore } from "../api/store";
-import { parseCookie } from "../utils/storage";
+import { parseCookie, type SyncableStorage } from "../utils/storage";
 import type { WalletId } from "../utils/WalletId";
 import type { KheopskitStoreData } from "./types";
 
@@ -138,6 +138,50 @@ describe("createKheopskitStore", () => {
 
 			expect(values.at(-1)).toEqual({ remembered: ["polkadot:talisman"] });
 			sub.unsubscribe();
+		});
+
+		it("createKheopskitStore uses the given storage and destroy stops storage sync", () => {
+			const entries = new Map([
+				[STORAGE_KEY, JSON.stringify({ remembered: ["polkadot:talisman"] })],
+			]);
+			const unsubscribe = vi.fn();
+			let pushFromOtherTab: (value: string | null) => void = () => {};
+			const storage = {
+				getItem: vi.fn((key: string) => entries.get(key) ?? null),
+				setItem: vi.fn((key: string, value: string) => {
+					entries.set(key, value);
+				}),
+				removeItem: vi.fn(),
+				subscribe: vi.fn(
+					(_key: string, callback: (value: string | null) => void) => {
+						pushFromOtherTab = callback;
+						return unsubscribe;
+					},
+				),
+			} satisfies SyncableStorage;
+
+			const kstore = createKheopskitStore({ storage, ssrCookies: "" });
+			const values: KheopskitStoreData[] = [];
+			kstore.observable.subscribe((v) => values.push(v));
+			expect(values).toEqual([{ remembered: ["polkadot:talisman"] }]);
+
+			kstore.rememberWallet("polkadot:polkadot-js" as WalletId);
+			expect(storage.setItem).toHaveBeenCalledWith(
+				STORAGE_KEY,
+				JSON.stringify({
+					remembered: ["polkadot:talisman", "polkadot:polkadot-js"],
+				}),
+			);
+			expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+			expect(parseCookie(document.cookie, STORAGE_KEY)).toBeNull();
+
+			pushFromOtherTab(JSON.stringify({ remembered: [] }));
+			expect(values).toHaveLength(3);
+
+			kstore.destroy();
+			expect(unsubscribe).toHaveBeenCalledOnce();
+			pushFromOtherTab(JSON.stringify({ remembered: ["solana:Phantom"] }));
+			expect(values).toHaveLength(3);
 		});
 
 		it("persists changes to localStorage", () => {

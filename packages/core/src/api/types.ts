@@ -315,6 +315,8 @@ export type KheopskitStore = {
 	forgetWallet: (walletId: WalletId) => void;
 	getCachedState: () => { wallets: CachedWallet[]; accounts: CachedAccount[] };
 	setCachedState: (wallets: CachedWallet[], accounts: CachedAccount[]) => void;
+	/** Stops cross-tab storage sync and completes `observable`. */
+	destroy: () => void;
 };
 
 /**

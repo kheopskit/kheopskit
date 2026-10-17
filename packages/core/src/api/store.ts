@@ -1,7 +1,7 @@
 import { uniq } from "lodash-es";
 import { createStore } from "../utils/createStore";
 import { isWalletPlatform } from "../utils/isWalletPlatform";
-import { safeLocalStorage } from "../utils/storage";
+import { type SyncableStorage, safeLocalStorage } from "../utils/storage";
 import {
 	isValidWalletId,
 	parseWalletId,
@@ -60,6 +60,11 @@ const isValidCachedAccount = (value: unknown): value is CachedAccount => {
 
 type CreateKheopskitStoreOptions = {
 	/**
+	 * Storage backend to persist into. When provided, it takes precedence over
+	 * `ssrCookies` and localStorage.
+	 */
+	storage?: SyncableStorage;
+	/**
 	 * Cookie string for SSR hydration.
 	 * When provided, uses cookieStorage instead of localStorage.
 	 */
@@ -73,8 +78,8 @@ type CreateKheopskitStoreOptions = {
 
 /**
  * Creates a kheopskit store with the appropriate storage backend.
- * Uses cookieStorage when ssrCookies is provided (for SSR hydration),
- * otherwise falls back to safeLocalStorage.
+ * Uses the given `storage` when provided, else cookieStorage when ssrCookies is
+ * provided (for SSR hydration), otherwise safeLocalStorage.
  *
  * @param options - Configuration options for the store
  */
@@ -83,9 +88,10 @@ export const createKheopskitStore = (
 ): KheopskitStore => {
 	const { ssrCookies, storageKey = DEFAULT_STORAGE_KEY } = options;
 	const storage =
-		ssrCookies !== undefined
+		options.storage ??
+		(ssrCookies !== undefined
 			? createCompactCookieStorage(ssrCookies)
-			: safeLocalStorage;
+			: safeLocalStorage);
 	const store = createStore(
 		storageKey,
 		DEFAULT_SETTINGS,
@@ -144,6 +150,7 @@ export const createKheopskitStore = (
 		forgetWallet,
 		getCachedState,
 		setCachedState,
+		destroy: store.destroy,
 	};
 };
 
