@@ -150,9 +150,12 @@ frame until the extension answers. A reconnect never prompts while the site
 stays authorised in the extension. When the authorisation was revoked the
 extension prompts once; a refusal forgets the wallet and the next load stays
 silent. Any other failure sets `error`, keeps the wallet remembered and is
-retried up to three times when discovery changes.
+retried up to three times when discovery changes. A manual `connect()` or
+`disconnect()` on a remembered wallet ends its automatic reconnect for the
+session, so a disconnect the user makes is never undone.
 
-`autoReconnect` is `true` by default. Pass `false` to reconnect nothing, or a
+`autoReconnect` governs injected wallets and is `true` by default. Pass `false`
+to reconnect none of them, or a
 synchronous, pure function to choose per wallet (it runs on the server and on
 the client against the cached placeholder, so key on `wallet.id`):
 
@@ -165,7 +168,8 @@ getKheopskit$({
 
 A wallet the function rejects shows `disconnected` from the first frame, without
 its cached accounts. Every successful connect is remembered whatever this option
-says, so an app can turn reconnect on later.
+says, so an app can turn reconnect on later. The WalletConnect row follows
+AppKit's own session restore and hydrates `connecting` while AppKit restores.
 - `cachedWallets` and `cachedAccounts` are written 1 second after the live state
   settles (the write is debounced), and only when a persisted field changed.
   Only accounts of connected wallets are cached.

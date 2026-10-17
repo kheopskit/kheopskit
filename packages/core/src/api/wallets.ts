@@ -7,6 +7,7 @@ import {
 	of,
 	shareReplay,
 	take,
+	tap,
 } from "rxjs";
 import { sortWallets } from "../utils/sortWallets";
 import { KheopskitError } from "./errors";
@@ -59,14 +60,18 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 			try {
 				await reconnectPolicy.attempt(wallet.id, () => wallet.connect());
 			} catch (err) {
-				if (err instanceof KheopskitError && err.code === "USER_REJECTED") {
-					store.forgetWallet(wallet.id);
-					reconnectPolicy.refuse(wallet.id);
+				if (subscriber.closed) return;
+				if (err instanceof KheopskitError) {
+					if (err.code === "USER_REJECTED") store.forgetWallet(wallet.id);
+					if (err.code === "USER_REJECTED" || err.code === "ABORTED")
+						reconnectPolicy.settle(wallet.id);
 				}
 				if (config.debug)
 					console.debug("[kheopskit] reconnect of %s failed", wallet.id, err);
 			}
 		};
+
+		const subWallets = wallets$.subscribe(subscriber);
 
 		const subAutoReconnect = combineLatest([wallets$, rememberedWalletIds$])
 			.pipe(
@@ -79,6 +84,10 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 						.filter(isInjectedWallet)
 						.filter((wallet) => walletIds.includes(wallet.id)),
 				),
+				tap((wallet) => {
+					if (wallet.status !== "disconnected")
+						reconnectPolicy.settle(wallet.id);
+				}),
 				filter(
 					(wallet) =>
 						wallet.status === "disconnected" &&
@@ -86,8 +95,6 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 				),
 			)
 			.subscribe(reconnect);
-
-		const subWallets = wallets$.subscribe(subscriber);
 
 		return () => {
 			subAutoReconnect.unsubscribe();
