@@ -1,6 +1,6 @@
 # Submit a transaction
 
-The "Submitting a transaction" block sends a 0-value transfer from a selected account to a selected recipient on a selected network. A `Send` button appears once a network is selected and `From` and `To` share a platform (on Ethereum, `To` must have a hex address). The network itself does not gate it, and an Ethereum `Send` is disabled on a non-EVM network. Progress shows as toasts (Ethereum `Transaction submitted: <hash>` then `Transaction successful`, Polkadot `Transaction created` then `broadcasted` then `Transaction successful`, Solana `Transaction sent: <sig>`), and every platform shows a `View on block explorer` link.
+The "Submitting a transaction" block sends a 0-value transfer from a selected account to a selected recipient on a selected network. A `Send` button appears once a network is selected and either `From` is an Ethereum account and `To` has a hex address, or `From` and `To` are both Polkadot or both Solana accounts. The network itself does not gate it, and an Ethereum `Send` is disabled on a non-EVM network. Progress shows as toasts (Ethereum `Transaction submitted: <hash>` then `Transaction successful`, Polkadot `Transaction created: <hash>` then `Transaction broadcasted: <hash>` then `Transaction successful`, Solana `Transaction sent: <sig>`). Ethereum shows a `View on block explorer` link when viem knows the chain, and Solana always shows one. Polkadot shows none, because the block looks its explorer up by the papi chain key among AppKit network ids and never finds a match.
 
 ## Sub-features
 
@@ -24,7 +24,7 @@ Preconditions:
 - **Connect.** Click `Connect` on the extension's Wallets row and approve in the extension. The Accounts table shows the `Guardians` account.
 - **Select.** Open the `Network` combobox and pick a network. Then pick the `Guardians` account in the `From` and `To` comboboxes. A `Send` button appears.
 - **Send.** Click `Send`. Before you approve in the extension popup, confirm that the signer name contains `Guardians`, then approve.
-- **Result.** A toast reads `Transaction successful` (Ethereum and Polkadot) or `Transaction sent: <sig>` (Solana). A `View on block explorer` link appears. Open it and confirm the transaction exists on chain.
+- **Result.** A toast reads `Transaction successful` (Ethereum and Polkadot) or `Transaction sent: <sig>` (Solana). On Ethereum and Solana a `View on block explorer` link appears; open it and confirm the transaction exists on chain. On Polkadot no link appears, so look up the hash from the `Transaction created: <hash>` toast on an explorer such as Subscan.
 - **Proof.** Save screenshots of the filled form, the extension approval showing the signer name, the success toast, and the explorer page into `.verify/evidence/<timestamp>-<app>-real-submit-tx/`.
 
 ## Gotchas

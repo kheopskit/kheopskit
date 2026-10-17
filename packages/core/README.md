@@ -186,7 +186,7 @@ that reconnect. No item is a placeholder once `isHydrating` is `false`.
 
 1. `hydrationGracePeriod` has elapsed (default 500 ms).
 2. Discovery has ended (`isDiscovering` is `false`), so a page with a cache
-   hydrates at least until `load`.
+   hydrates until `load` or `hydrationTimeout`, whichever comes first.
 3. Every wallet that hydrated as `connecting` has settled. A wallet has
    settled when it is absent from the discovered wallets, connected once its
    account list has been read (an empty list counts) or connected with no
@@ -302,8 +302,9 @@ code:
   The attempt itself is abandoned once every caller that passed a signal has
   aborted and no caller without one joined, on `disconnect()`, or when the
   last `kheopskit$` subscriber unsubscribes. An abort after the platform
-  granted the connect changes nothing. Aborting cannot close the extension's
-  own prompt.
+  granted the connect changes nothing, and a Polkadot extension counts as
+  granted only once its account list has been read. Aborting cannot close the
+  extension's own prompt.
 - **No default timeout.** An extension prompt pends only while the user has
   not answered it, so kheopskit sets no timeout. Pass `AbortSignal.timeout(ms)`
   to cap the wait.

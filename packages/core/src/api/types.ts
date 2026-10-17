@@ -57,10 +57,11 @@ export type ConnectOptions = {
 	/**
 	 * Ends this caller's wait for the platform's answer: its promise rejects
 	 * with a `KheopskitError` of code `ABORTED`. An abort after the platform
-	 * has granted the connect changes nothing. Other callers sharing the
-	 * attempt keep waiting. Once no caller waits any more, a handle the
-	 * platform hands back afterwards is released and the wallet is neither
-	 * connected nor remembered. The
+	 * has granted the connect changes nothing, and a Polkadot extension counts
+	 * as granted only once its account list has been read. Other callers
+	 * sharing the attempt keep waiting. Once no caller waits any more, a
+	 * handle the platform hands back afterwards is released and the wallet is
+	 * neither connected nor remembered. The
 	 * extension's own prompt may stay open: nothing can withdraw it from the
 	 * page. Kheopskit sets no timeout of its own, because an extension prompt
 	 * pends only while the user has not answered it; pass
@@ -473,17 +474,17 @@ export type KheopskitConfig<
 	 * `connecting`.
 	 *
 	 * - Discovery ends only after the page fires `load`, so a page with a cache
-	 *   hydrates until `load` even when no wallet reconnects.
+	 *   hydrates until `load` or `hydrationTimeout`, whichever comes first,
+	 *   even when no wallet reconnects.
 	 * - A wallet that reconnects without sharing any account with the site
 	 *   settles as soon as it answers; its cached accounts leave the list when
 	 *   hydration ends.
 	 * - A failed reconnect ends that wallet's wait, even when the reconnect
-	 *   policy still permits a retry. A retry runs only when the wallet list or
-	 *   the remembered list next changes (a wallet discovered or removed, or any
-	 *   wallet's status, error or name changing), which may never happen, so
-	 *   waiting for it would hold most failed reconnects until
-	 *   `hydrationTimeout`. A retry that does run shows on the live wallet's
-	 *   `status`, not as a placeholder.
+	 *   policy still permits a retry. A retry runs only when the wallet list next
+	 *   changes (a wallet discovered or removed, or any wallet's status, error
+	 *   or name changing), which may never happen, so waiting for it would
+	 *   hold most failed reconnects until `hydrationTimeout`. A retry that
+	 *   does run shows on the live wallet's `status`, not as a placeholder.
 	 * - A remembered wallet the user disconnects during or right after its
 	 *   reconnect holds hydration, and shows its cached accounts, until
 	 *   `hydrationTimeout`.

@@ -342,11 +342,12 @@ WalletConnect accounts through `polkadot_signMessage`.
 
 With no `options.type`, a string is sent as text with `type: "payload"` and a
 `Uint8Array` as `0x` hex with `type: "bytes"`. An explicit `options.type` is
-sent as given for either input. A hex-looking string is sent as text; pass a
-`Uint8Array` for bytes. From their sources: Talisman, polkadot.js, SubWallet
-and Nova ignore `type` and decode `data` by shape; Enkrypt reads it as the
-encoding of `data`, `"payload"` for UTF-8 text and `"bytes"` for hex, so it
-needs the value the derived default sends. Only Talisman was driven live.
+sent as given for either input, except over WalletConnect, which sends no
+`type`. A hex-looking string is sent as text; pass a `Uint8Array` for bytes.
+From their sources: Talisman, polkadot.js, SubWallet and Nova ignore `type`
+and decode `data` by shape; Enkrypt reads it as the encoding of `data`,
+`"payload"` for UTF-8 text and `"bytes"` for hex, so it needs the value the
+derived default sends. Only Talisman was driven live.
 
 Talisman 3.11.0 opens its Sign In screen when the text parses as a SIWS
 message and its generic Sign Request screen otherwise, hex included. The
@@ -677,7 +678,8 @@ A state literal or test mock typed as `KheopskitState` must add the field:
 ```
 
 Hydration now also waits for discovery. With a cache, `isHydrating` stays
-`true` at least until `load`.
+`true` until `load` or `hydrationTimeout`, whichever comes first. A
+`hydrationGracePeriod` of `0` still turns hydration off.
 
 ### New option: `hydrationTimeout`
 
@@ -710,7 +712,8 @@ listed account, as in 5.x, and a reconnected wallet with cached accounts that
 now lists none holds hydration until `hydrationTimeout`.
 
 - Discovery ends only after the page fires `load`, so a page with a cache
-  hydrates until `load` even when no wallet reconnects.
+  hydrates until `load` or `hydrationTimeout`, whichever comes first, even
+  when no wallet reconnects.
 - A wallet that reconnects without sharing any account with the site settles
   as soon as it answers; its cached accounts leave the list when hydration
   ends.
@@ -727,8 +730,8 @@ now lists none holds hydration until `hydrationTimeout`.
   forgotten, so the next load opens no prompt.
 
 In practice, with the extension removed or with `autoReconnect: false`,
-hydration ends once the grace period has elapsed and the page has loaded,
-instead of at 3 s.
+hydration no longer runs to 3 s. It ends once the grace period has elapsed and
+the page has loaded, or at `hydrationTimeout` if that comes first.
 
 ### Persistence guarantee
 
