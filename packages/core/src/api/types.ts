@@ -185,16 +185,8 @@ export type BaseWalletAccount = {
 	walletId: WalletId;
 };
 
-/**
- * The single WalletConnect connector, shared across every platform.
- *
- * Unlike injected wallets, it is **not tied to a platform**: one WalletConnect
- * session spans whichever namespaces the remote wallet approves in a single
- * pairing (a namespace can't be added to a live session afterwards). So there is
- * exactly one of these in `wallets`, discriminated by `type: "walletconnect"`.
- * Its accounts appear in `accounts`, each carrying its own `platform`.
- */
-export type WalletConnectWallet = {
+type LiveWalletConnectWallet = {
+	isPlaceholder?: false;
 	id: WalletId;
 	type: "walletconnect";
 	/**
@@ -211,8 +203,6 @@ export type WalletConnectWallet = {
 	appKit: AppKitInstance;
 	name: string;
 	icon: string;
-	/** See {@link BaseWallet.isPlaceholder}. */
-	isPlaceholder?: boolean;
 	/**
 	 * `connecting` while `connect()` opens the modal, `connected` while a
 	 * session is live, `disconnected` otherwise. On a reload with a cached
@@ -236,6 +226,21 @@ export type WalletConnectWallet = {
 };
 
 /**
+ * The single WalletConnect connector, shared across every platform.
+ *
+ * Unlike injected wallets, it is **not tied to a platform**: one WalletConnect
+ * session spans whichever namespaces the remote wallet approves in a single
+ * pairing (a namespace can't be added to a live session afterwards). So there is
+ * exactly one of these in `wallets`, discriminated by `type: "walletconnect"`.
+ * Its accounts appear in `accounts`, each carrying its own `platform`.
+ *
+ * A placeholder (see {@link BaseWallet.isPlaceholder}) has no `appKit`.
+ */
+export type WalletConnectWallet =
+	| LiveWalletConnectWallet
+	| PlaceholderWallet<LiveWalletConnectWallet, "appKit">;
+
+/**
  * The cached stand-in for a live item `T`: `isPlaceholder: true`, and the
  * fields `K`, which only the live item carries, absent. Platform account and
  * wallet types are `T | Placeholder<T, K>`, so narrow on `isPlaceholder`
@@ -246,10 +251,10 @@ export type Placeholder<T, K extends keyof T> = Omit<T, K | "isPlaceholder"> & {
 } & { [P in K]?: undefined };
 
 /** A {@link Placeholder} wallet, which is never connected. */
-export type PlaceholderWallet<T extends BaseWallet, K extends keyof T> = Omit<
-	Placeholder<T, K>,
-	"isConnected"
-> & { isConnected: false };
+export type PlaceholderWallet<
+	T extends { isConnected: boolean },
+	K extends keyof T,
+> = Omit<Placeholder<T, K>, "isConnected"> & { isConnected: false };
 
 /** Narrows a wallet to the platform-less {@link WalletConnectWallet}. */
 export const isWalletConnectWallet = (

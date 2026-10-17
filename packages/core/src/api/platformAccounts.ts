@@ -17,6 +17,11 @@ import type {
 } from "./types";
 import { isWalletConnectWallet } from "./types";
 
+export type LiveWalletConnectWallet = Exclude<
+	WalletConnectWallet,
+	{ isPlaceholder: true }
+>;
+
 /**
  * The platform-specific surface of an accounts stream. The shared pipeline —
  * filter connected wallets, fan out per-wallet account streams, flatten,
@@ -32,7 +37,7 @@ export type PlatformAccountsOptions<
 	getInjectedAccounts$: (wallet: TWallet) => Observable<TAccount[]>;
 	/** Account stream for the WalletConnect connector. */
 	getWalletConnectAccounts$: (
-		wallet: WalletConnectWallet,
+		wallet: LiveWalletConnectWallet,
 	) => Observable<TAccount[]>;
 	/** Optional post-flatten transform (e.g. Polkadot's `accountTypes` filter). */
 	mapAccounts?: (accounts: TAccount[]) => TAccount[];
@@ -75,7 +80,10 @@ export const createPlatformAccounts$ = <
 									.filter((w): w is TWallet => !isWalletConnectWallet(w))
 									.map(getInjectedAccounts$),
 								...wallets
-									.filter(isWalletConnectWallet)
+									.filter(
+										(w): w is LiveWalletConnectWallet =>
+											isWalletConnectWallet(w) && !w.isPlaceholder,
+									)
 									.map(getWalletConnectAccounts$),
 							])
 						: of([]),
@@ -131,7 +139,7 @@ export const getCaip10Addresses = (caip10s: string[]): string[] => [
 export const getWalletConnectSessionAccounts$ = <
 	TAccount extends BaseWalletAccount,
 >(options: {
-	wallet: WalletConnectWallet;
+	wallet: LiveWalletConnectWallet;
 	platform: WalletPlatform;
 	/** WalletConnect namespace, e.g. "polkadot" | "solana" | "eip155". */
 	namespace: string;

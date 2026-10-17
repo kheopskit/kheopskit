@@ -2,7 +2,8 @@ import * as pjs from "polkadot-api/pjs-signer";
 import { BehaviorSubject, firstValueFrom, of, take, toArray } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../../utils/WalletId";
-import type { WalletConnectWallet } from "../types";
+import type { LiveWalletConnectWallet } from "../platformAccounts";
+import type { AppKitInstance } from "../types";
 import { getPolkadotAccounts$ } from "./accounts";
 import type {
 	PolkadotInjected,
@@ -384,8 +385,8 @@ describe("getPolkadotAccounts$", () => {
 					// getAccount("polkadot").allAccounts is always empty. Accounts must
 					// come from session.namespaces (WalletConnect 0-accounts regression).
 					getAccount: vi.fn(() => ({ allAccounts: [] })),
-				} as unknown as WalletConnectWallet["appKit"],
-			} as WalletConnectWallet;
+				} as unknown as AppKitInstance,
+			} as LiveWalletConnectWallet;
 			return { wallet, provider };
 		};
 

@@ -16,7 +16,11 @@
  * these catch a symbol collapsing whole, which is how 5.1.1 failed.
  */
 
-import type { KheopskitConfig, KheopskitPlatform } from "@kheopskit/core";
+import type {
+	KheopskitConfig,
+	KheopskitPlatform,
+	WalletConnectWallet,
+} from "@kheopskit/core";
 import type {
 	EthereumAccount,
 	EthereumWallet,
@@ -144,6 +148,19 @@ export const solanaSigner = (account: SolanaAccount) => {
 	const narrowed: SolanaSigner = account.signer;
 	return narrowed;
 };
+
+export const walletConnectAppKit = (wallet: WalletConnectWallet) => {
+	// @ts-expect-error a placeholder has no appKit
+	wallet.appKit.getAccount("eip155");
+	if (wallet.isPlaceholder) return;
+	return wallet.appKit.getAccount("eip155");
+};
+export type PlaceholderAppKitIsAbsent = Expect<
+	Equal<
+		Extract<WalletConnectWallet, { isPlaceholder: true }>["appKit"],
+		undefined
+	>
+>;
 
 export const ethereumProvider = (wallet: EthereumWallet) => {
 	// @ts-expect-error a placeholder has no provider

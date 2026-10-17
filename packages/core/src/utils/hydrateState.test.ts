@@ -79,6 +79,7 @@ const SDK_FIELDS = [
 	"client",
 	"signer",
 	"getSigner",
+	"signRaw",
 	"extension",
 	"provider",
 	"wallet",

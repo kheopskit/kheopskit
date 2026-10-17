@@ -38,20 +38,20 @@ type HydrationBufferResult<T> = {
  * @param mergeFn - Function to merge live and cached items during hydration
  * @param isConverged - Optional function to check if live items have caught up to cached items
  */
-const createBufferCore = <T>(
-	cachedItems: T[],
-	liveItems$: Observable<T[]>,
+const createBufferCore = <L, C>(
+	cachedItems: C[],
+	liveItems$: Observable<L[]>,
 	gracePeriodMs: number,
-	mergeFn: (liveItems: T[], cachedItems: T[]) => T[],
-	isConverged?: (liveItems: T[], cachedItems: T[]) => boolean,
-): Observable<HydrationBufferResult<T>> => {
+	mergeFn: (liveItems: L[], cachedItems: C[]) => (L | C)[],
+	isConverged?: (liveItems: L[], cachedItems: C[]) => boolean,
+): Observable<HydrationBufferResult<L | C>> => {
 	// If no grace period or no cached items, just pass through live items
 	if (gracePeriodMs <= 0 || cachedItems.length === 0) {
 		return liveItems$.pipe(map((items) => ({ items, isHydrating: false })));
 	}
 
 	// Wrap in an Observable to properly manage all subscriptions
-	return new Observable<HydrationBufferResult<T>>((subscriber) => {
+	return new Observable<HydrationBufferResult<L | C>>((subscriber) => {
 		const subscriptions = new Subscription();
 
 		// Track whether we're still in the hydration grace period
@@ -59,7 +59,7 @@ const createBufferCore = <T>(
 		const isHydrating$ = new BehaviorSubject(true);
 
 		// Use startWith to emit cached items immediately before any live emissions
-		const liveWithInitial$ = liveItems$.pipe(startWith([] as T[]));
+		const liveWithInitial$ = liveItems$.pipe(startWith([] as L[]));
 
 		if (isConverged) {
 			// With convergence check: hydration ends when timer fires AND live state has caught up
@@ -140,15 +140,15 @@ const createBufferCore = <T>(
  * @param mergeItem - Optional function to merge a live item with its cached counterpart
  * @param transformCachedOnly - Optional function to transform cached items not yet in the live stream
  */
-export const createHydrationBuffer = <T>(
-	cachedItems: T[],
-	liveItems$: Observable<T[]>,
+export const createHydrationBuffer = <L, C>(
+	cachedItems: C[],
+	liveItems$: Observable<L[]>,
 	gracePeriodMs: number,
-	getKey: (item: T) => string,
-	isConverged?: (liveItems: T[], cachedItems: T[]) => boolean,
-	mergeItem?: (liveItem: T, cachedItem: T) => T,
-	transformCachedOnly?: (cachedItem: T) => T,
-): Observable<HydrationBufferResult<T>> => {
+	getKey: (item: L | C) => string,
+	isConverged?: (liveItems: L[], cachedItems: C[]) => boolean,
+	mergeItem?: (liveItem: L, cachedItem: C) => L | C,
+	transformCachedOnly?: (cachedItem: C) => C,
+): Observable<HydrationBufferResult<L | C>> => {
 	return createBufferCore(
 		cachedItems,
 		liveItems$,
@@ -160,7 +160,7 @@ export const createHydrationBuffer = <T>(
 			// For items in both live and cached, prefer cached (preserves connected state)
 			// but allow mergeItem to customize how they're combined
 			// For items only in live (newly discovered), use the live version
-			const mergedItems: T[] = liveItems.map((liveItem) => {
+			const mergedItems: (L | C)[] = liveItems.map((liveItem) => {
 				const key = getKey(liveItem);
 				const cachedItem = cachedByKey.get(key);
 				if (!cachedItem) return liveItem;

@@ -13,6 +13,7 @@ import {
 	getCaip10Addresses,
 	getSessionCaip10s,
 	getWalletConnectSessionAccounts$,
+	type LiveWalletConnectWallet,
 } from "../platformAccounts";
 import type {
 	AppKitInstance,
@@ -200,7 +201,7 @@ const getAppKitPolkadotSigning = (appKit: AppKitInstance, address: string) => {
 };
 
 const getWalletConnectAccounts$ = (
-	wallet: WalletConnectWallet,
+	wallet: LiveWalletConnectWallet,
 ): Observable<PolkadotAccount[]> =>
 	getWalletConnectSessionAccounts$({
 		wallet,

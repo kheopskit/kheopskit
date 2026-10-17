@@ -7,6 +7,7 @@ import {
 	getCaip10Addresses,
 	getSessionCaip10s,
 	getWalletConnectSessionAccounts$,
+	type LiveWalletConnectWallet,
 } from "../platformAccounts";
 import type { WalletConnectWallet } from "../types";
 import { getSolanaChainIdFromCaip2, type SolanaChainId } from "./chains";
@@ -65,7 +66,7 @@ const getInjectedWalletAccounts$ = (
 };
 
 const getWalletConnectAccounts$ = (
-	wallet: WalletConnectWallet,
+	wallet: LiveWalletConnectWallet,
 	chain: SolanaChainId,
 ): Observable<SolanaAccount[]> =>
 	getWalletConnectSessionAccounts$({

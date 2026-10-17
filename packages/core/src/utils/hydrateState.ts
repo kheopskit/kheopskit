@@ -52,7 +52,7 @@ export const hydrateWallet = (
 			isConnected: false,
 			connect,
 			disconnect,
-		} as unknown as PlaceholderOf<WalletConnectWallet>;
+		};
 	}
 
 	const { platform, identifier } = parseWalletId(cached.id);

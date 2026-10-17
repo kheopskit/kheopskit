@@ -14,11 +14,13 @@ import { getKheopskit$ } from "./kheopskit";
 import { polkadot } from "./polkadot/plugin";
 import type { PolkadotAccount, PolkadotWallet } from "./polkadot/types";
 import { createKheopskitStore } from "./store";
-import type {
-	KheopskitConfig,
-	KheopskitState,
-	WalletConnectPlugin,
-	WalletConnectWallet,
+import {
+	type AppKitInstance,
+	isWalletConnectWallet,
+	type KheopskitConfig,
+	type KheopskitState,
+	type WalletConnectPlugin,
+	type WalletConnectWallet,
 } from "./types";
 import { getWallets$ } from "./wallets";
 
@@ -757,7 +759,7 @@ describe("getKheopskit$ placeholders", () => {
 				id: WALLET_CONNECT_WALLET_ID,
 				type: "walletconnect",
 				platforms: [],
-				appKit: {} as WalletConnectWallet["appKit"],
+				appKit: {} as AppKitInstance,
 				name: "WalletConnect",
 				icon: "",
 				status: "disconnected",
@@ -773,6 +775,73 @@ describe("getKheopskit$ placeholders", () => {
 				walletId: WALLET_CONNECT_WALLET_ID,
 			});
 			expect(connect).not.toHaveBeenCalled();
+		});
+
+		it("a cached WalletConnect session's placeholder has no appKit and the restored connector has it", async () => {
+			const store = createKheopskitStore();
+			store.setCachedState(
+				[
+					{
+						id: WALLET_CONNECT_WALLET_ID,
+						type: "walletconnect",
+						name: "WalletConnect",
+						isConnected: true,
+					},
+				],
+				[],
+			);
+			const appKit: AppKitInstance = {
+				getProvider: () => undefined,
+				getAccount: () => undefined,
+				getCaipNetworks: () => [],
+			};
+			const connector$ = new BehaviorSubject<WalletConnectWallet | null>(null);
+			const states: KheopskitState[] = [];
+			subscription = getKheopskit$(
+				{
+					platforms: [polkadot()],
+					hydrationGracePeriod: 500,
+					walletConnect: {
+						type: "walletconnect",
+						metadata: {
+							name: "Test Dapp",
+							description: "",
+							url: "",
+							icons: [],
+						},
+						getWallet$: () => connector$,
+					},
+				},
+				{ store },
+			).subscribe((state) => states.push(state));
+			const connectorIn = (state: KheopskitState | undefined) =>
+				state?.wallets.find(isWalletConnectWallet);
+			const shape = (state: KheopskitState | undefined) => {
+				const wallet = connectorIn(state);
+				return (
+					wallet && [wallet.isPlaceholder, wallet.status, "appKit" in wallet]
+				);
+			};
+
+			await vi.advanceTimersByTimeAsync(0);
+			connector$.next({
+				id: WALLET_CONNECT_WALLET_ID,
+				type: "walletconnect",
+				platforms: [],
+				appKit,
+				name: "WalletConnect",
+				icon: "",
+				status: "connected",
+				isConnected: true,
+				connect: async () => {},
+				disconnect: async () => {},
+			});
+			await vi.advanceTimersByTimeAsync(4000);
+
+			expect(shape(states[0])).toEqual([true, "connecting", false]);
+			expect(shape(states.at(-1))).toEqual([false, "connected", true]);
+			const live = connectorIn(states.at(-1));
+			expect(live && !live.isPlaceholder && live.appKit).toBe(appKit);
 		});
 	});
 });

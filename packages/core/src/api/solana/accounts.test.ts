@@ -2,7 +2,8 @@ import { createSignableMessage } from "@solana/kit";
 import { firstValueFrom, of, take, toArray } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../../utils/WalletId";
-import type { WalletConnectWallet } from "../types";
+import type { LiveWalletConnectWallet } from "../platformAccounts";
+import type { AppKitInstance } from "../types";
 import type { SolanaInjectedWallet } from "./types";
 
 const ADDRESS_1 = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
@@ -80,8 +81,8 @@ const createMockInjectedWallet = (
 
 const createMockAppKitWallet = (
 	namespaces: Record<string, { accounts: string[] }>,
-	overrides: Partial<WalletConnectWallet> = {},
-): WalletConnectWallet => {
+	overrides: Partial<LiveWalletConnectWallet> = {},
+): LiveWalletConnectWallet => {
 	const listeners = new Map<string, Set<ChangeListener>>();
 	const provider = {
 		session: { topic: "test-topic", namespaces },
@@ -119,7 +120,7 @@ const createMockAppKitWallet = (
 			// getAccount("solana").allAccounts is always empty. Accounts must come
 			// from session.namespaces (WalletConnect 0-accounts regression).
 			getAccount: vi.fn(() => ({ allAccounts: [] })),
-		} as unknown as WalletConnectWallet["appKit"],
+		} as unknown as AppKitInstance,
 		...overrides,
 	};
 };
