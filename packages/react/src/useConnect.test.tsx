@@ -229,6 +229,61 @@ describe("useConnect", () => {
 		});
 	});
 
+	it.each([
+		["", Fragment],
+		[" under StrictMode", StrictMode],
+	])(
+		"rejects ABORTED a connect that starts after the component unmounts, without asking the wallet%s",
+		async (_, Wrapper) => {
+			const { settle, walletStatus, remembered, renderInside } = await setup(
+				"resolve",
+				Wrapper,
+			);
+			const outcomes: string[] = [];
+			let resume = () => {};
+			const resumed = new Promise<void>((resolve) => {
+				resume = resolve;
+			});
+			const ResumingConnect = () => {
+				const { connect } = useConnect(fake.walletId);
+				return (
+					<button
+						type="button"
+						onClick={() =>
+							resumed.then(connect).then(
+								() => outcomes.push("resolved"),
+								(error: KheopskitError) =>
+									outcomes.push(`rejected:${error.code}`),
+							)
+						}
+					>
+						Connect later
+					</button>
+				);
+			};
+
+			renderInside(<ResumingConnect />);
+			await settle();
+			fireEvent.click(screen.getByText("Connect later"));
+			renderInside();
+			await settle();
+			resume();
+			await settle();
+
+			expect({
+				outcomes,
+				enableCalls: fake.enableCalls().length,
+				status: walletStatus(),
+				remembered: await remembered(),
+			}).toEqual({
+				outcomes: ["rejected:ABORTED"],
+				enableCalls: 0,
+				status: "disconnected",
+				remembered: [],
+			});
+		},
+	);
+
 	it("rejects with an error naming an unknown wallet id", async () => {
 		await setup("resolve");
 		const outcomes: string[] = [];
