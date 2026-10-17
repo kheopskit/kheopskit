@@ -1,14 +1,17 @@
-import { firstValueFrom, of, type Subscription, take } from "rxjs";
+import { firstValueFrom, of, Subject, type Subscription, take } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WalletId } from "../utils/WalletId";
 import { getKheopskit$ } from "./kheopskit";
 import { polkadot } from "./polkadot/plugin";
 import { createKheopskitStore } from "./store";
-import type { KheopskitState } from "./types";
+import type { KheopskitState, WalletConnectWallet } from "./types";
 import { getWallets$ } from "./wallets";
 
-const { injected } = vi.hoisted(() => ({
+const { injected, walletConnect } = vi.hoisted(() => ({
 	injected: { names: [] as string[] },
+	walletConnect: {
+		connector$: undefined as unknown as Subject<WalletConnectWallet | null>,
+	},
 }));
 
 vi.mock("polkadot-api/pjs-signer", () => ({
@@ -23,6 +26,21 @@ vi.mock("./wallets", () => ({
 vi.mock("./accounts", () => ({
 	getAccounts$: vi.fn(() => of([])),
 }));
+
+vi.mock("./appKit", () => ({
+	getWalletConnectWallet$: () => walletConnect.connector$,
+}));
+
+const setReadyState = (value: DocumentReadyState) =>
+	Object.defineProperty(document, "readyState", {
+		value,
+		configurable: true,
+	});
+
+const fireLoad = () => {
+	setReadyState("complete");
+	window.dispatchEvent(new Event("load"));
+};
 
 describe("getKheopskit$ cached account filtering", () => {
 	beforeEach(() => {
@@ -124,17 +142,6 @@ describe("getKheopskit$ cached account filtering", () => {
 describe("getKheopskit$ discovery", () => {
 	let subscription: Subscription | undefined;
 
-	const setReadyState = (value: DocumentReadyState) =>
-		Object.defineProperty(document, "readyState", {
-			value,
-			configurable: true,
-		});
-
-	const fireLoad = () => {
-		setReadyState("complete");
-		window.dispatchEvent(new Event("load"));
-	};
-
 	const recordStates = () => {
 		const states: KheopskitState[] = [];
 		subscription = getKheopskit$({ platforms: [polkadot()] }).subscribe(
@@ -191,5 +198,58 @@ describe("getKheopskit$ discovery", () => {
 
 		vi.advanceTimersByTime(20);
 		expect(states[0]?.isDiscovering).toBe(false);
+	});
+});
+
+describe("getKheopskit$ discovery while the WalletConnect connector loads", () => {
+	let subscription: Subscription | undefined;
+
+	beforeEach(async () => {
+		localStorage.clear();
+		vi.useFakeTimers();
+		injected.names = [];
+		walletConnect.connector$ = new Subject();
+		const actual =
+			await vi.importActual<typeof import("./wallets")>("./wallets");
+		vi.mocked(getWallets$).mockImplementation(actual.getWallets$);
+	});
+
+	afterEach(() => {
+		subscription?.unsubscribe();
+		Reflect.deleteProperty(document, "readyState");
+		vi.useRealTimers();
+		vi.mocked(getWallets$).mockImplementation(() => of([]));
+	});
+
+	it("with a cached state, the emission that ends discovery already lists the extension present at load", () => {
+		setReadyState("interactive");
+		const store = createKheopskitStore();
+		store.setCachedState(
+			[
+				{
+					id: "polkadot:cached" as WalletId,
+					platform: "polkadot",
+					type: "injected",
+					name: "Cached",
+					isConnected: false,
+				},
+			],
+			[],
+		);
+		const states: KheopskitState[] = [];
+		subscription = getKheopskit$(
+			{ platforms: [polkadot()] },
+			{ store },
+		).subscribe((state) => states.push(state));
+
+		vi.advanceTimersByTime(1200);
+		injected.names = ["talisman"];
+		fireLoad();
+		vi.advanceTimersByTime(20);
+		walletConnect.connector$.next(null);
+		vi.advanceTimersByTime(20);
+
+		const settled = states.find((s) => s.isDiscovering === false);
+		expect(settled?.wallets.map((w) => w.id)).toEqual(["polkadot:talisman"]);
 	});
 });

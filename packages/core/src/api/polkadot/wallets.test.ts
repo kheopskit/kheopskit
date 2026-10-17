@@ -5,13 +5,18 @@ import { createKheopskitStore } from "../store";
 import type { KheopskitConfig, WalletConnectConfig } from "../types";
 import { polkadot } from "./plugin";
 
-const { connectInjectedExtension, injected } = vi.hoisted(() => ({
-	connectInjectedExtension: vi.fn().mockResolvedValue({}),
-	injected: { names: ["test-extension"] },
-}));
+const { connectInjectedExtension, getInjectedExtensions, injected } =
+	vi.hoisted(() => {
+		const injected = { names: ["test-extension"] };
+		return {
+			connectInjectedExtension: vi.fn().mockResolvedValue({}),
+			getInjectedExtensions: vi.fn(() => injected.names),
+			injected,
+		};
+	});
 
 vi.mock("polkadot-api/pjs-signer", () => ({
-	getInjectedExtensions: () => injected.names,
+	getInjectedExtensions,
 	connectInjectedExtension,
 }));
 
@@ -116,5 +121,26 @@ describe("polkadot wallet discovery", () => {
 		]);
 
 		subscription.unsubscribe();
+	});
+
+	it("does not read injectedWeb3 after an unsubscribe during the load emission", () => {
+		const plugin = polkadot();
+		const subscription = plugin
+			.getWallets$({
+				store: createKheopskitStore(),
+				config: resolveConfig({ platforms: [plugin] }),
+			})
+			.subscribe((wallets) => {
+				if (wallets.some((w) => w.id === "polkadot:at-load"))
+					subscription.unsubscribe();
+			});
+
+		vi.advanceTimersByTime(1200);
+		injected.names = ["at-load"];
+		window.dispatchEvent(new Event("load"));
+		const readsAtUnsubscribe = getInjectedExtensions.mock.calls.length;
+
+		vi.advanceTimersByTime(60_000);
+		expect(getInjectedExtensions).toHaveBeenCalledTimes(readsAtUnsubscribe);
 	});
 });
