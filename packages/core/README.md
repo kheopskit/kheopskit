@@ -117,6 +117,33 @@ config option). In the browser it goes to `localStorage` as JSON:
 - `remembered` lists the wallets the user connected. A wallet is added on every
   successful connect and removed on disconnect. When `autoReconnect` is on, these
   wallets reconnect on the next load.
+
+### Reconnect and wallet status
+
+Every wallet carries `status` (`disconnected`, `connecting` or `connected`;
+`isConnected` is `status === "connected"`) and `error`, the last connect the
+platform refused or failed, cleared when the next attempt starts. On a reload,
+a remembered wallet kheopskit will reconnect is `connecting` from the first
+frame until the extension answers. A reconnect never prompts while the site
+stays authorised in the extension. When the authorisation was revoked the
+extension prompts once; a refusal forgets the wallet and the next load stays
+silent. Any other failure sets `error`, keeps the wallet remembered and is
+retried up to three times when discovery changes.
+
+`autoReconnect` is `true` by default. Pass `false` to reconnect nothing, or a
+synchronous, pure function to choose per wallet (it runs on the server and on
+the client against the cached placeholder, so key on `wallet.id`):
+
+```ts
+getKheopskit$({
+  platforms: [polkadot()],
+  autoReconnect: (wallet) => wallet.id === "polkadot:talisman",
+});
+```
+
+A wallet the function rejects shows `disconnected` from the first frame, without
+its cached accounts. Every successful connect is remembered whatever this option
+says, so an app can turn reconnect on later.
 - `cachedWallets` and `cachedAccounts` are written 1 second after the live state
   settles (the write is debounced), and only when a persisted field changed.
   Only accounts of connected wallets are cached.
