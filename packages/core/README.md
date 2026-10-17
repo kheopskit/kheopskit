@@ -63,6 +63,13 @@ carries the SDK-free `KheopskitConfig`, `KheopskitState`, `BaseWallet` and
 > carrying only the base fields — SDK fields (`signer`, `client`,
 > provider/extension handles) are absent until hydration completes.
 
+`state.isDiscovering` is `true` until the page has fired `load` and kheopskit
+has read `window.injectedWeb3` again, so the emission that turns it `false`
+already lists every Polkadot extension injected by then. Wait for it before you
+conclude that a wallet is missing. It is `false` from the first emission when you
+subscribe after `load`, and always `true` on the server. It says nothing about
+wallets that inject after `load`.
+
 ## License
 
 ISC

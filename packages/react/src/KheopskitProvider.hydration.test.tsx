@@ -3,6 +3,7 @@ import { ethereum } from "@kheopskit/core/ethereum";
 import { polkadot } from "@kheopskit/core/polkadot";
 import { solana } from "@kheopskit/core/solana";
 import { render, screen } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Replace the live kheopskit observable with one that NEVER emits synchronously.
@@ -255,5 +256,35 @@ describe("KheopskitProvider hydration (no flash on SPA reload)", () => {
 
 		expect(screen.getByTestId("wallets-count")).toHaveTextContent("0");
 		expect(screen.getByTestId("accounts-count")).toHaveTextContent("0");
+	});
+});
+
+const DiscoveringConsumer = () => {
+	const { isDiscovering } = useWallets();
+	return <span data-testid="is-discovering">{String(isDiscovering)}</span>;
+};
+
+describe.each([
+	["without ssrCookies", undefined],
+	["with ssrCookies", "kheopskit={}"],
+])("KheopskitProvider discovery snapshots %s", (_, ssrCookies) => {
+	const tree = (
+		<KheopskitProvider
+			config={{ platforms: [polkadot()] }}
+			ssrCookies={ssrCookies}
+		>
+			<DiscoveringConsumer />
+		</KheopskitProvider>
+	);
+
+	it("reports isDiscovering on the server snapshot", () => {
+		expect(renderToString(tree)).toContain(
+			'<span data-testid="is-discovering">true</span>',
+		);
+	});
+
+	it("reports isDiscovering on the client initial snapshot", () => {
+		render(tree);
+		expect(screen.getByTestId("is-discovering")).toHaveTextContent("true");
 	});
 });
