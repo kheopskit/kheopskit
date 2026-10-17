@@ -67,14 +67,18 @@ carries the SDK-free `KheopskitConfig`, `KheopskitState`, `BaseWallet` and
 > provider/extension handles) are absent until hydration completes.
 
 `wallet.connect()` and `wallet.disconnect()` are safe to call straight from UI
-code. Concurrent `connect()` calls share one pending promise, a repeat call on
-a wallet that is already connected (or disconnected) resolves at once, and
-`connect({ signal })` rejects with a `KheopskitError` of code `ABORTED` when
-the signal fires. A refused prompt rejects with `USER_REJECTED` and any other
-failure with `CONNECT_FAILED`; both carry the platform error as `cause`. Each
-promise resolves only after `kheopskit$` has emitted the wallet's new
-`isConnected` value, and there is no default timeout: pass
-`AbortSignal.timeout(ms)` to cap the wait.
+code. Concurrent `connect()` calls on one wallet share one platform attempt, so
+the extension is asked once, and each call gets its own promise. A repeat call
+on a wallet that is already connected (or disconnected) resolves at once.
+`connect({ signal })` rejects that caller with a `KheopskitError` of code
+`ABORTED` when the signal fires before the platform answers. An abort after the
+platform granted the connect changes nothing. A refused prompt rejects with
+`USER_REJECTED` and any other failure with `CONNECT_FAILED`. Both carry the
+platform error as `cause`. `connect()` resolves only after `kheopskit$` has
+emitted the wallet with `isConnected: true`. `disconnect()` resolves once it has
+emitted `isConnected: false`, or once a later `connect()` or the end of the
+subscription makes that emission impossible. There is no default timeout: pass
+`AbortSignal.timeout(ms)` to cap the wait for the platform's answer.
 
 `state.isDiscovering` is `true` until the page has fired `load` and kheopskit
 has read `window.injectedWeb3` again, so the emission that turns it `false`

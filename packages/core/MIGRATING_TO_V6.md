@@ -15,10 +15,10 @@ This guide grows with each v6 change. Each section covers one area.
 
 | Area | v5 | v6 |
 |------|----|----|
-| `connect()` twice in a row | the second call asks the extension again | both calls share one pending promise; the extension is asked once |
+| `connect()` twice in a row | the second call asks the extension again | both calls share one platform attempt; the extension is asked once and each call gets its own promise |
 | `connect()` on a connected wallet | rejects `WALLET_ALREADY_CONNECTED` | resolves at once |
 | `disconnect()` on a disconnected wallet | rejects `WALLET_NOT_CONNECTED` | resolves at once |
-| Cancel a pending `connect()` | not possible | `connect({ signal })` rejects `ABORTED` |
+| Cancel a pending `connect()` | not possible | `connect({ signal })` rejects that caller `ABORTED` until the platform answers |
 | `disconnect()` while a `connect()` pends | rejects `WALLET_NOT_CONNECTED` | aborts the connect and resolves |
 | Refused prompt | the extension's plain `Error` | `KheopskitError` `USER_REJECTED` with `cause` |
 | Other connect failure | platform error passed through | `KheopskitError` `CONNECT_FAILED` with `cause` |
@@ -46,10 +46,10 @@ This guide grows with each v6 change. Each section covers one area.
 
 ### New codes
 
-- `ABORTED`: this `connect()` call was abandoned. Its `signal` fired,
-  `disconnect()` was called while it pended, the last `kheopskit$` subscriber
-  unsubscribed, or the wallet object came from a subscription that had
-  already ended.
+- `ABORTED`: this `connect()` call was abandoned. Its `signal` fired before the
+  platform answered, `disconnect()` was called while it pended, the last
+  `kheopskit$` subscriber unsubscribed, or the wallet object came from a
+  subscription that had already ended.
 - `USER_REJECTED`: the user refused the wallet prompt. `cause` holds the
   platform error: an EIP-1193 error with `code: 4001` on Ethereum; on
   Polkadot the extension's own `Error`, for Talisman
@@ -89,12 +89,14 @@ try {
   subscriber unsubscribes; those reject every remaining caller `ABORTED`.
 - **Resolution follows the state.** `connect()` resolves only after
   `kheopskit$` has emitted a state in which the wallet has
-  `isConnected: true`; `disconnect()` after one with `isConnected: false`.
-  The state your UI reads already reflects the change when the promise
-  settles. An authorised wallet may share zero accounts, so this is about
-  `isConnected`, not the account list.
+  `isConnected: true`; `disconnect()` after one with `isConnected: false`, or
+  once a later `connect()` or the end of the subscription makes that emission
+  impossible. The state your UI reads already reflects the change when the
+  promise settles. An authorised wallet may share zero accounts, so this is
+  about `isConnected`, not the account list.
 - **No default timeout.** A Polkadot extension prompt pends until the user
-  answers it. Pass `AbortSignal.timeout(ms)` to cap the wait. Aborting ends
+  answers it. Pass `AbortSignal.timeout(ms)` to cap your wait for the platform's
+  answer. The wait for the state after a grant is not capped. Aborting ends
   your wait; it cannot close the extension's own prompt. Once no caller waits
   any more, a handle the extension returns afterwards is released, and the
   wallet is neither connected nor remembered.
@@ -126,4 +128,6 @@ try {
 - Refusal detection by `error.name === "Error"` or by message text. Branch on
   `error.code === "USER_REJECTED"`.
 - Cancel flows that forget the wallet and disconnect a late approval. Pass a
-  `signal` and abort it.
+  `signal` and abort it. When a caller without a signal shares the attempt
+  (auto-reconnect does), a late approval still connects the wallet, so call
+  `disconnect()` if the user must end up disconnected.
