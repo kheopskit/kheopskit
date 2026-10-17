@@ -29,11 +29,11 @@ remembered wallets, and test fixtures that seed
 
 `createKheopskitStore({ storage })` persists into any `SyncableStorage` (now
 exported from `@kheopskit/core`). It takes precedence over `ssrCookies` and
-`localStorage`. `store.destroy()` stops cross-tab sync and completes
-`store.observable`.
+`localStorage`.
 
-`KheopskitProvider` destroys the store it replaces when `ssrCookies` or
-`storageKey` changes.
+The store holds its cross-tab subscription only while `store.observable` is
+observed. Explicit owners call `store.destroy()`, which completes
+`store.observable` and so ends that subscription.
 
 ### Account order inside a wallet
 
