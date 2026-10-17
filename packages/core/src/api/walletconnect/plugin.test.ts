@@ -60,6 +60,7 @@ describe("walletConnect().getWallet$ disconnect", () => {
 		let emitProviders: (p: Record<string, unknown>) => void = () => {};
 		const fakeAppKit = {
 			chainNamespaces: ["solana"],
+			getProvider: () => undefined,
 			subscribeProviders: (cb: (p: Record<string, unknown>) => void) => {
 				emitProviders = cb;
 				cb({ solana: {} });
@@ -128,6 +129,7 @@ describe("walletConnect().getWallet$ single-session connect model", () => {
 		let emit: (p: Record<string, unknown>) => void = () => {};
 		const fakeAppKit = {
 			chainNamespaces,
+			getProvider: () => undefined,
 			subscribeProviders: (cb: (p: Record<string, unknown>) => void) => {
 				emit = cb;
 				cb({}); // start fully disconnected
@@ -245,6 +247,7 @@ describe("walletConnect().getWallet$ single AppKit instance", () => {
 	const makeCreateAppKit = () =>
 		vi.fn(() => ({
 			chainNamespaces: ["eip155"],
+			getProvider: () => undefined,
 			subscribeProviders: (cb: (p: Record<string, unknown>) => void) => {
 				cb({});
 				return () => {};
@@ -256,10 +259,6 @@ describe("walletConnect().getWallet$ single AppKit instance", () => {
 
 	it("creates the AppKit instance at most once across teardown and re-subscribe", async () => {
 		vi.resetModules();
-		// createAppKit must run at most once per process — Reown AppKit cannot be
-		// instantiated twice. The cached connector observable is multicast with
-		// refCount:false so draining every subscriber and re-subscribing (React
-		// unmount/remount, StrictMode) does NOT re-run the producer.
 		const createAppKit = makeCreateAppKit();
 		vi.doMock("@reown/appkit/core", () => ({ createAppKit }));
 

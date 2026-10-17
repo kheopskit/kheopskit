@@ -1,3 +1,4 @@
+import type { AppKit } from "@reown/appkit/core";
 import {
 	BehaviorSubject,
 	distinctUntilChanged,
@@ -113,13 +114,145 @@ const dropAccountsCache = (platform: WalletPlatform): void => {
 	);
 };
 
+const namespaceOf: Record<WalletPlatform, string> = {
+	polkadot: "polkadot",
+	ethereum: "eip155",
+	solana: "solana",
+};
+const allPlatforms: WalletPlatform[] = ["polkadot", "ethereum", "solana"];
+
+const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
+	// Exposed on the wallet as the (decoupled) AppKitInstance escape hatch.
+	const appKitInstance = appKit as unknown as AppKitInstance;
+
+	const status$ = new BehaviorSubject<{
+		isPolkadotConnected: boolean;
+		isEthereumConnected: boolean;
+		isSolanaConnected: boolean;
+		opening: boolean;
+		error: KheopskitError | undefined;
+	}>({
+		isPolkadotConnected: false,
+		isEthereumConnected: false,
+		isSolanaConnected: false,
+		opening: false,
+		error: undefined,
+	});
+
+	const syncProviders = (providers: Partial<Record<string, unknown>>) => {
+		status$.next({
+			...status$.value,
+			isPolkadotConnected: !!providers.polkadot,
+			isEthereumConnected: !!providers.eip155,
+			isSolanaConnected: !!providers.solana,
+		});
+	};
+
+	const openModal = async () => {
+		status$.next({ ...status$.value, opening: true, error: undefined });
+		try {
+			await appKit.open();
+		} catch (cause) {
+			const error = toConnectError(
+				cause,
+				WALLET_CONNECT_WALLET_ID,
+				() => false,
+			);
+			status$.next({ ...status$.value, opening: false, error });
+			throw error;
+		}
+		status$.next({ ...status$.value, opening: false });
+	};
+
+	const enabledPlatforms = allPlatforms.filter((p) =>
+		(appKit.chainNamespaces as string[]).includes(namespaceOf[p]),
+	);
+
+	let prevConnected = {
+		polkadot: false,
+		ethereum: false,
+		solana: false,
+	};
+
+	const wallet$ = status$.pipe(
+		map((s) => ({
+			polkadot: s.isPolkadotConnected,
+			ethereum: s.isEthereumConnected,
+			solana: s.isSolanaConnected,
+			opening: s.opening,
+			error: s.error,
+		})),
+		distinctUntilChanged(
+			(a, b) =>
+				a.polkadot === b.polkadot &&
+				a.ethereum === b.ethereum &&
+				a.solana === b.solana &&
+				a.opening === b.opening &&
+				a.error === b.error,
+		),
+		tap((connected) => {
+			// Drop caches for namespaces that just went disconnected.
+			for (const platform of allPlatforms)
+				if (prevConnected[platform] && !connected[platform])
+					dropAccountsCache(platform);
+			prevConnected = connected;
+		}),
+		map(({ opening, error, ...connected }): WalletConnectWallet => {
+			const platforms = enabledPlatforms.filter((p) => connected[p]);
+			const isConnected = platforms.length > 0;
+			const walletInfo = appKit.getWalletInfo();
+			return {
+				id: WALLET_CONNECT_WALLET_ID,
+				type: "walletconnect",
+				platforms,
+				appKit: appKitInstance,
+				name: walletInfo?.name ?? "WalletConnect",
+				icon: walletInfo?.icon ?? WALLET_CONNECT_ICON,
+				// One shared session: connecting opens the modal; the wallet
+				// approves namespaces in that single pairing. Disconnect is
+				// session-wide; re-pair to change the approved set.
+				connect: async () => {
+					if (!isConnected) await openModal();
+				},
+				disconnect: async () => {
+					if (isConnected) await appKit.disconnect();
+				},
+				status: isConnected
+					? "connected"
+					: opening
+						? "connecting"
+						: "disconnected",
+				error,
+				isConnected,
+			};
+		}),
+	);
+
+	return new Observable<WalletConnectWallet>((subscriber) => {
+		// AppKit's subscribeProviders only reports later changes, so read the
+		// state that may have changed while nobody observed.
+		syncProviders({
+			polkadot: appKit.getProvider("polkadot"),
+			eip155: appKit.getProvider("eip155"),
+			solana: appKit.getProvider("solana"),
+		});
+		const unsubProviders = appKit.subscribeProviders(syncProviders);
+		const sub = wallet$.subscribe(subscriber);
+		return () => {
+			sub.unsubscribe();
+			unsubProviders();
+		};
+	});
+};
+
 /**
  * @remarks
  * The AppKit instance is a process-wide singleton (Reown AppKit itself cannot
  * be instantiated twice). The **first** call with a `walletConnect` config wins;
  * later calls with a *different* `walletConnect` config reuse that first
  * instance. Call {@link resetAppKitCache} before re-initialising if the
- * WalletConnect config must change.
+ * WalletConnect config must change. AppKit's provider subscription lives only
+ * while the connector is observed.
  *
  * One WalletConnect session is shared across every namespace, and a namespace
  * can only be established during the initial pairing — it can't be added to a
@@ -154,165 +287,44 @@ const getWalletConnectWallet$ = (
 	if (!cachedAppKit) {
 		// Dynamic import avoids loading @reown/appkit at module-eval time (SSR /
 		// edge runtimes like Cloudflare Workers).
-		cachedAppKit = from(loadAppKit()).pipe(
-			switchMap((createAppKit) => {
+		const connector$ = from(loadAppKit()).pipe(
+			map((createAppKit) =>
 				// @reown/appkit missing (optional peer dep) — degrade gracefully.
-				if (!createAppKit) return of<WalletConnectWallet | null>(null);
-				return new Observable<WalletConnectWallet | null>((subscriber) => {
-					const appKit = createAppKit({
-						projectId: walletConnect.projectId,
-						metadata: walletConnect.metadata,
-						networks: walletConnect.networks as never,
-						themeMode: walletConnect.themeMode,
-						themeVariables: walletConnect.themeVariables as never,
-						universalProviderConfigOverride: {
-							methods: {
-								polkadot: ["polkadot_signTransaction", "polkadot_signMessage"],
-								solana: [
-									"solana_signTransaction",
-									"solana_signMessage",
-									"solana_signAndSendTransaction",
-								],
-							},
-						},
-						allWallets: "HIDE",
-						debug,
-						allowUnsupportedChain: true,
-					});
-
-					// Exposed on the wallet as the (decoupled) AppKitInstance escape hatch.
-					const appKitInstance = appKit as unknown as AppKitInstance;
-
-					const status$ = new BehaviorSubject<{
-						isPolkadotConnected: boolean;
-						isEthereumConnected: boolean;
-						isSolanaConnected: boolean;
-						opening: boolean;
-						error: KheopskitError | undefined;
-					}>({
-						isPolkadotConnected: false,
-						isEthereumConnected: false,
-						isSolanaConnected: false,
-						opening: false,
-						error: undefined,
-					});
-
-					const unsubProviders = appKit.subscribeProviders((providers) => {
-						status$.next({
-							...status$.value,
-							isPolkadotConnected: !!providers.polkadot,
-							isEthereumConnected: !!providers.eip155,
-							isSolanaConnected: !!providers.solana,
-						});
-					});
-
-					const openModal = async () => {
-						status$.next({ ...status$.value, opening: true, error: undefined });
-						try {
-							await appKit.open();
-						} catch (cause) {
-							const error = toConnectError(
-								cause,
-								WALLET_CONNECT_WALLET_ID,
-								() => false,
-							);
-							status$.next({ ...status$.value, opening: false, error });
-							throw error;
-						}
-						status$.next({ ...status$.value, opening: false });
-					};
-
-					const namespaceOf: Record<WalletPlatform, string> = {
-						polkadot: "polkadot",
-						ethereum: "eip155",
-						solana: "solana",
-					};
-					const allPlatforms: WalletPlatform[] = [
-						"polkadot",
-						"ethereum",
-						"solana",
-					];
-					const enabledPlatforms = allPlatforms.filter((p) =>
-						(appKit.chainNamespaces as string[]).includes(namespaceOf[p]),
-					);
-
-					let prevConnected = {
-						polkadot: false,
-						ethereum: false,
-						solana: false,
-					};
-
-					const sub = status$
-						.pipe(
-							map((s) => ({
-								polkadot: s.isPolkadotConnected,
-								ethereum: s.isEthereumConnected,
-								solana: s.isSolanaConnected,
-								opening: s.opening,
-								error: s.error,
-							})),
-							distinctUntilChanged(
-								(a, b) =>
-									a.polkadot === b.polkadot &&
-									a.ethereum === b.ethereum &&
-									a.solana === b.solana &&
-									a.opening === b.opening &&
-									a.error === b.error,
-							),
-							tap((connected) => {
-								// Drop caches for namespaces that just went disconnected.
-								for (const platform of allPlatforms)
-									if (prevConnected[platform] && !connected[platform])
-										dropAccountsCache(platform);
-								prevConnected = connected;
-							}),
-							map(({ opening, error, ...connected }): WalletConnectWallet => {
-								const platforms = enabledPlatforms.filter((p) => connected[p]);
-								const isConnected = platforms.length > 0;
-								const walletInfo = appKit.getWalletInfo();
-								return {
-									id: WALLET_CONNECT_WALLET_ID,
-									type: "walletconnect",
-									platforms,
-									appKit: appKitInstance,
-									name: walletInfo?.name ?? "WalletConnect",
-									icon: walletInfo?.icon ?? WALLET_CONNECT_ICON,
-									// One shared session: connecting opens the modal; the wallet
-									// approves namespaces in that single pairing. Disconnect is
-									// session-wide; re-pair to change the approved set.
-									connect: async () => {
-										if (!isConnected) await openModal();
+				createAppKit
+					? createConnector$(
+							createAppKit({
+								projectId: walletConnect.projectId,
+								metadata: walletConnect.metadata,
+								networks: walletConnect.networks as never,
+								themeMode: walletConnect.themeMode,
+								themeVariables: walletConnect.themeVariables as never,
+								universalProviderConfigOverride: {
+									methods: {
+										polkadot: [
+											"polkadot_signTransaction",
+											"polkadot_signMessage",
+										],
+										solana: [
+											"solana_signTransaction",
+											"solana_signMessage",
+											"solana_signAndSendTransaction",
+										],
 									},
-									disconnect: async () => {
-										if (isConnected) await appKit.disconnect();
-									},
-									status: isConnected
-										? "connected"
-										: opening
-											? "connecting"
-											: "disconnected",
-									error,
-									isConnected,
-								};
+								},
+								allWallets: "HIDE",
+								debug,
+								allowUnsupportedChain: true,
 							}),
 						)
-						.subscribe(subscriber);
-
-					return () => {
-						sub.unsubscribe();
-						unsubProviders();
-					};
-				});
-			}),
-			// refCount:false keeps the AppKit instance alive for the process lifetime
-			// once created: createAppKit runs at most once (Reown AppKit cannot be
-			// instantiated twice). With refCount:true the producer would re-run
-			// createAppKit whenever every subscriber drained and a new one
-			// re-subscribed — e.g. a React unmount/remount or StrictMode's
-			// mount→unmount→remount — throwing on the duplicate Lit web components and
-			// WalletConnect modal singleton. The replayed connector value also keeps
-			// the wallet list stable across such teardown/rebuild cycles.
+					: null,
+			),
+			// refCount:false runs createAppKit at most once per process: a second
+			// instance throws on the duplicate Lit web components and modal.
 			shareReplay({ refCount: false, bufferSize: 1 }),
+		);
+		cachedAppKit = connector$.pipe(
+			switchMap((wallet$) => wallet$ ?? of(null)),
+			shareReplay({ refCount: true, bufferSize: 1 }),
 		);
 		setCachedAppKit(cachedAppKit, walletConnect.projectId);
 	}
