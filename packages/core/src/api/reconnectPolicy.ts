@@ -1,58 +1,63 @@
-/**
- * Bookkeeping for wallet auto-reconnect attempts.
- *
- * Tracks wallets currently reconnecting (to avoid duplicate concurrent
- * attempts) and those already reconnected (so we don't fight a later manual
- * disconnect). A failed attempt is retried when the wallet next re-emits
- * (e.g. a late-injecting extension that isn't ready on first sight), but only
- * up to `maxAttempts`: a wallet whose connect() keeps rejecting (a permission
- * permanently denied, a buggy provider) must not be re-attempted on every
- * wallets$ emission — the stream re-emits frequently (polkadot polling,
- * mipd/wallet-standard register events).
- */
+import type { BaseWallet, KheopskitConfig } from "./types";
+
+// `maxAttempts` caps retries: wallets$ re-emits on every discovery change, so a
+// connect that always rejects would otherwise be re-attempted on each one.
 export type ReconnectPolicyOptions = {
 	/** @default 3 */
 	maxAttempts?: number;
 };
 
+type ReconnectAttemptState =
+	| { kind: "pending" }
+	| { kind: "reconnected" }
+	| { kind: "settled" }
+	| { kind: "failed"; attempts: number };
+
 export const createReconnectPolicy = ({
 	maxAttempts = 3,
 }: ReconnectPolicyOptions = {}) => {
-	const reconnecting = new Set<string>();
-	const reconnected = new Set<string>();
-	const failedAttempts = new Map<string, number>();
+	const states = new Map<string, ReconnectAttemptState>();
 
-	const shouldAttempt = (walletId: string): boolean =>
-		!reconnecting.has(walletId) &&
-		!reconnected.has(walletId) &&
-		(failedAttempts.get(walletId) ?? 0) < maxAttempts;
+	const shouldAttempt = (walletId: string): boolean => {
+		const state = states.get(walletId);
+		if (!state) return true;
+		return state.kind === "failed" && state.attempts < maxAttempts;
+	};
 
-	/**
-	 * Runs `connect` under the policy. Resolves `false` without connecting when
-	 * an attempt is already in flight, the wallet already reconnected, or it
-	 * exhausted its attempts; resolves `true` on success. A rejection from
-	 * `connect` is recorded as a failed attempt and rethrown for the caller to
-	 * report.
-	 */
 	const attempt = async (
 		walletId: string,
 		connect: () => Promise<unknown>,
 	): Promise<boolean> => {
 		if (!shouldAttempt(walletId)) return false;
 
-		reconnecting.add(walletId);
+		const before = states.get(walletId);
+		states.set(walletId, { kind: "pending" });
+		const recordOutcome = (outcome: ReconnectAttemptState) => {
+			if (states.get(walletId)?.kind !== "settled")
+				states.set(walletId, outcome);
+		};
 		try {
 			await connect();
-			reconnected.add(walletId);
-			failedAttempts.delete(walletId);
+			recordOutcome({ kind: "reconnected" });
 			return true;
 		} catch (err) {
-			failedAttempts.set(walletId, (failedAttempts.get(walletId) ?? 0) + 1);
+			const attempts = before?.kind === "failed" ? before.attempts + 1 : 1;
+			recordOutcome({ kind: "failed", attempts });
 			throw err;
-		} finally {
-			reconnecting.delete(walletId);
 		}
 	};
 
-	return { shouldAttempt, attempt };
+	const settle = (walletId: string) => {
+		states.set(walletId, { kind: "settled" });
+	};
+
+	return { shouldAttempt, attempt, settle };
 };
+
+// Shared by the first-frame snapshot and the live attempt: both must evaluate
+// `autoReconnect` identically or the server and client markup diverge.
+export const reconnectAccepts = (
+	autoReconnect: KheopskitConfig["autoReconnect"],
+	wallet: BaseWallet,
+): boolean =>
+	typeof autoReconnect === "function" ? autoReconnect(wallet) : autoReconnect;

@@ -68,3 +68,36 @@ describe("createReconnectPolicy", () => {
 		expect(connect).toHaveBeenCalledTimes(2);
 	});
 });
+
+describe("createReconnectPolicy settlement", () => {
+	it("never attempts a settled wallet again, even with attempts left", async () => {
+		const policy = createReconnectPolicy({ maxAttempts: 3 });
+		const connect = vi.fn().mockRejectedValue(new Error("refused"));
+
+		await expect(policy.attempt("w1", connect)).rejects.toThrow("refused");
+		policy.settle("w1");
+
+		expect(policy.shouldAttempt("w1")).toBe(false);
+		await expect(policy.attempt("w1", connect)).resolves.toBe(false);
+		expect(connect).toHaveBeenCalledTimes(1);
+		expect(policy.shouldAttempt("w2")).toBe(true);
+	});
+
+	it("a settle during a pending attempt outlives the attempt's failure", async () => {
+		const policy = createReconnectPolicy({ maxAttempts: 3 });
+		let reject!: (error: Error) => void;
+		const attempt = policy.attempt(
+			"w1",
+			() =>
+				new Promise<void>((_, rej) => {
+					reject = rej;
+				}),
+		);
+
+		policy.settle("w1");
+		reject(new Error("locked"));
+		await expect(attempt).rejects.toThrow("locked");
+
+		expect(policy.shouldAttempt("w1")).toBe(false);
+	});
+});

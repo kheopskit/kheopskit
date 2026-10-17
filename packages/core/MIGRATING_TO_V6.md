@@ -361,7 +361,82 @@ and the fourth factory argument (the signature type) is ignored by
 
 ---
 
-## Test kit
+## 4. Wallet status and reconnect
+
+### New fields
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `wallet.status` | `"disconnected" \| "connecting" \| "connected"` | `connecting` while a `connect()` call or an auto-reconnect waits for the platform. On the WalletConnect connector, while `connect()` opens the modal. |
+| `wallet.error` | `KheopskitError \| undefined` | The last `connect()` or auto-reconnect that the platform refused (`USER_REJECTED`) or failed (`CONNECT_FAILED`). Cleared when the next attempt starts. An aborted attempt sets nothing. |
+| `wallet.isConnected` | `boolean` | Unchanged, now defined as `status === "connected"`. No emission shows `isConnected: true` with another status. |
+
+Test code that builds wallet objects by hand needs `status`.
+
+### `autoReconnect` takes a function
+
+```ts
+autoReconnect: boolean | ((wallet: BaseWallet) => boolean)
+```
+
+The option governs injected wallets. The function is called per remembered
+injected wallet, with its cached placeholder on the first frame and with its
+live object before each attempt. It must be
+synchronous and pure: the server and the client evaluate it for the same input
+and both must agree, or the markup diverges. It receives the `BaseWallet`
+fields only, so key on `wallet.id`.
+
+Every successful `connect()` is still recorded in the remembered list, whatever
+`autoReconnect` says.
+
+### Refused reconnects are forgotten
+
+A reconnect never prompts while the site stays authorised in the extension.
+When the authorisation was revoked the extension prompts once; a refusal
+forgets the wallet (it leaves the remembered list), so the next load stays
+silent. Any other failure sets `wallet.error`, keeps the wallet remembered and
+is retried up to three times when discovery changes. A manual `connect()` or
+`disconnect()` on a remembered wallet ends its automatic reconnect for the
+session, so a disconnect the user makes is never undone. Automatic reconnect
+also ends when the wallet disappears mid-attempt; the wallet stays remembered
+for the next load. Nothing is written to `console.error` any more;
+`debug: true` logs the failure with `console.debug`.
+
+### First frame after a reload
+
+A cached connected wallet hydrates as `status: "connecting"`, `isConnected:
+false`, with its cached accounts as placeholders, and stays so until its
+reconnect settles. A wallet the predicate rejects hydrates as `disconnected`
+without its cached accounts. With `autoReconnect: false` every cached injected
+wallet hydrates as `disconnected`. The WalletConnect row follows AppKit's own
+session restore, whatever `autoReconnect` says, and hydrates `connecting` while
+AppKit restores. Nothing flashes from connected to disconnected.
+
+### `getHydratedSnapshot` signature
+
+```ts
+// v5
+getHydratedSnapshot(store, config.platforms, options)
+// v6
+getHydratedSnapshot(store, config, options)
+```
+
+The second argument is the resolved config (`platforms` and `autoReconnect`),
+so the snapshot applies the same reconnect rule as the live stream.
+`KheopskitProvider` passes it to both its server and client snapshots.
+
+### What downstream apps delete
+
+- A hand-rolled status map (`intents`, `statusOf`) keyed by wallet id. Read
+  `wallet.status` and `wallet.error`.
+- A reconnect loop over the remembered list (`reconnectRemembered$`) and its
+  forget-on-refusal branch. Set `autoReconnect: true`.
+- A "reconnect only this wallet" rule implemented by reading storage before
+  calling `connect()`. Pass it as the `autoReconnect` function.
+
+---
+
+## 5. Test kit
 
 v6 adds `@kheopskit/core/testing` (see the
 [core README](README.md#testing)). It replaces the `injectedWeb3` fakes that

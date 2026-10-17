@@ -72,6 +72,7 @@ const namesOf = (state: KheopskitState, walletId: string) =>
 const frameOf = (state: KheopskitState) => ({
 	a: namesOf(state, "polkadot:a"),
 	b: namesOf(state, "polkadot:b"),
+	bStatus: state.wallets.find((w) => w.id === "polkadot:b")?.status,
 });
 
 const start = () => {
@@ -140,9 +141,10 @@ describe("a Polkadot account change after connect survives another wallet", () =
 			await tick(1200);
 
 			expect(h.emissions.slice(mark - 1).map(frameOf)).toEqual([
-				{ a: "Alice", b: "" },
-				{ a: "Alice", b: "Charlie" },
-				{ a: "Alice", b: "" },
+				{ a: "Alice", b: "", bStatus: "disconnected" },
+				{ a: "Alice", b: "", bStatus: "connecting" },
+				{ a: "Alice", b: "Charlie", bStatus: "connected" },
+				{ a: "Alice", b: "", bStatus: "disconnected" },
 			]);
 			expect(cachedNamesOf(h.store)).toEqual(["Alice"]);
 			h.subscription.unsubscribe();
@@ -165,8 +167,9 @@ describe("a Polkadot account change after connect survives another wallet", () =
 			await tick(20);
 
 			expect(h.emissions.slice(mark - 1).map(frameOf)).toEqual([
-				{ a: "Alice,Bob,Dave", b: "" },
-				{ a: "Alice,Bob,Dave", b: "Charlie" },
+				{ a: "Alice,Bob,Dave", b: "", bStatus: "disconnected" },
+				{ a: "Alice,Bob,Dave", b: "", bStatus: "connecting" },
+				{ a: "Alice,Bob,Dave", b: "Charlie", bStatus: "connected" },
 			]);
 			h.subscription.unsubscribe();
 		},

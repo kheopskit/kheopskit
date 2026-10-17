@@ -131,7 +131,15 @@ export const getPolkadotWallets$ = (
 						window.location.hostname,
 				),
 			isUserRejection: isRefusalMessage,
-			buildWallet: ({ walletId, handle, isConnected, connect, disconnect }) => {
+			buildWallet: ({
+				walletId,
+				handle,
+				status,
+				error,
+				isConnected,
+				connect,
+				disconnect,
+			}) => {
 				const { identifier } = parseWalletId(walletId);
 				const extInfo = POLKADOT_EXTENSIONS[identifier];
 
@@ -143,6 +151,8 @@ export const getPolkadotWallets$ = (
 					icon: extInfo?.icon ?? "",
 					sourceId: identifier,
 					extension: handle,
+					status,
+					error,
 					isConnected,
 					connect,
 					disconnect,

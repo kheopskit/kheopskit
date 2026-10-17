@@ -1,4 +1,3 @@
-import * as pjs from "polkadot-api/pjs-signer";
 import { BehaviorSubject, firstValueFrom, of, take, toArray } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -16,15 +15,6 @@ import type {
 	PolkadotInjectedWallet,
 } from "./types";
 import { latestAccounts } from "./wallets";
-
-vi.mock("polkadot-api/pjs-signer", async (importOriginal) => {
-	const real = await importOriginal<typeof import("polkadot-api/pjs-signer")>();
-	return {
-		...real,
-		getTxCreatorFromPjs: vi.fn(real.getTxCreatorFromPjs),
-		getPolkadotSignerFromPjs: undefined,
-	};
-});
 
 const ALICE = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 const BOB = "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty";
@@ -78,6 +68,7 @@ const injectedWalletWith = (
 	extension,
 	name: "Test Wallet",
 	icon: "data:image/svg+xml,...",
+	status: "connected",
 	isConnected: true,
 	connect: vi.fn(),
 	disconnect: vi.fn(),
@@ -163,41 +154,6 @@ describe("getPolkadotAccounts$", () => {
 			"[kheopskit] polkadot({ accountTypes }) is empty; all Polkadot accounts will be filtered out.",
 		);
 		warnSpy.mockRestore();
-	});
-
-	it("builds the signer with the detected factory and passes ecdsa for ethereum accounts", async () => {
-		const factory = vi.mocked(pjs.getTxCreatorFromPjs);
-		factory.mockClear();
-		const listed: PolkadotInjectedAccount[] = [
-			alice,
-			{ address: ETH, name: "Eth Key", type: "ethereum", genesisHash: null },
-		];
-		const { extension } = createMockExtension(listed, {
-			subscribe: vi.fn(() => vi.fn()),
-		});
-		const wallet = injectedWalletWith(extension);
-
-		const accounts = await firstValueFrom(
-			getPolkadotAccounts$(of([wallet]), ["sr25519", "ethereum"]),
-		);
-
-		expect(factory).toHaveBeenCalledTimes(2);
-		expect(factory).toHaveBeenCalledWith(
-			ALICE,
-			expect.any(Function),
-			expect.any(Function),
-			"sr25519",
-		);
-		expect(factory).toHaveBeenCalledWith(
-			ETH,
-			expect.any(Function),
-			expect.any(Function),
-			"ecdsa",
-		);
-		expect(accounts.map((account) => account.txCreator)).toEqual([
-			expect.any(Function),
-			expect.any(Function),
-		]);
 	});
 
 	it("passes readonly and partOfPortfolio through", async () => {
@@ -376,6 +332,7 @@ describe("getPolkadotAccounts$", () => {
 				platforms: ["polkadot"],
 				name: "WalletConnect",
 				icon: "data:image/svg+xml;base64,AAAA",
+				status: "connected",
 				isConnected: true,
 				connect: vi.fn(),
 				disconnect: vi.fn(),

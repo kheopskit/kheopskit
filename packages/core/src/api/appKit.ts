@@ -11,6 +11,7 @@ import {
 } from "rxjs";
 import { clearCachedObservablesByPrefix } from "../utils/getCachedObservable";
 import { WALLET_CONNECT_WALLET_ID } from "../utils/WalletId";
+import { type KheopskitError, toConnectError } from "./errors";
 import type {
 	AppKitInstance,
 	KheopskitConfig,
@@ -175,19 +176,44 @@ export const getWalletConnectWallet$ = (
 					// Exposed on the wallet as the (decoupled) AppKitInstance escape hatch.
 					const appKitInstance = appKit as unknown as AppKitInstance;
 
-					const status$ = new BehaviorSubject({
+					const status$ = new BehaviorSubject<{
+						isPolkadotConnected: boolean;
+						isEthereumConnected: boolean;
+						isSolanaConnected: boolean;
+						opening: boolean;
+						error: KheopskitError | undefined;
+					}>({
 						isPolkadotConnected: false,
 						isEthereumConnected: false,
 						isSolanaConnected: false,
+						opening: false,
+						error: undefined,
 					});
 
 					const unsubProviders = appKit.subscribeProviders((providers) => {
 						status$.next({
+							...status$.value,
 							isPolkadotConnected: !!providers.polkadot,
 							isEthereumConnected: !!providers.eip155,
 							isSolanaConnected: !!providers.solana,
 						});
 					});
+
+					const openModal = async () => {
+						status$.next({ ...status$.value, opening: true, error: undefined });
+						try {
+							await appKit.open();
+						} catch (cause) {
+							const error = toConnectError(
+								cause,
+								WALLET_CONNECT_WALLET_ID,
+								() => false,
+							);
+							status$.next({ ...status$.value, opening: false, error });
+							throw error;
+						}
+						status$.next({ ...status$.value, opening: false });
+					};
 
 					const namespaceOf: Record<WalletPlatform, string> = {
 						polkadot: "polkadot",
@@ -215,12 +241,16 @@ export const getWalletConnectWallet$ = (
 								polkadot: s.isPolkadotConnected,
 								ethereum: s.isEthereumConnected,
 								solana: s.isSolanaConnected,
+								opening: s.opening,
+								error: s.error,
 							})),
 							distinctUntilChanged(
 								(a, b) =>
 									a.polkadot === b.polkadot &&
 									a.ethereum === b.ethereum &&
-									a.solana === b.solana,
+									a.solana === b.solana &&
+									a.opening === b.opening &&
+									a.error === b.error,
 							),
 							tap((connected) => {
 								// Drop caches for namespaces that just went disconnected.
@@ -229,7 +259,7 @@ export const getWalletConnectWallet$ = (
 										dropAccountsCache(platform);
 								prevConnected = connected;
 							}),
-							map((connected): WalletConnectWallet => {
+							map(({ opening, error, ...connected }): WalletConnectWallet => {
 								const platforms = enabledPlatforms.filter((p) => connected[p]);
 								const isConnected = platforms.length > 0;
 								const walletInfo = appKit.getWalletInfo();
@@ -244,11 +274,17 @@ export const getWalletConnectWallet$ = (
 									// approves namespaces in that single pairing. Disconnect is
 									// session-wide; re-pair to change the approved set.
 									connect: async () => {
-										if (!isConnected) await appKit.open();
+										if (!isConnected) await openModal();
 									},
 									disconnect: async () => {
 										if (isConnected) await appKit.disconnect();
 									},
+									status: isConnected
+										? "connected"
+										: opening
+											? "connecting"
+											: "disconnected",
+									error,
 									isConnected,
 								};
 							}),
