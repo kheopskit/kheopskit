@@ -36,15 +36,18 @@ export const snap = async (page: Page, testInfo: TestInfo, name: string) => {
 
 export const readPersistedState = (page: Page) =>
 	page.evaluate(() => {
-		const cookie = document.cookie
+		const cookieEntry = document.cookie
 			.split("; ")
 			.find((c) => c.startsWith("kheopskit="));
-		return {
-			localStorage: localStorage.getItem("kheopskit"),
-			cookie: cookie
-				? decodeURIComponent(cookie.slice("kheopskit=".length))
-				: null,
-		};
+		const cookie = cookieEntry
+			? decodeURIComponent(cookieEntry.slice("kheopskit=".length))
+			: null;
+		const stored = localStorage.getItem("kheopskit");
+		const remembered: string[] | null =
+			(stored
+				? JSON.parse(stored).remembered
+				: cookie && JSON.parse(cookie).r) ?? null;
+		return { localStorage: stored, cookie, remembered };
 	});
 
 export const saveJson = (testInfo: TestInfo, name: string, value: unknown) =>
