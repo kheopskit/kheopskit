@@ -422,9 +422,9 @@ export type KheopskitConfig<
  * may contain placeholders restored from the cache, flagged
  * `isPlaceholder: true`. Each platform type is a union on that flag: a
  * placeholder lacks the SDK handles (`account.txCreator` or `polkadotSigner`
- * on Polkadot, `account.client` on Ethereum, `account.signer` / `getSigner` /
- * `chains` on Solana, `wallet.extension` / `provider` / `wallet` and
- * `sourceId`), so the compiler rejects reading them until you narrow:
+ * on Polkadot, `account.client` on Ethereum, `account.signer` / `getSigner` on
+ * Solana, `wallet.extension` / `provider` / `wallet` and `sourceId`), so the
+ * compiler rejects reading them until you narrow:
  *
  * ```ts
  * if (account.isPlaceholder) return;
@@ -437,7 +437,8 @@ export type KheopskitConfig<
  *
  * The plain, serializable platform data that is persisted in the cache IS
  * restored on the placeholders (Ethereum `chainId`, Polkadot key `type`), so it
- * renders immediately on reload without flashing.
+ * renders immediately on reload without flashing. Solana `chains` is not
+ * cached: a placeholder account's is empty.
  */
 export type KheopskitState<
 	P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],

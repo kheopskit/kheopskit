@@ -46,9 +46,8 @@ export const hydrateWallet = (
 	};
 	const disconnect = async () => {};
 
-	// The platform-less WalletConnect connector. `appKit`/`platforms` are SDK
-	// state absent until the live connector loads (cast like other placeholder
-	// SDK handles); icon is filled from the localStorage cache by the caller.
+	// `WalletConnectWallet` still types `appKit` as present on a placeholder;
+	// the cast hides its absence until that handle joins the union.
 	if (cached.type === "walletconnect") {
 		return {
 			id: cached.id,
@@ -105,6 +104,7 @@ export const hydrateAccount = (cached: CachedAccount): BaseWalletAccount => ({
 	...(cached.platform === "polkadot" && {
 		type: cached.polkadotAccountType,
 	}),
+	...(cached.platform === "solana" && { chains: [] }),
 });
 
 /**

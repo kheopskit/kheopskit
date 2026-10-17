@@ -156,6 +156,7 @@ describe("placeholders", () => {
 			["solana", true],
 		]);
 		expect(accounts.map(sdkFieldsOf)).toEqual([[], [], []]);
+		expect(accounts[2]).toMatchObject({ chains: [] });
 	});
 
 	it("a placeholder's connect rejects with WALLET_PENDING and its disconnect resolves", async () => {
