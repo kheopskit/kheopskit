@@ -295,8 +295,11 @@ const cacheWallet = (
 const subscribeEngineDuringHydration = (
 	sources$: BehaviorSubject<EngineSource[]>,
 	cachedIsConnected: boolean,
+	overrides: Partial<
+		InjectedWalletsAdapter<EngineSource, BaseWallet, string>
+	> = {},
 ) => {
-	const platform = enginePlatform({ sources$ });
+	const platform = enginePlatform({ sources$, ...overrides });
 	const store = createKheopskitStore();
 	cacheWallet(store, cachedIsConnected, { id: engineWalletId, name: "Engine" });
 	const emissions: KheopskitState[] = [];
@@ -800,20 +803,22 @@ describe("getKheopskit$ connect semantics", () => {
 		sub.unsubscribe();
 	});
 
-	it("a wallet that leaves the list after the platform granted its connect rejects that connect ABORTED", async () => {
+	it("a wallet that leaves the list while its connect is pending during hydration rejects that connect ABORTED and is gone once hydration ends", async () => {
 		const sources$ = new BehaviorSubject<EngineSource[]>([{ name: "engine" }]);
-		const { emissions, sub } = subscribeEngineDuringHydration(sources$, false);
+		const grant = createDeferred<string>();
+		const { emissions, sub } = subscribeEngineDuringHydration(sources$, false, {
+			connect: () => grant.promise,
+		});
 		await settleMicrotasks();
 		expect(emissions.at(-1)?.isHydrating).toBe(true);
 
 		const connecting = walletIn(emissions.at(-1), engineWalletId).connect();
 		expect(await settlementOf(connecting)).toBe("pending");
-		expect(rememberedWalletIds()).toEqual([engineWalletId]);
+		expect(walletIn(emissions.at(-1), engineWalletId).status).toBe(
+			"connecting",
+		);
 
 		sources$.next([]);
-		await vi.advanceTimersByTimeAsync(500);
-		expect(emissions.at(-1)?.isHydrating).toBe(false);
-		expect(emissions.at(-1)?.wallets).toEqual([]);
 		expect(await settlementOf(connecting)).toBe("rejected");
 		await expect(connecting).rejects.toMatchObject({
 			code: "ABORTED",
@@ -821,25 +826,35 @@ describe("getKheopskit$ connect semantics", () => {
 			message: `[kheopskit] connect of wallet ${engineWalletId} was aborted`,
 		});
 
+		await vi.advanceTimersByTimeAsync(500);
+		expect(emissions.at(-1)?.isHydrating).toBe(false);
+		expect(emissions.at(-1)?.wallets).toEqual([]);
+
+		grant.resolve("handle");
+		await settleMicrotasks();
+		expect(rememberedWalletIds()).toEqual([]);
+
 		sub.unsubscribe();
 	});
 
-	it("a disconnect that waits for the state resolves when the wallet leaves the list", async () => {
+	it("a disconnect on a cached connected wallet the reconnect rule rejects resolves at once, and the wallet leaves the list with its source", async () => {
 		const sources$ = new BehaviorSubject<EngineSource[]>([{ name: "engine" }]);
 		const { emissions, sub } = subscribeEngineDuringHydration(sources$, true);
 		await settleMicrotasks();
-		expect(walletIn(emissions.at(-1), engineWalletId).isConnected).toBe(true);
+		expect([
+			walletIn(emissions.at(-1), engineWalletId).status,
+			walletIn(emissions.at(-1), engineWalletId).isConnected,
+		]).toEqual(["disconnected", false]);
 
 		const disconnecting = walletIn(
 			emissions.at(-1),
 			engineWalletId,
 		).disconnect();
-		expect(await settlementOf(disconnecting)).toBe("pending");
+		expect(await settlementOf(disconnecting)).toBe("resolved");
 
 		sources$.next([]);
 		await vi.advanceTimersByTimeAsync(3000);
 		expect(emissions.at(-1)?.wallets).toEqual([]);
-		expect(await settlementOf(disconnecting)).toBe("resolved");
 
 		sub.unsubscribe();
 	});
