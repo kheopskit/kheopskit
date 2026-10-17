@@ -9,7 +9,7 @@ import {
 } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getWalletAccountId } from "../utils/WalletAccountId";
-import type { WalletId } from "../utils/WalletId";
+import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../utils/WalletId";
 import { getAccounts$ } from "./accounts";
 import { getKheopskit$ } from "./kheopskit";
 import { polkadot } from "./polkadot/plugin";
@@ -594,6 +594,39 @@ describe("getKheopskit$ placeholders", () => {
 				false,
 			]);
 		});
+
+		it("live accounts identical to their placeholders emit before hydration ends", async () => {
+			vi.mocked(connectInjectedExtension).mockImplementation(
+				async () =>
+					({
+						...extension,
+						getAccounts: () => [],
+						subscribe: (
+							callback: (
+								accounts: ReturnType<typeof extension.getAccounts>,
+							) => void,
+						) => {
+							const timeout = setTimeout(
+								() => callback(extension.getAccounts()),
+								200,
+							);
+							return () => clearTimeout(timeout);
+						},
+					}) as never,
+			);
+			const states = record(seedStore(true));
+			await vi.advanceTimersByTimeAsync(4000);
+
+			const firstLive = states.findIndex((s) =>
+				s.accounts.some((a) => !a.isPlaceholder),
+			);
+			expect(firstLive).toBeGreaterThan(0);
+			expect(walletIn(states[firstLive - 1])?.status).toBe("connected");
+			expect(
+				states[firstLive]?.accounts.map((a) => [a.isPlaceholder, a.address]),
+			).toEqual(addresses.map((address) => [false, address]));
+			expect(states[firstLive]?.isHydrating).toBe(true);
+		});
 	});
 
 	describe("placeholder connect defers to the live wallet", () => {
@@ -640,12 +673,19 @@ describe("getKheopskit$ placeholders", () => {
 			const placeholder = await placeholderOf(states);
 
 			const controller = new AbortController();
-			const result = placeholder
-				.connect({ signal: controller.signal })
-				.catch((error: unknown) => error);
+			let outcome: unknown = "pending";
+			placeholder.connect({ signal: controller.signal }).then(
+				() => {
+					outcome = "resolved";
+				},
+				(error: unknown) => {
+					outcome = error;
+				},
+			);
 			await vi.advanceTimersByTimeAsync(100);
 			controller.abort();
-			expect(await result).toMatchObject({ code: "ABORTED", walletId });
+			await vi.advanceTimersByTimeAsync(0);
+			expect(outcome).toMatchObject({ code: "ABORTED", walletId });
 
 			injected.names = ["talisman"];
 			await fireLoad();
@@ -669,6 +709,61 @@ describe("getKheopskit$ placeholders", () => {
 			expect(await result).toMatchObject({ code: "WALLET_PENDING", walletId });
 			expect(rejectedIn?.isHydrating).toBe(false);
 			expect(connectInjectedExtension).not.toHaveBeenCalled();
+		});
+
+		it("rejects ABORTED without connecting when the consumer unsubscribes as the wallet goes live", async () => {
+			const store = createKheopskitStore();
+			store.setCachedState(
+				[
+					{
+						id: WALLET_CONNECT_WALLET_ID,
+						type: "walletconnect",
+						name: "WalletConnect",
+						isConnected: false,
+					},
+				],
+				[],
+			);
+			const isLive = (state: KheopskitState) =>
+				state.wallets.some(
+					(w) => w.id === WALLET_CONNECT_WALLET_ID && !w.isPlaceholder,
+				);
+			const states: KheopskitState[] = [];
+			subscription = getKheopskit$(
+				{ platforms: [polkadot()], hydrationGracePeriod: 500 },
+				{ store },
+			).subscribe((state) => {
+				states.push(state);
+				if (isLive(state)) subscription?.unsubscribe();
+			});
+			await vi.advanceTimersByTimeAsync(0);
+			const placeholder = states[0]?.wallets.find(
+				(w) => w.id === WALLET_CONNECT_WALLET_ID,
+			);
+			expect(placeholder?.isPlaceholder).toBe(true);
+
+			const connect = vi.fn(async () => {});
+			const result = placeholder?.connect().catch((error: unknown) => error);
+			walletConnect.connector$.next({
+				id: WALLET_CONNECT_WALLET_ID,
+				type: "walletconnect",
+				platforms: [],
+				appKit: {} as WalletConnectWallet["appKit"],
+				name: "WalletConnect",
+				icon: "",
+				status: "disconnected",
+				isConnected: false,
+				connect,
+				disconnect: async () => {},
+			});
+			await vi.advanceTimersByTimeAsync(200);
+
+			expect(states.some(isLive)).toBe(true);
+			expect(await result).toMatchObject({
+				code: "ABORTED",
+				walletId: WALLET_CONNECT_WALLET_ID,
+			});
+			expect(connect).not.toHaveBeenCalled();
 		});
 	});
 });
