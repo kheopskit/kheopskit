@@ -1,6 +1,12 @@
 import * as pjs from "polkadot-api/pjs-signer";
 import { BehaviorSubject, firstValueFrom, of, take, toArray } from "rxjs";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+	createFakePolkadotExtension,
+	FAKE_SIGNATURE,
+	type FakePolkadotAccount,
+	type FakePolkadotExtension,
+} from "../../testing/fakePolkadotExtension";
 import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../../utils/WalletId";
 import type { WalletConnectWallet } from "../types";
 import { getPolkadotAccounts$ } from "./accounts";
@@ -59,15 +65,15 @@ const createMockExtension = (
 	return { extension, unsubscribe };
 };
 
-const createMockInjectedWallet = (
-	accounts: PolkadotInjectedAccount[],
+const injectedWalletWith = (
+	extension: PolkadotInjected,
 	overrides: Partial<PolkadotInjectedWallet> = {},
 ): PolkadotInjectedWallet => ({
 	id: "polkadot:test-wallet" as WalletId,
 	platform: "polkadot",
 	type: "injected",
 	sourceId: "test-wallet",
-	extension: createMockExtension(accounts).extension,
+	extension,
 	name: "Test Wallet",
 	icon: "data:image/svg+xml,...",
 	isConnected: true,
@@ -76,11 +82,27 @@ const createMockInjectedWallet = (
 	...overrides,
 });
 
+const fakes: FakePolkadotExtension[] = [];
+
+afterEach(() => {
+	for (const fake of fakes.splice(0)) fake.uninstall();
+});
+
+const fakeInjectedWallet = async (accounts: FakePolkadotAccount[]) => {
+	const fake = createFakePolkadotExtension({ name: "test-wallet", accounts });
+	fakes.push(fake);
+	const extension = await window.injectedWeb3?.[fake.name]?.enable("test");
+	return {
+		fake,
+		wallet: injectedWalletWith(extension as unknown as PolkadotInjected),
+	};
+};
+
 const nextMacrotask = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("getPolkadotAccounts$", () => {
 	it("keeps only configured account types", async () => {
-		const wallet = createMockInjectedWallet([
+		const { wallet } = await fakeInjectedWallet([
 			alice,
 			{ address: ETH, name: "Eth Key", type: "ethereum", genesisHash: null },
 		]);
@@ -95,7 +117,7 @@ describe("getPolkadotAccounts$", () => {
 	});
 
 	it("includes ethereum polkadot accounts when explicitly configured", async () => {
-		const wallet = createMockInjectedWallet([
+		const { wallet } = await fakeInjectedWallet([
 			{
 				address: ETH,
 				name: "Ethereum Key",
@@ -113,20 +135,12 @@ describe("getPolkadotAccounts$", () => {
 	});
 
 	it("re-emits when the extension renames an account", async () => {
-		let pushAccounts: (value: PolkadotInjectedAccount[]) => void = () => {};
-		const { extension } = createMockExtension([alice], {
-			subscribe: vi.fn((cb: (value: PolkadotInjectedAccount[]) => void) => {
-				cb([alice]);
-				pushAccounts = cb;
-				return vi.fn();
-			}),
-		});
-		const wallet = createMockInjectedWallet([alice], { extension });
+		const { fake, wallet } = await fakeInjectedWallet([alice]);
 
 		const names = firstValueFrom(
 			getPolkadotAccounts$(of([wallet]), ["sr25519"]).pipe(take(2), toArray()),
 		);
-		pushAccounts([{ ...alice, name: "Alice (renamed)" }]);
+		fake.setAccounts([{ ...alice, name: "Alice (renamed)" }]);
 
 		expect((await names).map((accounts) => accounts[0]?.name)).toEqual([
 			"Alice",
@@ -136,7 +150,7 @@ describe("getPolkadotAccounts$", () => {
 
 	it("returns no accounts and warns that polkadot({ accountTypes }) is empty", async () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-		const wallet = createMockInjectedWallet([alice]);
+		const { wallet } = await fakeInjectedWallet([alice]);
 
 		const accounts = await firstValueFrom(
 			getPolkadotAccounts$(of([wallet]), []),
@@ -152,7 +166,7 @@ describe("getPolkadotAccounts$", () => {
 	it("builds the signer with the detected factory and passes ecdsa for ethereum accounts", async () => {
 		const factory = vi.mocked(pjs.getTxCreatorFromPjs);
 		factory.mockClear();
-		const wallet = createMockInjectedWallet([
+		const { wallet } = await fakeInjectedWallet([
 			alice,
 			{ address: ETH, name: "Eth Key", type: "ethereum", genesisHash: null },
 		]);
@@ -181,7 +195,7 @@ describe("getPolkadotAccounts$", () => {
 	});
 
 	it("passes readonly and partOfPortfolio through", async () => {
-		const wallet = createMockInjectedWallet([
+		const { wallet } = await fakeInjectedWallet([
 			{ ...alice, readonly: true, partOfPortfolio: false },
 		]);
 
@@ -195,9 +209,7 @@ describe("getPolkadotAccounts$", () => {
 
 	it("unsubscribes the extension's account subscription on teardown and on disconnect", async () => {
 		const tornDown = createMockExtension([alice]);
-		const wallet = createMockInjectedWallet([alice], {
-			extension: tornDown.extension,
-		});
+		const wallet = injectedWalletWith(tornDown.extension);
 		const subscription = getPolkadotAccounts$(of([wallet]), [
 			"sr25519",
 		]).subscribe();
@@ -207,8 +219,7 @@ describe("getPolkadotAccounts$", () => {
 
 		const disconnected = createMockExtension([alice]);
 		const wallets$ = new BehaviorSubject<PolkadotInjectedWallet[]>([]);
-		const connected = createMockInjectedWallet([alice], {
-			extension: disconnected.extension,
+		const connected = injectedWalletWith(disconnected.extension, {
 			disconnect: vi.fn(async () => {
 				wallets$.next([
 					{ ...connected, isConnected: false, extension: undefined },
@@ -228,7 +239,7 @@ describe("getPolkadotAccounts$", () => {
 		const { extension } = createMockExtension([alice], {
 			subscribe: vi.fn(() => vi.fn()),
 		});
-		const wallet = createMockInjectedWallet([alice], { extension });
+		const wallet = injectedWalletWith(extension);
 		const emissions: string[][] = [];
 
 		const subscription = getPolkadotAccounts$(of([wallet]), [
@@ -243,7 +254,7 @@ describe("getPolkadotAccounts$", () => {
 	});
 
 	it("skips an account it cannot build and emits the rest from subscribe", async () => {
-		const wallet = createMockInjectedWallet([alice, broken]);
+		const { wallet } = await fakeInjectedWallet([alice, broken]);
 		const emissions: string[][] = [];
 
 		const subscription = getPolkadotAccounts$(of([wallet]), [
@@ -261,7 +272,7 @@ describe("getPolkadotAccounts$", () => {
 		const { extension } = createMockExtension([alice, broken], {
 			subscribe: vi.fn(() => vi.fn()),
 		});
-		const wallet = createMockInjectedWallet([alice, broken], { extension });
+		const wallet = injectedWalletWith(extension);
 		const emissions: string[][] = [];
 
 		const subscription = getPolkadotAccounts$(of([wallet]), [
@@ -279,7 +290,7 @@ describe("getPolkadotAccounts$", () => {
 		const { extension } = createMockExtension([alice], {
 			get: vi.fn(async () => [{ ...alice, address: BOB }]),
 		});
-		const wallet = createMockInjectedWallet([alice], { extension });
+		const wallet = injectedWalletWith(extension);
 		const emissions: string[][] = [];
 
 		const subscription = getPolkadotAccounts$(of([wallet]), [
@@ -294,29 +305,22 @@ describe("getPolkadotAccounts$", () => {
 	});
 
 	it("signRaw sends text as text and bytes as hex with the given type and returns the signature", async () => {
-		const { extension } = createMockExtension([alice]);
-		const wallet = createMockInjectedWallet([alice], { extension });
+		const { fake, wallet } = await fakeInjectedWallet([alice]);
 
 		const [account] = await firstValueFrom(
 			getPolkadotAccounts$(of([wallet]), ["sr25519"]),
 		);
 		if (!account) throw new Error("no account");
 
-		await expect(account.signRaw("hello")).resolves.toBe("0xabcd");
-		expect(extension.signer.signRaw).toHaveBeenLastCalledWith({
-			address: ALICE,
-			data: "hello",
-			type: "bytes",
-		});
-
+		await expect(account.signRaw("hello")).resolves.toBe(FAKE_SIGNATURE);
 		await expect(
 			account.signRaw(new Uint8Array([1, 255]), { type: "payload" }),
-		).resolves.toBe("0xabcd");
-		expect(extension.signer.signRaw).toHaveBeenLastCalledWith({
-			address: ALICE,
-			data: "0x01ff",
-			type: "payload",
-		});
+		).resolves.toBe(FAKE_SIGNATURE);
+
+		expect(fake.signRawCalls()).toEqual([
+			{ address: ALICE, data: "hello", type: "bytes" },
+			{ address: ALICE, data: "0x01ff", type: "payload" },
+		]);
 	});
 
 	describe("appKit (WalletConnect) wallets", () => {
@@ -519,7 +523,7 @@ describe("getPolkadotAccounts$", () => {
 			const { wallet } = createMockAppKitWallet([
 				`polkadot:${GENESIS}:${ALICE}`,
 			]);
-			const injected = createMockInjectedWallet([alice]);
+			const { wallet: injected } = await fakeInjectedWallet([alice]);
 
 			const accounts = await firstValueFrom(
 				getV2PolkadotAccounts$(of([injected, wallet]), ["sr25519"]),

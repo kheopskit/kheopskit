@@ -1,22 +1,26 @@
 import { firstValueFrom } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	createFakePolkadotExtension,
+	type FakePolkadotExtension,
+} from "../../testing/fakePolkadotExtension";
+import { createMemoryStorage } from "../../testing/memoryStorage";
 import { resolveConfig } from "../config";
 import { createKheopskitStore } from "../store";
 import type { KheopskitConfig, WalletConnectConfig } from "../types";
 import { polkadot } from "./plugin";
 
-const { getInjectedExtensions, injected } = vi.hoisted(() => {
-	const injected = { names: ["test-extension"] };
-	return {
-		getInjectedExtensions: vi.fn(() => injected.names),
-		injected,
-	};
-});
+const fakes: FakePolkadotExtension[] = [];
 
-vi.mock("polkadot-api/pjs-signer", async (importOriginal) => ({
-	...(await importOriginal<typeof import("polkadot-api/pjs-signer")>()),
-	getInjectedExtensions,
-}));
+const install = (...args: Parameters<typeof createFakePolkadotExtension>) => {
+	const fake = createFakePolkadotExtension(...args);
+	fakes.push(fake);
+	return fake;
+};
+
+afterEach(() => {
+	for (const fake of fakes.splice(0)) fake.uninstall();
+});
 
 const walletConnect = {
 	projectId: "test",
@@ -32,7 +36,7 @@ const walletConnect = {
 const connectWith = async (config: Partial<KheopskitConfig>) => {
 	const plugin = polkadot();
 	const wallets$ = plugin.getWallets$({
-		store: createKheopskitStore(),
+		store: createKheopskitStore({ storage: createMemoryStorage() }),
 		config: resolveConfig({ ...config, platforms: [plugin] }),
 	});
 	const [wallet] = await firstValueFrom(wallets$);
@@ -40,37 +44,28 @@ const connectWith = async (config: Partial<KheopskitConfig>) => {
 };
 
 describe("polkadot wallet connect", () => {
-	const enable = vi.fn();
+	let fake: FakePolkadotExtension;
 
 	beforeEach(() => {
-		localStorage.clear();
-		enable.mockReset().mockResolvedValue({
-			accounts: { get: async () => [], subscribe: () => () => {} },
-			signer: { signRaw: vi.fn(), signPayload: vi.fn() },
-		});
-		window.injectedWeb3 = { "test-extension": { enable } };
-	});
-
-	afterEach(() => {
-		delete window.injectedWeb3;
+		fake = install({ name: "test-extension" });
 	});
 
 	it("sends appName as the dapp name", async () => {
 		await connectWith({ appName: "My Dapp", walletConnect });
 
-		expect(enable).toHaveBeenCalledWith("My Dapp");
+		expect(fake.enableCalls()).toEqual(["My Dapp"]);
 	});
 
 	it("falls back to the WalletConnect metadata name", async () => {
 		await connectWith({ walletConnect });
 
-		expect(enable).toHaveBeenCalledWith("WalletConnect Dapp");
+		expect(fake.enableCalls()).toEqual(["WalletConnect Dapp"]);
 	});
 
 	it("falls back to the page hostname", async () => {
 		await connectWith({ appName: "" });
 
-		expect(enable).toHaveBeenCalledWith("localhost");
+		expect(fake.enableCalls()).toEqual(["localhost"]);
 	});
 });
 
@@ -79,40 +74,20 @@ describe("polkadot wallet enable() result", () => {
 		address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
 		name: "Alice",
 		type: "sr25519" as const,
-		genesisHash: null,
 	};
-	let pushAccounts: (accounts: (typeof alice)[]) => void = () => {};
-	const extensionWith = (signer: Record<string, unknown>) => ({
-		enable: vi.fn().mockResolvedValue({
-			accounts: {
-				get: async () => [alice],
-				subscribe: (cb: (accounts: (typeof alice)[]) => void) => {
-					pushAccounts = cb;
-					cb([alice]);
-					return () => {};
-				},
-			},
-			signer,
-		}),
-	});
-
-	beforeEach(() => {
-		localStorage.clear();
-		injected.names = ["good", "bad"];
-	});
-
-	afterEach(() => {
-		delete window.injectedWeb3;
-		injected.names = ["test-extension"];
-	});
 
 	it("rejects connect() when signer.signRaw is missing and keeps the other wallet's accounts streaming", async () => {
-		window.injectedWeb3 = {
-			good: extensionWith({ signPayload: vi.fn(), signRaw: vi.fn() }),
-			bad: extensionWith({ signPayload: vi.fn() }),
+		const good = install({ name: "good", accounts: [alice] });
+		const injectedWeb3 = window.injectedWeb3 ?? {};
+		injectedWeb3.bad = {
+			enable: async () =>
+				({
+					accounts: { get: async () => [alice], subscribe: () => () => {} },
+					signer: { signPayload: async () => ({ id: 1, signature: "0x" }) },
+				}) as never,
 		};
 		const plugin = polkadot();
-		const store = createKheopskitStore();
+		const store = createKheopskitStore({ storage: createMemoryStorage() });
 		const wallets$ = plugin.getWallets$({
 			store,
 			config: resolveConfig({ appName: "test", platforms: [plugin] }),
@@ -145,9 +120,10 @@ describe("polkadot wallet enable() result", () => {
 			"polkadot:good",
 		]);
 
-		pushAccounts([{ ...alice, name: "Alice (renamed)" }]);
+		good.setAccounts([{ ...alice, name: "Alice (renamed)" }]);
 		expect(emissions.at(-1)).toEqual(["polkadot:good:Alice (renamed)"]);
 		subscription.unsubscribe();
+		delete injectedWeb3.bad;
 	});
 });
 
@@ -158,38 +134,40 @@ describe("polkadot wallet discovery", () => {
 			value: "interactive",
 			configurable: true,
 		});
-		injected.names = [];
 	});
 
 	afterEach(() => {
 		Reflect.deleteProperty(document, "readyState");
 		vi.useRealTimers();
-		injected.names = ["test-extension"];
 	});
 
-	it("reads injectedWeb3 again at window load", () => {
+	const subscribeToWallets = (onWallets: (ids: string[]) => void) => {
 		const plugin = polkadot();
-		const emissions: string[][] = [];
-		const subscription = plugin
+		return plugin
 			.getWallets$({
-				store: createKheopskitStore(),
+				store: createKheopskitStore({ storage: createMemoryStorage() }),
 				config: resolveConfig({ platforms: [plugin] }),
 			})
-			.subscribe((wallets) => emissions.push(wallets.map((w) => w.id)));
+			.subscribe((wallets) => onWallets(wallets.map((w) => w.id)));
+	};
+
+	it("reads injectedWeb3 again at window load", () => {
+		const emissions: string[][] = [];
+		const subscription = subscribeToWallets((ids) => emissions.push(ids));
 
 		vi.advanceTimersByTime(1200);
-		injected.names = ["at-load"];
+		install({ name: "at-load" });
 		window.dispatchEvent(new Event("load"));
 		expect(emissions.at(-1)).toEqual(["polkadot:at-load"]);
 
-		injected.names = ["at-load", "load-plus-100"];
+		install({ name: "load-plus-100" });
 		vi.advanceTimersByTime(100);
 		expect(emissions.at(-1)).toEqual([
 			"polkadot:at-load",
 			"polkadot:load-plus-100",
 		]);
 
-		injected.names = ["at-load", "load-plus-100", "too-late"];
+		install({ name: "too-late" });
 		vi.advanceTimersByTime(60_000);
 		expect(emissions.at(-1)).toEqual([
 			"polkadot:at-load",
@@ -200,23 +178,28 @@ describe("polkadot wallet discovery", () => {
 	});
 
 	it("does not read injectedWeb3 after an unsubscribe during the load emission", () => {
-		const plugin = polkadot();
-		const subscription = plugin
-			.getWallets$({
-				store: createKheopskitStore(),
-				config: resolveConfig({ platforms: [plugin] }),
-			})
-			.subscribe((wallets) => {
-				if (wallets.some((w) => w.id === "polkadot:at-load"))
-					subscription.unsubscribe();
-			});
+		let reads = 0;
+		let registry: Window["injectedWeb3"];
+		Object.defineProperty(window, "injectedWeb3", {
+			configurable: true,
+			get: () => {
+				reads++;
+				return registry;
+			},
+			set: (value: Window["injectedWeb3"]) => {
+				registry = value;
+			},
+		});
+		const subscription = subscribeToWallets((ids) => {
+			if (ids.includes("polkadot:at-load")) subscription.unsubscribe();
+		});
 
 		vi.advanceTimersByTime(1200);
-		injected.names = ["at-load"];
+		install({ name: "at-load" });
 		window.dispatchEvent(new Event("load"));
-		const readsAtUnsubscribe = getInjectedExtensions.mock.calls.length;
+		const readsAtUnsubscribe = reads;
 
 		vi.advanceTimersByTime(60_000);
-		expect(getInjectedExtensions).toHaveBeenCalledTimes(readsAtUnsubscribe);
+		expect(reads).toBe(readsAtUnsubscribe);
 	});
 });
