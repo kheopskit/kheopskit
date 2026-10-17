@@ -347,6 +347,8 @@ export type KheopskitConfig<
 	 * a refusal forgets the wallet, so the next load stays silent. A manual
 	 * `connect()` or `disconnect()` on a remembered wallet ends its automatic
 	 * reconnect for the session, so a disconnect the user makes is never undone.
+	 * Automatic reconnect also ends when the wallet disappears mid-attempt; the
+	 * wallet stays remembered for the next load.
 	 *
 	 * A wallet this accepts shows `status: "connecting"` from the first frame
 	 * until its attempt settles. A wallet this rejects shows `disconnected`

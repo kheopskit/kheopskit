@@ -133,7 +133,9 @@ extension prompts once; a refusal forgets the wallet and the next load stays
 silent. Any other failure sets `error`, keeps the wallet remembered and is
 retried up to three times when discovery changes. A manual `connect()` or
 `disconnect()` on a remembered wallet ends its automatic reconnect for the
-session, so a disconnect the user makes is never undone.
+session, so a disconnect the user makes is never undone. Automatic
+reconnect also ends when the wallet disappears mid-attempt; the wallet stays
+remembered for the next load.
 
 `autoReconnect` governs injected wallets and is `true` by default. Pass `false`
 to reconnect none of them, or a

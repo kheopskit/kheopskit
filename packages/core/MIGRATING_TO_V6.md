@@ -264,8 +264,10 @@ forgets the wallet (it leaves the remembered list), so the next load stays
 silent. Any other failure sets `wallet.error`, keeps the wallet remembered and
 is retried up to three times when discovery changes. A manual `connect()` or
 `disconnect()` on a remembered wallet ends its automatic reconnect for the
-session, so a disconnect the user makes is never undone. Nothing is written to
-`console.error` any more; `debug: true` logs the failure with `console.debug`.
+session, so a disconnect the user makes is never undone. Automatic reconnect
+also ends when the wallet disappears mid-attempt; the wallet stays remembered
+for the next load. Nothing is written to `console.error` any more;
+`debug: true` logs the failure with `console.debug`.
 
 ### First frame after a reload
 
