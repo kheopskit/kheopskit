@@ -497,6 +497,21 @@ describe("getKheopskit$ placeholders", () => {
 			});
 		});
 
+		it("does not enable an extension installed between discovery polls before discovery lists it", async () => {
+			const states = record(seedStore(false));
+			const placeholder = await placeholderOf(states);
+
+			const talisman = install({ name: "talisman", accounts });
+			const connecting = placeholder.connect();
+			await vi.advanceTimersByTimeAsync(50);
+			expect(walletIn(states.at(-1))?.isPlaceholder).toBe(true);
+			expect(talisman.enableCalls()).toEqual([]);
+
+			await vi.advanceTimersByTimeAsync(400);
+			await connecting;
+			expect(talisman.enableCalls()).toHaveLength(1);
+		});
+
 		it("rejects ABORTED when its signal aborts", async () => {
 			const states = record(seedStore(false));
 			const placeholder = await placeholderOf(states);
