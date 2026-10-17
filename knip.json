@@ -16,9 +16,6 @@
 		"packages/core": {
 			"ignore": ["src/utils/storage.ts"]
 		},
-		"packages/react": {
-			"ignoreDependencies": ["@types/react-dom", "react-dom"]
-		},
 		"examples/vite-react": {
 			"entry": ["src/styles.css"],
 			"ignore": [

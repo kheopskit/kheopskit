@@ -350,6 +350,21 @@ export type KheopskitState<
 	 * present at runtime — guard all access behind `!isHydrating`.
 	 */
 	isHydrating: boolean;
+	/**
+	 * Whether wallet discovery may still be incomplete.
+	 *
+	 * `true` when the subscription started before `document.readyState` was
+	 * `"complete"`. It turns `false` in the first emission after `window` fired
+	 * `load` and the Polkadot registry (`window.injectedWeb3`) was read again,
+	 * so that emission already lists every extension injected by `load`. When the
+	 * subscription starts after `load`, it is `false` from the first emission.
+	 * Always `true` on the server.
+	 *
+	 * This rests on wallets injecting `injectedWeb3` before `load`. It says
+	 * nothing about wallets that inject after `load`. Ethereum (EIP-6963) and
+	 * Solana (Wallet Standard) registries are event-driven and need no re-read.
+	 */
+	isDiscovering: boolean;
 };
 
 /** Shape of the persisted store data (localStorage, or cookies in compact form). */

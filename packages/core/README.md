@@ -76,6 +76,13 @@ promise resolves only after `kheopskit$` has emitted the wallet's new
 `isConnected` value, and there is no default timeout: pass
 `AbortSignal.timeout(ms)` to cap the wait.
 
+`state.isDiscovering` is `true` until the page has fired `load` and kheopskit
+has read `window.injectedWeb3` again, so the emission that turns it `false`
+already lists every Polkadot extension injected by then. Wait for it before you
+conclude that a wallet is missing. It is `false` from the first emission when you
+subscribe after `load`, and always `true` on the server. It says nothing about
+wallets that inject after `load`.
+
 ## License
 
 ISC
