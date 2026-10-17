@@ -5,6 +5,7 @@ import {
 	map,
 	Observable,
 	shareReplay,
+	tap,
 } from "rxjs";
 import type { WalletId } from "../utils/WalletId";
 import { abortedError, type KheopskitError, toConnectError } from "./errors";
@@ -142,6 +143,14 @@ export const createInjectedWallets$ = <
 			ReadonlyMap<WalletId, Connection<THandle>>
 		>(new Map());
 		const teardown = new AbortController();
+		let present = new Set<WalletId>();
+
+		const abortConnectsOfSourcesThatLeft = (sources: readonly TSource[]) => {
+			present = new Set(sources.map((source) => adapter.getWalletId(source)));
+			for (const [walletId, connection] of connections$.value)
+				if (connection.status === "connecting" && !present.has(walletId))
+					connection.abort();
+		};
 
 		const setConnection = (
 			walletId: WalletId,
@@ -236,7 +245,7 @@ export const createInjectedWallets$ = <
 			walletId: WalletId,
 			options?: ConnectOptions,
 		): Promise<void> => {
-			if (teardown.signal.aborted)
+			if (teardown.signal.aborted || !present.has(walletId))
 				return Promise.reject(abortedError(walletId, "connect"));
 			const current = connections$.value.get(walletId);
 			if (current?.status === "connected") {
@@ -286,7 +295,10 @@ export const createInjectedWallets$ = <
 			return disconnecting;
 		};
 
-		const sub = combineLatest([adapter.sources$, connections$])
+		const sub = combineLatest([
+			adapter.sources$.pipe(tap(abortConnectsOfSourcesThatLeft)),
+			connections$,
+		])
 			.pipe(
 				map(([sources, connections]) =>
 					sources.map((source): TWallet => {

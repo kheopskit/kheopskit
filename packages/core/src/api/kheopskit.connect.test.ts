@@ -1,7 +1,12 @@
+import { getWallets } from "@wallet-standard/app";
+import type { Wallet as WalletStandardWallet } from "@wallet-standard/base";
 import { announceProvider, type EIP6963ProviderDetail } from "mipd";
 import { BehaviorSubject, firstValueFrom, of } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearCachedObservable } from "../utils/getCachedObservable";
+import {
+	clearCachedObservable,
+	clearCachedObservablesByPrefix,
+} from "../utils/getCachedObservable";
 import type { WalletId } from "../utils/WalletId";
 import { ethereum } from "./ethereum/plugin";
 import {
@@ -10,6 +15,7 @@ import {
 } from "./injectedWallets";
 import { getKheopskit$ } from "./kheopskit";
 import { polkadot } from "./polkadot/plugin";
+import { solana } from "./solana/plugin";
 import { createKheopskitStore } from "./store";
 import type {
 	BaseWallet,
@@ -159,6 +165,58 @@ const ethConfig = {
 	hydrationGracePeriod: 0,
 };
 
+const solanaConfig = {
+	platforms: [solana()],
+	autoReconnect: false,
+	debug: false,
+	storageKey: "kheopskit",
+	hydrationGracePeriod: 0,
+};
+
+const registeredStandardWallets: Array<() => void> = [];
+
+const registerFakeStandardWallet = (name = "Fake Standard") => {
+	const pendingConnects: Array<() => void> = [];
+	const wallet = {
+		version: "1.0.0",
+		name,
+		icon: "data:image/svg+xml;base64,AAAA",
+		chains: ["solana:mainnet"],
+		accounts: [],
+		features: {
+			"standard:connect": {
+				version: "1.0.0",
+				connect: () =>
+					new Promise<{ accounts: [] }>((resolve) => {
+						pendingConnects.push(() => resolve({ accounts: [] }));
+					}),
+			},
+		},
+	};
+	const unregister = getWallets().register(
+		wallet as unknown as WalletStandardWallet,
+	);
+	registeredStandardWallets.push(unregister);
+	return {
+		walletId: `solana:${name}` as WalletId,
+		unregister,
+		pendingConnects: () => pendingConnects.length,
+		grantConnect: () => {
+			const grant = pendingConnects.shift();
+			if (!grant) throw new Error("no pending standard:connect to grant");
+			grant();
+		},
+	};
+};
+
+const createDeferred = <T>() => {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((res) => {
+		resolve = res;
+	});
+	return { promise, resolve };
+};
+
 type EngineSource = { name: string };
 
 const enginePlatform = (
@@ -227,19 +285,27 @@ const rememberedWalletIds = (): string[] =>
 const cacheWallet = (
 	store: ReturnType<typeof createKheopskitStore>,
 	isConnected: boolean,
+	{ id = fakeWalletId, name = EXTENSION } = {},
 ) =>
 	store.setCachedState(
-		[
-			{
-				id: fakeWalletId,
-				platform: "polkadot",
-				type: "injected",
-				name: EXTENSION,
-				isConnected,
-			},
-		],
+		[{ id, platform: "polkadot", type: "injected", name, isConnected }],
 		[],
 	);
+
+const subscribeEngineDuringHydration = (
+	sources$: BehaviorSubject<EngineSource[]>,
+	cachedIsConnected: boolean,
+) => {
+	const platform = enginePlatform({ sources$ });
+	const store = createKheopskitStore();
+	cacheWallet(store, cachedIsConnected, { id: engineWalletId, name: "Engine" });
+	const emissions: KheopskitState[] = [];
+	const sub = getKheopskit$(
+		{ ...engineConfig(platform), hydrationGracePeriod: 500 },
+		{ store },
+	).subscribe((state) => emissions.push(state));
+	return { emissions, sub };
+};
 
 const collect = (
 	state$: ReturnType<typeof getKheopskit$>,
@@ -282,6 +348,8 @@ describe("getKheopskit$ connect semantics", () => {
 	afterEach(() => {
 		fake.uninstall();
 		for (const eth of installedEthereumProviders.splice(0)) eth.uninstall();
+		for (const unregister of registeredStandardWallets.splice(0)) unregister();
+		clearCachedObservablesByPrefix("accounts:solana:");
 		vi.useRealTimers();
 		vi.restoreAllMocks();
 	});
@@ -695,6 +763,141 @@ describe("getKheopskit$ connect semantics", () => {
 		expect(second.length).toBe(secondEmitted);
 
 		secondSub.unsubscribe();
+	});
+
+	it("a Wallet Standard wallet that unregisters while its connect is pending rejects that connect ABORTED, and a later grant neither connects nor remembers it", async () => {
+		const standard = registerFakeStandardWallet();
+		const emissions: KheopskitState[] = [];
+		const sub = getKheopskit$(solanaConfig, {
+			store: createKheopskitStore(),
+		}).subscribe((state) => emissions.push(state));
+		await settleMicrotasks();
+
+		const connecting = walletIn(emissions.at(-1), standard.walletId).connect();
+		await settleMicrotasks();
+		expect(standard.pendingConnects()).toBe(1);
+
+		standard.unregister();
+		expect(await settlementOf(connecting)).toBe("rejected");
+		await expect(connecting).rejects.toMatchObject({
+			code: "ABORTED",
+			walletId: standard.walletId,
+			message: `[kheopskit] connect of wallet ${standard.walletId} was aborted`,
+		});
+		expect(emissions.at(-1)?.wallets).toEqual([]);
+
+		const emitted = emissions.length;
+		standard.grantConnect();
+		await settleMicrotasks();
+		expect(rememberedWalletIds()).toEqual([]);
+		expect(emissions.length).toBe(emitted);
+		expect(
+			emissions.some((state) =>
+				state.wallets.some((w) => w.id === standard.walletId && w.isConnected),
+			),
+		).toBe(false);
+
+		sub.unsubscribe();
+	});
+
+	it("a wallet that leaves the list after the platform granted its connect rejects that connect ABORTED", async () => {
+		const sources$ = new BehaviorSubject<EngineSource[]>([{ name: "engine" }]);
+		const { emissions, sub } = subscribeEngineDuringHydration(sources$, false);
+		await settleMicrotasks();
+		expect(emissions.at(-1)?.isHydrating).toBe(true);
+
+		const connecting = walletIn(emissions.at(-1), engineWalletId).connect();
+		expect(await settlementOf(connecting)).toBe("pending");
+		expect(rememberedWalletIds()).toEqual([engineWalletId]);
+
+		sources$.next([]);
+		await vi.advanceTimersByTimeAsync(500);
+		expect(emissions.at(-1)?.isHydrating).toBe(false);
+		expect(emissions.at(-1)?.wallets).toEqual([]);
+		expect(await settlementOf(connecting)).toBe("rejected");
+		await expect(connecting).rejects.toMatchObject({
+			code: "ABORTED",
+			walletId: engineWalletId,
+			message: `[kheopskit] connect of wallet ${engineWalletId} was aborted`,
+		});
+
+		sub.unsubscribe();
+	});
+
+	it("a disconnect that waits for the state resolves when the wallet leaves the list", async () => {
+		const sources$ = new BehaviorSubject<EngineSource[]>([{ name: "engine" }]);
+		const { emissions, sub } = subscribeEngineDuringHydration(sources$, true);
+		await settleMicrotasks();
+		expect(walletIn(emissions.at(-1), engineWalletId).isConnected).toBe(true);
+
+		const disconnecting = walletIn(
+			emissions.at(-1),
+			engineWalletId,
+		).disconnect();
+		expect(await settlementOf(disconnecting)).toBe("pending");
+
+		sources$.next([]);
+		await vi.advanceTimersByTimeAsync(3000);
+		expect(emissions.at(-1)?.wallets).toEqual([]);
+		expect(await settlementOf(disconnecting)).toBe("resolved");
+
+		sub.unsubscribe();
+	});
+
+	it("a platform stream that errors while a connect is pending rejects that connect ABORTED and ends the subscription", async () => {
+		const sources$ = new BehaviorSubject<EngineSource[]>([{ name: "engine" }]);
+		const grant = createDeferred<string>();
+		const platform = enginePlatform({ sources$, connect: () => grant.promise });
+		const emissions: KheopskitState[] = [];
+		const errors: unknown[] = [];
+		const sub = getKheopskit$(engineConfig(platform), {
+			store: createKheopskitStore(),
+		}).subscribe({
+			next: (state) => emissions.push(state),
+			error: (error) => errors.push(error),
+		});
+		await settleMicrotasks();
+
+		const connecting = walletIn(emissions.at(-1), engineWalletId).connect();
+		expect(await settlementOf(connecting)).toBe("pending");
+
+		sources$.error(new Error("registry gone"));
+		expect(await settlementOf(connecting)).toBe("rejected");
+		await expect(connecting).rejects.toMatchObject({
+			code: "ABORTED",
+			walletId: engineWalletId,
+		});
+		expect(errors.map((error) => (error as Error).message)).toEqual([
+			"registry gone",
+		]);
+		expect(sub.closed).toBe(true);
+
+		grant.resolve("handle");
+		await settleMicrotasks();
+		expect(rememberedWalletIds()).toEqual([]);
+	});
+
+	it("a platform stream that completes while a connect is pending leaves the connect to settle with the platform's answer", async () => {
+		const sources$ = new BehaviorSubject<EngineSource[]>([{ name: "engine" }]);
+		const grant = createDeferred<string>();
+		const platform = enginePlatform({ sources$, connect: () => grant.promise });
+		const emissions: KheopskitState[] = [];
+		const sub = getKheopskit$(engineConfig(platform), {
+			store: createKheopskitStore(),
+		}).subscribe((state) => emissions.push(state));
+		await settleMicrotasks();
+
+		const connecting = walletIn(emissions.at(-1), engineWalletId).connect();
+		sources$.complete();
+		expect(await settlementOf(connecting)).toBe("pending");
+
+		grant.resolve("handle");
+		expect(await settlementOf(connecting)).toBe("resolved");
+		expect(walletIn(emissions.at(-1), engineWalletId).isConnected).toBe(true);
+		expect(rememberedWalletIds()).toEqual([engineWalletId]);
+		expect(sub.closed).toBe(false);
+
+		sub.unsubscribe();
 	});
 
 	it("on Ethereum, connect resolves once the wallet shows connected, the accounts follow in a later emission, and a previous connection's late eth_accounts answer never shows", async () => {

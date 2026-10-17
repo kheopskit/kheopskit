@@ -119,7 +119,9 @@ export type BaseWallet = {
 	 *   wallet's `eth_accounts` request is pending may show the accounts of its
 	 *   previous connection for as long as that request goes unanswered, and
 	 *   `connect()` may resolve on that emission. A `disconnect()` call made
-	 *   while it waits for that state rejects it with `ABORTED`. Once the last `kheopskit$`
+	 *   while it waits for that state rejects it with `ABORTED`. A pending
+	 *   `connect()` also rejects `ABORTED` when its wallet disappears (an
+	 *   extension removed, a Wallet Standard wallet unregistered). Once the last `kheopskit$`
 	 *   subscriber has unsubscribed, a call on a wallet object from that
 	 *   subscription rejects with `ABORTED` without asking the platform.
 	 * - **Typed rejections.** A platform rejection is wrapped in a
