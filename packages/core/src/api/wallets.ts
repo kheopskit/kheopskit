@@ -51,7 +51,6 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 						),
 					)
 				: platformWallets$;
-		// Note: No startWith([]) here - the hydration buffer handles initial state
 		const wallets$ = unsortedWallets$.pipe(map((all) => all.sort(sortWallets)));
 
 		const reconnectPolicy = createReconnectPolicy();

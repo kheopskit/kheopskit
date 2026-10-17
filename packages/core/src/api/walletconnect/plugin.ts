@@ -114,9 +114,6 @@ const dropAccountsCache = (platform: WalletPlatform): void => {
 };
 
 /**
- * The single, platform-less WalletConnect connector for the given options — or
- * `null` on the server, or when `@reown/appkit` isn't installed.
- *
  * @remarks
  * The AppKit instance is a process-wide singleton (Reown AppKit itself cannot
  * be instantiated twice). The **first** call with a `walletConnect` config wins;
@@ -165,8 +162,6 @@ const getWalletConnectWallet$ = (
 					const appKit = createAppKit({
 						projectId: walletConnect.projectId,
 						metadata: walletConnect.metadata,
-						// Loosely typed in WalletConnectOptions to keep @reown/appkit's
-						// types out of core; forwarded to AppKit verbatim.
 						networks: walletConnect.networks as never,
 						themeMode: walletConnect.themeMode,
 						themeVariables: walletConnect.themeVariables as never,

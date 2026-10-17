@@ -252,7 +252,6 @@ export type WalletConnectMetadata = {
  */
 export type WalletConnectPlugin = {
 	readonly type: "walletconnect";
-	/** Read by the Polkadot plugin as the `appName` fallback. */
 	readonly metadata: WalletConnectMetadata;
 	getWallet$(ctx: PlatformContext): Observable<WalletConnectWallet | null>;
 };

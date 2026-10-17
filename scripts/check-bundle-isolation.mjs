@@ -60,8 +60,7 @@ const RULES = {
 const RUNTIME_FORMATS = [".mjs", ".js"];
 const DTS_FORMATS = [".d.ts", ".d.mts"];
 
-// `import ... from "x"`, side-effect `import "x"`, `require("x")` and dynamic
-// `import("x")`: a lazy import still lands in the dapp's bundle graph.
+// Dynamic import() counts: a lazy import still lands in the dapp's bundle graph.
 const SPEC_RES = [
 	/\bfrom\s*["']([^"']+)["']/g,
 	/\bimport\s*["']([^"']+)["']/g,
@@ -99,8 +98,6 @@ const resolveDts = (spec) =>
 		.replace(/\.mjs$/, ".d.mts")
 		.replace(/\.js$/, ".d.ts");
 
-// Chunks reachable from an entry by following relative imports, resolved with
-// `resolveSpec`.
 const reachableChunks = (entry, resolveSpec, seen = new Set()) => {
 	if (seen.has(entry)) return seen;
 	seen.add(entry);
