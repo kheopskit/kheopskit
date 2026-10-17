@@ -518,9 +518,6 @@ describe("getKheopskit$ placeholders", () => {
 		vi.useFakeTimers();
 		enable.mockReset();
 		window.injectedWeb3 = { talisman: { enable } } as never;
-		walletConnect.connector$ = new BehaviorSubject<WalletConnectWallet | null>(
-			null,
-		);
 		const actualWallets =
 			await vi.importActual<typeof import("./wallets")>("./wallets");
 		const actualAccounts =
@@ -726,9 +723,23 @@ describe("getKheopskit$ placeholders", () => {
 				state.wallets.some(
 					(w) => w.id === WALLET_CONNECT_WALLET_ID && !w.isPlaceholder,
 				);
+			const connector$ = new BehaviorSubject<WalletConnectWallet | null>(null);
 			const states: KheopskitState[] = [];
 			subscription = getKheopskit$(
-				{ platforms: [polkadot()], hydrationGracePeriod: 500 },
+				{
+					platforms: [polkadot()],
+					hydrationGracePeriod: 500,
+					walletConnect: {
+						type: "walletconnect",
+						metadata: {
+							name: "Test Dapp",
+							description: "",
+							url: "",
+							icons: [],
+						},
+						getWallet$: () => connector$,
+					},
+				},
 				{ store },
 			).subscribe((state) => {
 				states.push(state);
@@ -742,7 +753,7 @@ describe("getKheopskit$ placeholders", () => {
 
 			const connect = vi.fn(async () => {});
 			const result = placeholder?.connect().catch((error: unknown) => error);
-			walletConnect.connector$.next({
+			connector$.next({
 				id: WALLET_CONNECT_WALLET_ID,
 				type: "walletconnect",
 				platforms: [],
