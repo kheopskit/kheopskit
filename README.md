@@ -183,7 +183,8 @@ export const connectedWalletIds$ = kheopskit$.pipe(
 ```
 
 In an SSR app, pass `createKheopskit(config, { store })` when code reads `store`
-or subscribes to `kheopskit$` before the provider renders. The
+or subscribes to `kheopskit$` before the provider renders, such as module-scope
+code or a parent's effect that runs before the provider mounts. The
 [React README](packages/react/README.md#one-instance-for-react-and-rxjs-code)
 explains which store `createKheopskit` creates otherwise.
 

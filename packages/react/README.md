@@ -179,14 +179,20 @@ export const addresses$ = kheopskit$.pipe(
 ```
 
 `kheopskit$` starts with its first subscriber and stops when the last one
-leaves. The mounted provider counts as a subscriber. The server never runs it.
-The provider renders each server request from that request's `ssrCookies`.
+leaves. The mounted provider counts as a subscriber. The provider never runs it
+on the server. It renders each server request from that request's
+`ssrCookies`. A module-level subscription in code the server evaluates does run
+it there. It emits one state without wallets, persists nothing, leaves no timer
+behind and does not change what the provider renders for a request.
 
 Without `options.store`, `createKheopskit` creates the store on first use in
-the browser. It persists to cookies when the provider renders first with
-`ssrCookies`, and to localStorage otherwise. In an SSR app, code that reads
-`store` or subscribes to `kheopskit$` before the provider renders would get the
-localStorage store. Pass the store in that case:
+the browser. The provider claims it when it first renders there. The store is
+backed by cookies when the provider renders with `ssrCookies`, and by
+localStorage otherwise. Effects of components inside the provider run after
+that render, so they use the provider's store. In an SSR app, code that reads
+`store` or subscribes to `kheopskit$` before the provider renders, such as
+module-scope code or a parent's effect that runs before the provider mounts,
+would get the localStorage store. Pass the store in that case:
 
 ```ts
 import { createKheopskitStore } from "@kheopskit/core";
