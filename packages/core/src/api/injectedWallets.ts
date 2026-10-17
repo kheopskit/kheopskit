@@ -174,7 +174,7 @@ export const createInjectedWallets$ = <
 							return;
 						}
 						setConnection(walletId, { status: "connected", handle });
-						store.addEnabledWalletId(walletId);
+						store.rememberWallet(walletId);
 						resolve();
 					},
 					(error) => {
@@ -245,7 +245,7 @@ export const createInjectedWallets$ = <
 						});
 					throw error;
 				}
-				store.removeEnabledWalletId(walletId);
+				store.forgetWallet(walletId);
 				if (closed) return;
 				setConnection(walletId, undefined);
 				adapter.onDisconnected?.(walletId);

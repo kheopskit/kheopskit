@@ -1,6 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createStore } from "./createStore";
-import { cookieStorage, noopStorage, type Storage } from "./storage";
+import {
+	cookieStorage,
+	noopStorage,
+	type Storage,
+	type SyncableStorage,
+} from "./storage";
 
 describe("createStore", () => {
 	const TEST_KEY = "test-store-key";
@@ -120,6 +125,34 @@ describe("createStore", () => {
 		});
 	});
 
+	describe("with default storage when localStorage throws", () => {
+		afterEach(() => {
+			vi.restoreAllMocks();
+		});
+
+		it("keeps every in-memory write, observed or not", async () => {
+			vi.spyOn(window.Storage.prototype, "setItem").mockImplementation(() => {
+				throw new DOMException("denied", "SecurityError");
+			});
+			vi.resetModules();
+			const { createStore: createFreshStore } = await import("./createStore");
+			const store = createFreshStore(TEST_KEY, { items: [] as string[] });
+
+			store.mutate((prev) => ({ items: [...prev.items, "a"] }));
+			store.mutate((prev) => ({ items: [...prev.items, "b"] }));
+			const values: { items: string[] }[] = [];
+			const sub = store.observable.subscribe((v) => values.push(v));
+			store.mutate((prev) => ({ items: [...prev.items, "c"] }));
+			sub.unsubscribe();
+
+			expect(values).toEqual([
+				{ items: ["a", "b"] },
+				{ items: ["a", "b", "c"] },
+			]);
+			expect(store.get()).toEqual({ items: ["a", "b", "c"] });
+		});
+	});
+
 	describe("with cookieStorage", () => {
 		it("initializes with defaultValue when no cookie exists", () => {
 			const store = createStore(TEST_KEY, { data: "default" }, cookieStorage());
@@ -145,17 +178,13 @@ describe("createStore", () => {
 
 	describe("with cookieStorage and initialCookies (SSR scenario)", () => {
 		it("reads initial value from ssrCookies", () => {
-			const ssrData = { autoReconnect: ["polkadot:polkadot-js"] };
+			const ssrData = { items: ["polkadot:polkadot-js"] };
 			const ssrCookies = `${TEST_KEY}=${encodeURIComponent(JSON.stringify(ssrData))}`;
 			const storage = cookieStorage(ssrCookies);
 
 			// On client (jsdom), cookieStorage reads from document.cookie
 			// But we can test the flow by verifying createStore works with the storage
-			const store = createStore(
-				TEST_KEY,
-				{ autoReconnect: [] as string[] },
-				storage,
-			);
+			const store = createStore(TEST_KEY, { items: [] as string[] }, storage);
 			// In jsdom, it will read from document.cookie (which is empty), not ssrCookies
 			// This is expected because document is available
 			expect(store.get()).toBeDefined();
@@ -217,6 +246,79 @@ describe("createStore", () => {
 			localStorage.setItem(TEST_KEY, JSON.stringify(complex));
 			const store = createStore(TEST_KEY, {});
 			expect(store.get()).toEqual(complex);
+		});
+	});
+
+	describe("cross-tab storage sync", () => {
+		const createSpyStorage = (initial: string | null) => {
+			const entries = new Map<string, string>();
+			if (initial !== null) entries.set(TEST_KEY, initial);
+			const stopSync = vi.fn();
+			const storage = {
+				getItem: (key: string) => entries.get(key) ?? null,
+				setItem: (key: string, value: string) => {
+					entries.set(key, value);
+				},
+				removeItem: (key: string) => {
+					entries.delete(key);
+				},
+				subscribe: vi.fn(() => stopSync),
+			} satisfies SyncableStorage;
+			const writeFromOtherTab = (value: string) => entries.set(TEST_KEY, value);
+			return { storage, stopSync, writeFromOtherTab };
+		};
+
+		it("starts storage sync on the first subscriber and stops it after the last unsubscribes", () => {
+			const { storage, stopSync } = createSpyStorage(null);
+			const store = createStore(TEST_KEY, { count: 0 }, storage);
+			expect(storage.subscribe).not.toHaveBeenCalled();
+
+			const first = store.observable.subscribe();
+			const second = store.observable.subscribe();
+			expect(storage.subscribe).toHaveBeenCalledOnce();
+
+			first.unsubscribe();
+			expect(stopSync).not.toHaveBeenCalled();
+			second.unsubscribe();
+			expect(stopSync).toHaveBeenCalledOnce();
+		});
+
+		it("re-reads storage on resubscribe", () => {
+			const { storage, writeFromOtherTab } = createSpyStorage(
+				JSON.stringify({ count: 1 }),
+			);
+			const store = createStore(TEST_KEY, { count: 0 }, storage);
+			store.observable.subscribe().unsubscribe();
+
+			writeFromOtherTab(JSON.stringify({ count: 2 }));
+			const values: { count: number }[] = [];
+			store.observable.subscribe((v) => values.push(v)).unsubscribe();
+
+			expect(values).toEqual([{ count: 2 }]);
+		});
+
+		it("mutate while unobserved builds on what another tab wrote", () => {
+			const { storage, writeFromOtherTab } = createSpyStorage(
+				JSON.stringify({ items: ["a"] }),
+			);
+			const store = createStore(TEST_KEY, { items: [] as string[] }, storage);
+
+			writeFromOtherTab(JSON.stringify({ items: ["a", "b"] }));
+			store.mutate((prev) => ({ items: [...prev.items, "c"] }));
+
+			expect(storage.getItem(TEST_KEY)).toBe(
+				JSON.stringify({ items: ["a", "b", "c"] }),
+			);
+		});
+
+		it("destroy stops the sync of live subscribers", () => {
+			const { storage, stopSync } = createSpyStorage(null);
+			const store = createStore(TEST_KEY, { count: 0 }, storage);
+			store.observable.subscribe();
+
+			store.destroy();
+
+			expect(stopSync).toHaveBeenCalledOnce();
 		});
 	});
 

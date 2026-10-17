@@ -88,7 +88,7 @@ const config = (hydrationGracePeriod: number, autoReconnect = false) => ({
 });
 
 const rememberedWalletIds = (): string[] =>
-	JSON.parse(localStorage.getItem("kheopskit") || "{}").autoReconnect ?? [];
+	JSON.parse(localStorage.getItem("kheopskit") || "{}").remembered ?? [];
 
 const cacheWallet = (
 	store: ReturnType<typeof createKheopskitStore>,
@@ -284,7 +284,7 @@ describe("getKheopskit$ connect semantics", () => {
 
 	it("a UI connect that aborts on unmount leaves a pending auto-reconnect to finish", async () => {
 		const store = createKheopskitStore();
-		store.addEnabledWalletId(fakeWalletId);
+		store.rememberWallet(fakeWalletId);
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 		const emissions: KheopskitState[] = [];
 		const { sub, wallet } = collect(

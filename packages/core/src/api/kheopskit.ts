@@ -349,12 +349,16 @@ type PolkadotAccountFields = { type?: string };
 type SolanaAccountFields = { chains?: string[] };
 
 /**
- * A signature of an account covering its id plus the platform-specific fields
- * that can change without the id changing (Ethereum chainId, Polkadot key type,
- * Solana clusters). Used to detect both UI-relevant changes and changes worth
- * re-persisting, so the two comparators can't drift apart.
+ * A signature of an account covering its id, its name, plus the
+ * platform-specific fields that can change without the id changing (Ethereum
+ * chainId, Polkadot key type, Solana clusters). Used to detect both UI-relevant
+ * changes and changes worth re-persisting, so the two comparators can't drift
+ * apart.
  */
-const accountChangeKey = (account: BaseWalletAccount): string => {
+const accountChangeKey = (account: BaseWalletAccount): string =>
+	`${account.name ?? ""}|${accountPlatformKey(account)}`;
+
+const accountPlatformKey = (account: BaseWalletAccount): string => {
 	switch (account.platform) {
 		case "ethereum":
 			return `${account.id}|${(account as EthereumAccountFields).chainId ?? ""}`;

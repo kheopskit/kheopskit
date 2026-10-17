@@ -48,7 +48,7 @@ type CompactAccountEntry = [
 
 type CompactStoreV1 = {
 	v: 1;
-	// autoReconnect
+	// remembered
 	r?: WalletId[];
 	// wallets: [id, name, isConnected(0|1), type(0=injected,1=walletconnect)?]
 	w?: CompactWalletEntry[];
@@ -57,6 +57,18 @@ type CompactStoreV1 = {
 };
 
 const EMPTY_STORE_DATA: KheopskitStoreData = {};
+
+type PreV6StoreData = KheopskitStoreData & { autoReconnect?: unknown };
+
+export const migratePreV6StoreData = (
+	data: PreV6StoreData,
+): KheopskitStoreData => {
+	if (data?.autoReconnect === undefined) return data;
+	const { autoReconnect, ...rest } = data;
+	return rest.remembered === undefined && Array.isArray(autoReconnect)
+		? { ...rest, remembered: autoReconnect }
+		: rest;
+};
 
 const toCompactPolkadotAccountType = (
 	type: CachedAccount["polkadotAccountType"],
@@ -147,7 +159,7 @@ const toCompactStore = (data: KheopskitStoreData): CompactStoreV1 => {
 
 	return {
 		v: 1,
-		r: data.autoReconnect,
+		r: data.remembered,
 		w: wallets?.length ? wallets : undefined,
 		a: accounts?.length ? accounts : undefined,
 	};
@@ -218,7 +230,7 @@ const fromCompactStore = (data: CompactStoreV1): KheopskitStoreData => {
 	}
 
 	return {
-		autoReconnect: data.r,
+		remembered: data.r,
 		cachedWallets: wallets,
 		cachedAccounts: accounts,
 	};
@@ -228,7 +240,7 @@ const decodeStore = (raw: string, fallback: KheopskitStoreData) => {
 	try {
 		const parsed = JSON.parse(raw) as unknown;
 		if (isCompactStore(parsed)) return fromCompactStore(parsed);
-		return parsed as KheopskitStoreData;
+		return migratePreV6StoreData(parsed as PreV6StoreData);
 	} catch {
 		return fallback;
 	}

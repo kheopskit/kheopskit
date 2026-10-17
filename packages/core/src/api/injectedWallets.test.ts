@@ -65,7 +65,7 @@ const settlementOf = async (promise: Promise<unknown>): Promise<Settlement> => {
 };
 
 const rememberedWalletIds = (): string[] =>
-	JSON.parse(localStorage.getItem("kheopskit") || "{}").autoReconnect ?? [];
+	JSON.parse(localStorage.getItem("kheopskit") || "{}").remembered ?? [];
 
 const setup = (
 	overrides: Partial<

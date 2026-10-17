@@ -1,5 +1,6 @@
 export { clearAllCachedObservables } from "../utils/getCachedObservable";
 export { isValidAddress } from "../utils/isValidAddress";
+export type { SyncableStorage } from "../utils/storage";
 export {
 	getWalletAccountId,
 	parseWalletAccountId,
