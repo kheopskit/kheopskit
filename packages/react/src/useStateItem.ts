@@ -25,18 +25,16 @@ export const useStateItem = <K, T extends object>(
 ): T | undefined => {
 	const store = useKheopskitExternalStore(hookName);
 	const snapshots = useMemo(() => {
-		let cached: { generation: number; item: T } | undefined;
+		let cached: T | undefined;
 		return {
 			getSnapshot: () => {
 				const item = select(store.getSnapshot(), key);
-				const generation = store.getSnapshotGeneration();
 				const reusable =
 					cached !== undefined &&
 					item !== undefined &&
-					cached.generation === generation &&
-					isSameItemIgnoringClosures(cached.item, item);
-				if (!reusable) cached = item && { generation, item };
-				return cached?.item;
+					isSameItemIgnoringClosures(cached, item);
+				if (!reusable) cached = item;
+				return cached;
 			},
 			getServerSnapshot: () => select(store.getServerSnapshot(), key),
 		};

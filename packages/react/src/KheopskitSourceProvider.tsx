@@ -7,10 +7,17 @@ import {
 	type KheopskitStore,
 	resolveConfig,
 } from "@kheopskit/core";
-import { type FC, type PropsWithChildren, useEffect, useMemo } from "react";
+import {
+	type FC,
+	type PropsWithChildren,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+} from "react";
 import type { Observable } from "rxjs";
 import { KheopskitContext } from "./context";
 import { createExternalStore } from "./createExternalStore";
+import { withLiveActions } from "./liveActions";
 
 type KheopskitSource = {
 	store: KheopskitStore;
@@ -24,6 +31,11 @@ type KheopskitSourceProviderProps = PropsWithChildren<{
 }>;
 
 const keepPipelineRunning = () => {};
+
+// A layout effect, so that a child's layout effect calling an action on reveal
+// finds the pipeline held again one microtask later (see createExternalStore).
+const useIsomorphicLayoutEffect =
+	typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 const hydrating = (
 	config: KheopskitConfig,
@@ -60,23 +72,25 @@ export const KheopskitSourceProvider: FC<KheopskitSourceProviderProps> = ({
 
 	const externalStore = useMemo(
 		() =>
-			createExternalStore(
-				() => {
-					const { store, kheopskit$ } = resolveClientSource(resolvedConfig);
-					return {
-						observable$: kheopskit$,
-						initialValue: hydrating(
-							resolvedConfig,
-							getHydratedSnapshot(store, resolvedConfig, { icons: true }),
-						),
-					};
-				},
-				serverSnapshot(resolvedConfig, ssrCookies),
+			withLiveActions(
+				createExternalStore(
+					() => {
+						const { store, kheopskit$ } = resolveClientSource(resolvedConfig);
+						return {
+							observable$: kheopskit$,
+							initialValue: hydrating(
+								resolvedConfig,
+								getHydratedSnapshot(store, resolvedConfig, { icons: true }),
+							),
+						};
+					},
+					serverSnapshot(resolvedConfig, ssrCookies),
+				),
 			),
 		[resolvedConfig, ssrCookies, resolveClientSource],
 	);
 
-	useEffect(
+	useIsomorphicLayoutEffect(
 		() => externalStore.subscribe(keepPipelineRunning),
 		[externalStore],
 	);

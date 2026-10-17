@@ -8,17 +8,20 @@ import {
 	type KheopskitExternalStore,
 	useKheopskitExternalStore,
 } from "./context";
+import { walletActions } from "./liveActions";
 import { useWallet } from "./useWallet";
 
 export type UseConnectResult = {
 	/**
-	 * Connects the wallet. Resolves once the state shows it connected. Unmounting
-	 * the component or changing `walletId` aborts a pending connect, which then
-	 * resolves without connecting. A connect that starts after unmount, or
-	 * through a `connect` captured before `walletId` changed, rejects `ABORTED`
-	 * without asking the wallet. Rejects with the wallet's `KheopskitError`
-	 * otherwise, such as `USER_REJECTED`, and with an `Error` when the state
-	 * lists no wallet with this id.
+	 * Connects the wallet through the pipeline that runs when it is called, and
+	 * waits for that pipeline's first emission when an `<Activity>` reveal has
+	 * just restarted it. Resolves once the state shows the wallet connected.
+	 * Unmounting the component or changing `walletId` aborts a pending connect,
+	 * which then resolves without connecting. A connect that starts after
+	 * unmount, or through a `connect` captured before `walletId` changed,
+	 * rejects `ABORTED` without asking the wallet. Rejects with the wallet's
+	 * `KheopskitError` otherwise, such as `USER_REJECTED`, and with an `Error`
+	 * when the state lists no wallet with this id.
 	 */
 	connect: () => Promise<void>;
 	/** Disconnects the wallet. Resolves once the state shows it disconnected. */
@@ -41,14 +44,7 @@ const createWalletActions = (
 	walletId: WalletId,
 ) => {
 	let scope = new AbortController();
-
-	const currentWallet = () => {
-		const wallet = store
-			.getSnapshot()
-			.wallets.find((candidate) => candidate.id === walletId);
-		if (!wallet) throw new Error(`[kheopskit] no wallet ${walletId}`);
-		return wallet;
-	};
+	const wallet = walletActions(store, walletId);
 
 	return {
 		connect: async () => {
@@ -61,7 +57,7 @@ const createWalletActions = (
 					{ walletId },
 				);
 			try {
-				await currentWallet().connect({ signal });
+				await wallet.connect({ signal });
 			} catch (error) {
 				const abortedByCleanup =
 					signal.aborted &&
@@ -70,7 +66,7 @@ const createWalletActions = (
 				if (!abortedByCleanup) throw error;
 			}
 		},
-		disconnect: async () => currentWallet().disconnect(),
+		disconnect: wallet.disconnect,
 		renew: () => {
 			if (scope.signal.aborted) scope = new AbortController();
 		},
@@ -80,7 +76,9 @@ const createWalletActions = (
 
 /**
  * Connect and disconnect actions for one wallet, with its status and error.
- * `connect` and `disconnect` keep their identity while `walletId` is the same.
+ * `connect` and `disconnect` keep their identity while `walletId` is the same,
+ * so `useEffect(() => { connect() }, [connect])` connects on mount and after
+ * every `<Activity>` reveal.
  *
  * @example
  * ```tsx
