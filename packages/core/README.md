@@ -75,10 +75,16 @@ on a wallet that is already connected (or disconnected) resolves at once.
 platform granted the connect changes nothing. A refused prompt rejects with
 `USER_REJECTED` and any other failure with `CONNECT_FAILED`. Both carry the
 platform error as `cause`. `connect()` resolves only after `kheopskit$` has
-emitted the wallet with `isConnected: true`. `disconnect()` resolves once it has
-emitted `isConnected: false`, or once a later `connect()` or the end of the
-subscription makes that emission impossible. There is no default timeout: pass
-`AbortSignal.timeout(ms)` to cap the wait for the platform's answer.
+emitted the wallet with `isConnected: true`. On platforms that list accounts
+asynchronously (Ethereum `eth_accounts`) the accounts may arrive in a later
+emission; no emission shows a connected wallet with a previous connection's
+accounts, or a disconnected wallet still listing accounts. `disconnect()`
+resolves once it has emitted `isConnected: false`, or once a later `connect()`
+or the end of the subscription makes that emission impossible. After the last
+subscriber has unsubscribed, `connect()` and `disconnect()` on a wallet object
+from that subscription reject `ABORTED` without asking the platform. There is
+no default timeout: pass `AbortSignal.timeout(ms)` to cap the wait for the
+platform's answer.
 
 `state.isDiscovering` is `true` until the page has fired `load` and kheopskit
 has read `window.injectedWeb3` again, so the emission that turns it `false`

@@ -1,8 +1,9 @@
 # Migrating to Kheopskit v6
 
 v6 tightens the wallet connection contract. `connect()` and `disconnect()` are
-safe to call from UI code, rejections are typed, and the state stream never
-shows a wallet as connected while its accounts are stale.
+safe to call from UI code, rejections are typed, and no emission of the state
+stream shows a connected wallet with a previous connection's accounts, or a
+disconnected wallet still listing accounts.
 
 `@kheopskit/core`, `@kheopskit/react` and the repo release tag move to
 **`6.0.0`** together.
@@ -22,8 +23,8 @@ This guide grows with each v6 change. Each section covers one area.
 | `disconnect()` while a `connect()` pends | rejects `WALLET_NOT_CONNECTED` | aborts the connect and resolves |
 | Refused prompt | the extension's plain `Error` | `KheopskitError` `USER_REJECTED` with `cause` |
 | Other connect failure | platform error passed through | `KheopskitError` `CONNECT_FAILED` with `cause` |
-| When `connect()` resolves | when the platform call returned | after `kheopskit$` emitted the wallet with `isConnected: true` |
-| Intermediate emissions | a wallet could show connected with stale accounts for one frame | a synchronous burst is one emission |
+| When `connect()` resolves | when the platform call returned | after `kheopskit$` emitted the wallet with `isConnected: true`; accounts a platform lists asynchronously (Ethereum `eth_accounts`) may follow in a later emission |
+| Intermediate emissions | a wallet could show connected with the previous connection's accounts for one frame | a synchronous burst is one emission; no emission shows a connected wallet with a previous connection's accounts, or a disconnected wallet still listing accounts |
 
 ---
 
@@ -46,10 +47,12 @@ This guide grows with each v6 change. Each section covers one area.
 
 ### New codes
 
-- `ABORTED`: this `connect()` call was abandoned. Its `signal` fired before the
-  platform answered, `disconnect()` was called while it pended, the last
-  `kheopskit$` subscriber unsubscribed, or the wallet object came from a
-  subscription that had already ended.
+- `ABORTED`: this `connect()` or `disconnect()` call was abandoned. For
+  `connect()`, its `signal` fired before the platform answered, `disconnect()`
+  was called while it pended, or the last `kheopskit$` subscriber
+  unsubscribed. For either call, the wallet object came from a subscription
+  that had already ended; the call then rejects without asking the platform
+  and without changing the remembered list.
 - `USER_REJECTED`: the user refused the wallet prompt. `cause` holds the
   platform error: an EIP-1193 error with `code: 4001` on Ethereum; on
   Polkadot the extension's own `Error`, for Talisman
@@ -92,8 +95,12 @@ try {
   `isConnected: true`; `disconnect()` after one with `isConnected: false`, or
   once a later `connect()` or the end of the subscription makes that emission
   impossible. The state your UI reads already reflects the change when the
-  promise settles. An authorised wallet may share zero accounts, so this is
-  about `isConnected`, not the account list.
+  promise settles. This is about `isConnected`, not the account list: an
+  authorised wallet may share zero accounts, and on platforms that list
+  accounts asynchronously (Ethereum `eth_accounts`) the accounts may arrive in
+  a later emission. What holds for every emission is that none shows a
+  connected wallet with a previous connection's accounts, or a disconnected
+  wallet still listing accounts.
 - **No default timeout.** A Polkadot extension prompt pends until the user
   answers it. Pass `AbortSignal.timeout(ms)` to cap your wait for the platform's
   answer. The wait for the state after a grant is not capped. Aborting ends
@@ -114,8 +121,9 @@ try {
   the last `kheopskit$` subscriber unsubscribes, even if the extension never
   answers.
 - **Persistence is best-effort.** A storage write that throws
-  (`QuotaExceededError`, a denied write) keeps the in-memory state, and
-  neither `connect()` nor `disconnect()` rejects because of it.
+  (`QuotaExceededError`, a denied write) keeps the in-memory state while the
+  store is observed (an unobserved store re-reads storage), and neither
+  `connect()` nor `disconnect()` rejects because of it.
 - **Wallet objects are stable.** An emission that only changes accounts keeps
   the same wallet object, with the same `connect` and `disconnect` functions,
   so effects and memos keyed on them do not re-run.
@@ -123,8 +131,10 @@ try {
   and resolves once it is open; `isConnected` follows when the user approves.
 - **No throttle on the stream.** `throttleTime(16)` is replaced by a microtask
   coalesce: a synchronous burst (wallets, then accounts) becomes one emission,
-  so no emission shows a wallet connected with stale accounts. The first
-  emission can arrive one microtask after subscribe. `KheopskitProvider` still
+  so no emission shows a connected wallet with a previous connection's
+  accounts, or a disconnected wallet still listing accounts. Accounts a
+  platform lists asynchronously (Ethereum `eth_accounts`) arrive in a later
+  emission. The first emission can arrive one microtask after subscribe. `KheopskitProvider` still
   paints the cached snapshot synchronously.
 
 ### What to delete in your app

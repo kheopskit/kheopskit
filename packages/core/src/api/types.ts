@@ -92,7 +92,9 @@ export type BaseWallet = {
 	 *   emitted a state in which this wallet has `isConnected: true`, so the
 	 *   consumer-visible state already reflects the connect. On platforms that
 	 *   list accounts asynchronously (Ethereum `eth_accounts`), the accounts may
-	 *   arrive in a later emission. A `disconnect()` call made while it waits
+	 *   arrive in a later emission; no emission shows a connected wallet with a
+	 *   previous connection's accounts, or a disconnected wallet still listing
+	 *   accounts. A `disconnect()` call made while it waits
 	 *   for that state rejects it with `ABORTED`. Once the last `kheopskit$`
 	 *   subscriber has unsubscribed, a call on a wallet object from that
 	 *   subscription rejects with `ABORTED` without asking the platform.
@@ -111,7 +113,12 @@ export type BaseWallet = {
 	 * emitted a state in which this wallet has `isConnected: false`, or once a
 	 * later `connect()` or the end of the subscription makes that emission
 	 * impossible, and rejects if the platform disconnect fails so callers can
-	 * surface or retry.
+	 * surface or retry. Once the last `kheopskit$` subscriber has unsubscribed,
+	 * a call on a wallet object from that subscription rejects with `ABORTED`
+	 * without asking the platform and without changing the remembered list. A
+	 * `disconnect()` started before that point still completes: the wallet was
+	 * forgotten when it was called, and nothing else is written once the
+	 * subscription has ended.
 	 */
 	disconnect: () => Promise<void>;
 };

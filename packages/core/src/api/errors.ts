@@ -6,10 +6,12 @@ import type { WalletId } from "../utils/WalletId";
  */
 export type KheopskitErrorCode =
 	/**
-	 * This `connect()` call was abandoned: its `signal` fired before the
-	 * platform answered, `disconnect()` was called while it pended, the last
-	 * `kheopskit$` subscriber unsubscribed, or the wallet object came from a
-	 * subscription that had already ended.
+	 * This `connect()` or `disconnect()` call was abandoned. For `connect()`:
+	 * its `signal` fired before the platform answered, `disconnect()` was
+	 * called while it pended, or the last `kheopskit$` subscriber unsubscribed.
+	 * For either call: the wallet object came from a subscription that had
+	 * already ended, in which case the call rejects without asking the platform
+	 * and without changing the remembered list.
 	 */
 	| "ABORTED"
 	/** The user refused the wallet's connect prompt. `cause` holds the platform error. */
