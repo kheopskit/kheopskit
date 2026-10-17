@@ -6,6 +6,7 @@ import type {
 import type { Wallet as WalletStandardWallet } from "@wallet-standard/base";
 import type { WalletAccountId } from "../../utils/WalletAccountId";
 import type { WalletId } from "../../utils/WalletId";
+import type { BaseWallet } from "../types";
 import type { SolanaChainId } from "./chains";
 
 /**
@@ -34,8 +35,8 @@ export type SolanaInjectedWallet = {
 	name: string;
 	icon: string;
 	isConnected: boolean;
-	connect: () => Promise<void>;
-	disconnect: () => Promise<void>;
+	connect: BaseWallet["connect"];
+	disconnect: BaseWallet["disconnect"];
 };
 
 export type SolanaWallet = SolanaInjectedWallet;

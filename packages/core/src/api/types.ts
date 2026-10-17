@@ -50,6 +50,19 @@ export type PolkadotAccountType = "sr25519" | "ed25519" | "ecdsa" | "ethereum";
  * packages (`@kheopskit/core/<platform>`) extend this with SDK-typed fields
  * (the injected provider/extension/standard-wallet handle).
  */
+/** Options accepted by {@link BaseWallet.connect}. */
+export type ConnectOptions = {
+	/**
+	 * Ends the caller's wait. The pending promise rejects with a `KheopskitError`
+	 * of code `ABORTED`; a handle the platform hands back afterwards is released
+	 * and the wallet is neither connected nor remembered. The extension's own
+	 * prompt may stay open: nothing can withdraw it from the page. Kheopskit sets
+	 * no timeout of its own, because an extension prompt pends only while the
+	 * user has not answered it; pass `AbortSignal.timeout(ms)` to cap the wait.
+	 */
+	signal?: AbortSignal;
+};
+
 export type BaseWallet = {
 	id: WalletId;
 	platform: WalletPlatform;
@@ -57,10 +70,34 @@ export type BaseWallet = {
 	name: string;
 	icon: string;
 	isConnected: boolean;
-	connect: () => Promise<void>;
 	/**
-	 * Disconnect the wallet. Resolves once the underlying provider/extension
-	 * disconnect completes; rejects if it fails so callers can surface or retry.
+	 * Connects the wallet.
+	 *
+	 * - **Shared in flight.** Concurrent calls on one wallet share a single
+	 *   pending promise and the platform is asked once. An abort through any
+	 *   sharer's `signal`, a `disconnect()` call, or the teardown of the last
+	 *   `kheopskit$` subscriber rejects every sharer with code `ABORTED`.
+	 * - **Idempotent.** On a connected wallet it resolves at once without
+	 *   touching the platform.
+	 * - **Abortable.** See {@link ConnectOptions.signal}. There is no default
+	 *   timeout.
+	 * - **Settles with the state.** It resolves only after `kheopskit$` has
+	 *   emitted a state in which this wallet has `isConnected: true`, so the
+	 *   consumer-visible state already reflects the connect.
+	 * - **Typed rejections.** A platform rejection is wrapped in a
+	 *   `KheopskitError` carrying the original error as `cause` and the
+	 *   `walletId`: `USER_REJECTED` when the user refused the prompt,
+	 *   `CONNECT_FAILED` otherwise.
+	 */
+	connect: (options?: ConnectOptions) => Promise<void>;
+	/**
+	 * Disconnects the wallet.
+	 *
+	 * On a disconnected wallet it resolves at once. While a `connect()` is
+	 * pending it aborts that connect (its promise rejects with `ABORTED`) and
+	 * never waits for the extension prompt. It resolves only after `kheopskit$`
+	 * has emitted a state in which this wallet has `isConnected: false`, and
+	 * rejects if the platform disconnect fails so callers can surface or retry.
 	 */
 	disconnect: () => Promise<void>;
 };
@@ -107,7 +144,14 @@ export type WalletConnectWallet = {
 	name: string;
 	icon: string;
 	isConnected: boolean;
-	connect: () => Promise<void>;
+	/**
+	 * Opens the WalletConnect modal and resolves once it is open; `isConnected`
+	 * follows when the user approves a session. Unlike injected wallets, this
+	 * promise does not wait for the state to show the connector connected, and
+	 * `signal` is accepted for signature compatibility only.
+	 */
+	connect: (options?: ConnectOptions) => Promise<void>;
+	/** Ends the live session when there is one; resolves at once otherwise. */
 	disconnect: () => Promise<void>;
 };
 
