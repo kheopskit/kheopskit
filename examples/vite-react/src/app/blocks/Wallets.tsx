@@ -1,4 +1,5 @@
-import { type BaseWallet, isWalletConnectWallet } from "@kheopskit/core";
+import { isWalletConnectWallet, type WalletId } from "@kheopskit/core";
+import { useConnect } from "@kheopskit/react";
 import { Button } from "@/components/ui/button";
 import {
 	Table,
@@ -11,25 +12,22 @@ import {
 import { useWallets } from "@/lib/config/playgroundConfig";
 import { AppBlock } from "./AppBlock";
 
-const WalletButton = ({
-	wallet,
-}: {
-	wallet: Pick<BaseWallet, "status" | "connect" | "disconnect">;
-}) => {
-	if (wallet.status === "connected")
+const WalletButton = ({ walletId }: { walletId: WalletId }) => {
+	const { connect, disconnect, status } = useConnect(walletId);
+	if (status === "connected")
 		return (
-			<Button className="w-28" onClick={() => wallet.disconnect()}>
+			<Button className="w-28" onClick={disconnect}>
 				Disconnect
 			</Button>
 		);
-	if (wallet.status === "connecting")
+	if (status === "connecting")
 		return (
 			<Button className="w-28" disabled>
 				Connecting…
 			</Button>
 		);
 	return (
-		<Button className="w-28" onClick={() => wallet.connect()}>
+		<Button className="w-28" onClick={connect}>
 			Connect
 		</Button>
 	);
@@ -85,7 +83,7 @@ export const Wallets = () => {
 								{accounts.filter((a) => a.walletId === wallet.id).length}
 							</TableCell>
 							<TableCell className="text-right">
-								<WalletButton wallet={wallet} />
+								<WalletButton walletId={wallet.id} />
 							</TableCell>
 						</TableRow>
 					))}
