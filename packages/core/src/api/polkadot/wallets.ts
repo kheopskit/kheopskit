@@ -8,10 +8,15 @@ import {
 	parseWalletId,
 	type WalletId,
 } from "../../utils/WalletId";
+import { isRefusalMessage } from "../errors";
 import { createInjectedWallets$ } from "../injectedWallets";
 import type { KheopskitStore } from "../store";
 import type { KheopskitConfig } from "../types";
-import type { PolkadotInjected, PolkadotInjectedWallet } from "./types";
+import type {
+	PolkadotInjected,
+	PolkadotInjectedAccount,
+	PolkadotInjectedWallet,
+} from "./types";
 
 type EnableResult = {
 	accounts?: Partial<PolkadotInjected["accounts"]>;
@@ -36,12 +41,24 @@ const isPolkadotInjected = (
 	typeof injected.signer?.signPayload === "function" &&
 	typeof injected.signer.signRaw === "function";
 
-const enableExtension = async (identifier: string, appName: string) => {
+/**
+ * The list each extension last reported: read when its connect was granted,
+ * so the emission that first shows the wallet connected already lists it, and
+ * updated by every `subscribe` callback, so an accounts stream that restarts
+ * resumes from the current list rather than the connect-time one.
+ */
+export const latestAccounts = new WeakMap<
+	PolkadotInjected,
+	PolkadotInjectedAccount[]
+>();
+
+const connectExtension = async (identifier: string, appName: string) => {
 	const entry = (globalThis as InjectedWeb3Window).injectedWeb3?.[identifier];
 	if (!entry) throw new Error(`Unavailable extension: "${identifier}"`);
 	const injected = await entry.enable(appName);
 	if (!isPolkadotInjected(injected))
 		throw new Error(`Unsupported extension: "${identifier}"`);
+	latestAccounts.set(injected, await injected.accounts.get());
 	return injected;
 };
 
@@ -107,12 +124,13 @@ export const getPolkadotWallets$ = (
 			sources$: createWalletIdsPoller$(),
 			getWalletId: (walletId) => walletId,
 			connect: (walletId) =>
-				enableExtension(
+				connectExtension(
 					parseWalletId(walletId).identifier,
 					config.appName ||
 						config.walletConnect?.metadata.name ||
 						window.location.hostname,
 				),
+			isUserRejection: isRefusalMessage,
 			buildWallet: ({ walletId, handle, isConnected, connect, disconnect }) => {
 				const { identifier } = parseWalletId(walletId);
 				const extInfo = POLKADOT_EXTENSIONS[identifier];

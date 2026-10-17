@@ -53,9 +53,24 @@ const setReadyState = (value: DocumentReadyState) =>
 		configurable: true,
 	});
 
-const fireLoad = () => {
+const loadListeners: EventListener[] = [];
+
+const captureLoadListeners = () => {
+	const addEventListener = window.addEventListener.bind(window);
+	vi.spyOn(window, "addEventListener").mockImplementation(
+		(type, listener, options) => {
+			if (type === "load") loadListeners.push(listener as EventListener);
+			else addEventListener(type, listener, options);
+		},
+	);
+};
+
+const fireLoad = async () => {
 	setReadyState("complete");
-	window.dispatchEvent(new Event("load"));
+	for (const listener of [...loadListeners]) {
+		listener(new Event("load"));
+		await vi.advanceTimersByTimeAsync(0);
+	}
 };
 
 describe("getKheopskit$ cached account filtering", () => {
@@ -116,45 +131,48 @@ describe("getKheopskit$ discovery", () => {
 
 	beforeEach(() => {
 		vi.useFakeTimers();
+		captureLoadListeners();
 	});
 
 	afterEach(() => {
 		subscription?.unsubscribe();
+		loadListeners.length = 0;
+		vi.restoreAllMocks();
 		Reflect.deleteProperty(document, "readyState");
 		vi.useRealTimers();
 	});
 
-	it("isDiscovering is true before load and false after", () => {
+	it("isDiscovering is true before load and false after", async () => {
 		setReadyState("interactive");
 		const states = recordStates();
 
-		vi.advanceTimersByTime(1200);
+		await vi.advanceTimersByTimeAsync(1200);
 		expect(states.length).toBeGreaterThan(0);
 		expect(states.map((s) => s.isDiscovering)).not.toContain(false);
 
-		fireLoad();
-		vi.advanceTimersByTime(20);
+		await fireLoad();
+		await vi.advanceTimersByTimeAsync(20);
 		expect(states.at(-1)?.isDiscovering).toBe(false);
 	});
 
-	it("the emission that ends discovery already lists the extension present at load", () => {
+	it("the emission that ends discovery already lists the extension present at load", async () => {
 		setReadyState("interactive");
 		const states = recordStates();
 
-		vi.advanceTimersByTime(1200);
+		await vi.advanceTimersByTimeAsync(1200);
 		install({ name: "talisman" });
-		fireLoad();
-		vi.advanceTimersByTime(20);
+		await fireLoad();
+		await vi.advanceTimersByTimeAsync(20);
 
 		const settled = states.find((s) => s.isDiscovering === false);
 		expect(settled?.wallets.map((w) => w.id)).toEqual(["polkadot:talisman"]);
 	});
 
-	it("isDiscovering is false from the first emission when subscribed after load", () => {
+	it("isDiscovering is false from the first emission when subscribed after load", async () => {
 		setReadyState("complete");
 		const states = recordStates();
 
-		vi.advanceTimersByTime(20);
+		await vi.advanceTimersByTimeAsync(20);
 		expect(states[0]?.isDiscovering).toBe(false);
 	});
 });
@@ -165,15 +183,18 @@ describe("getKheopskit$ discovery while the WalletConnect connector loads", () =
 	beforeEach(() => {
 		vi.useFakeTimers();
 		walletConnect.connector$ = new Subject();
+		captureLoadListeners();
 	});
 
 	afterEach(() => {
 		subscription?.unsubscribe();
+		loadListeners.length = 0;
+		vi.restoreAllMocks();
 		Reflect.deleteProperty(document, "readyState");
 		vi.useRealTimers();
 	});
 
-	it("with a cached state, the emission that ends discovery already lists the extension present at load", () => {
+	it("with a cached state, the emission that ends discovery already lists the extension present at load", async () => {
 		setReadyState("interactive");
 		const store = memoryStore();
 		store.setCachedState(
@@ -186,12 +207,12 @@ describe("getKheopskit$ discovery while the WalletConnect connector loads", () =
 			{ store },
 		).subscribe((state) => states.push(state));
 
-		vi.advanceTimersByTime(1200);
+		await vi.advanceTimersByTimeAsync(1200);
 		install({ name: "talisman" });
-		fireLoad();
-		vi.advanceTimersByTime(20);
+		await fireLoad();
+		await vi.advanceTimersByTimeAsync(20);
 		walletConnect.connector$?.next(null);
-		vi.advanceTimersByTime(20);
+		await vi.advanceTimersByTimeAsync(20);
 
 		const settled = states.find((s) => s.isDiscovering === false);
 		expect(settled?.wallets.map((w) => w.id)).toEqual(["polkadot:talisman"]);

@@ -11,6 +11,9 @@ Full docs and the interactive playground: https://github.com/kheopskit/kheopskit
 > (and WalletConnect) optional peer dependencies. See
 > [MIGRATING_TO_V4.md](./MIGRATING_TO_V4.md).
 
+> **Upgrading from v5?** v6 changes the `connect()`/`disconnect()` contract and
+> the error codes. See [MIGRATING_TO_V6.md](./MIGRATING_TO_V6.md).
+
 ## Install
 
 `rxjs` is always required; every platform SDK (and WalletConnect) is an optional
@@ -63,6 +66,29 @@ carries the SDK-free `KheopskitConfig`, `KheopskitState`, `BaseWallet` and
 > carrying only the base fields — SDK fields (`signer`, `client`,
 > provider/extension handles) are absent until hydration completes.
 
+`wallet.connect()` and `wallet.disconnect()` are safe to call straight from UI
+code. Concurrent `connect()` calls on one wallet share one platform attempt, so
+the extension is asked once, and each call gets its own promise. A repeat call
+on a wallet that is already connected (or disconnected) resolves at once.
+`connect({ signal })` rejects that caller with a `KheopskitError` of code
+`ABORTED` when the signal fires before the platform answers. An abort after the
+platform granted the connect changes nothing. A refused prompt rejects with
+`USER_REJECTED` and any other failure with `CONNECT_FAILED`. Both carry the
+platform error as `cause`. `connect()` resolves only after `kheopskit$` has
+emitted the wallet with `isConnected: true`. On platforms that list accounts
+asynchronously (Ethereum `eth_accounts`) the accounts may arrive in a later
+emission. No emission shows a disconnected wallet still listing accounts.
+Until a fix tracked for 6.0.0 lands, an Ethereum wallet that reconnects while
+another connected Ethereum wallet's `eth_accounts` request is pending may show
+the accounts of its previous connection for as long as that request goes
+unanswered, and `connect()` may resolve on that emission. `disconnect()`
+resolves once it has emitted `isConnected: false`, or once a later `connect()`
+or the end of the subscription makes that emission impossible. After the last
+subscriber has unsubscribed, `connect()` and `disconnect()` on a wallet object
+from that subscription reject `ABORTED` without asking the platform. There is
+no default timeout: pass `AbortSignal.timeout(ms)` to cap the wait for the
+platform's answer.
+
 `state.isDiscovering` is `true` until the page has fired `load` and kheopskit
 has read `window.injectedWeb3` again, so the emission that turns it `false`
 already lists every Polkadot extension injected by then. Wait for it before you
@@ -81,7 +107,10 @@ Sign Request screen for hex; the screen follows the text `data`, not `type`.
 Enkrypt reads `type` as the encoding of `data`, so it needs the value the
 derived default sends. On a connected Polkadot wallet, `wallet.extension` is the raw object
 `enable()` returned, typed as `PolkadotInjected`. Use it for extension calls
-kheopskit does not wrap.
+kheopskit does not wrap. `connect()` reads `accounts.get()` before it resolves,
+so the emission that first shows the wallet connected already lists its
+accounts, and a rejected `accounts.get()` fails the connect with
+`CONNECT_FAILED`.
 
 ## Persisted store
 
@@ -166,8 +195,8 @@ extension. It has no test-runner dependency, so it works with vitest and jest.
   `window.injectedWeb3[name]`. `options.name` defaults to `"fake-extension"`.
   `options.accounts` is the account list. `options.enable` sets how `enable()`
   answers: `"resolve"` (the default) at once, `"reject"` at once with
-  `new Error("Rejected")` (what Talisman rejects with), or `"hold"` until the
-  test calls `resolveEnable()` or `rejectEnable(error?)`.
+  `new Error("Rejected")`, which `connect()` reports as `USER_REJECTED`, or
+  `"hold"` until the test calls `resolveEnable()` or `rejectEnable(error?)`.
 - The fake returns `{ name, walletId, setAccounts, resolveEnable, rejectEnable,
   enableCalls, signRawCalls, uninstall }`. `setAccounts(accounts)` pushes the
   list to every `accounts.subscribe` listener. `enableCalls()` lists the app

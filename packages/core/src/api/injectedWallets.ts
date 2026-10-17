@@ -5,11 +5,12 @@ import {
 	map,
 	Observable,
 	shareReplay,
+	tap,
 } from "rxjs";
 import type { WalletId } from "../utils/WalletId";
-import { KheopskitError } from "./errors";
+import { abortedError, toConnectError } from "./errors";
 import type { KheopskitStore } from "./store";
-import type { BaseWallet } from "./types";
+import type { BaseWallet, ConnectOptions } from "./types";
 
 /**
  * Compare two wallet arrays by their relevant properties (not functions).
@@ -54,6 +55,9 @@ export type InjectedWalletsAdapter<
 	 * live handle until disconnect.
 	 */
 	connect: (source: TSource, walletId: WalletId) => Promise<THandle>;
+	/** `true` maps the platform's rejection to `USER_REJECTED`; absent means never. */
+	isUserRejection?: (error: unknown) => boolean;
+	releaseAbandonedHandle?: (handle: THandle, walletId: WalletId) => void;
 	/**
 	 * Optional platform disconnect call, awaited before local state clears so a
 	 * failed disconnect rejects without desyncing the connected list.
@@ -71,17 +75,54 @@ export type InjectedWalletsAdapter<
 		/** Live connection handle; `undefined` while disconnected. */
 		handle: THandle | undefined;
 		isConnected: boolean;
-		connect: () => Promise<void>;
+		connect: (options?: ConnectOptions) => Promise<void>;
 		disconnect: () => Promise<void>;
 	}) => TWallet;
 };
 
+type Connecting = {
+	status: "connecting";
+	promise: Promise<void>;
+	anchored: boolean;
+	waiting: number;
+	answered: boolean;
+	abort: () => void;
+};
+
+type Connection<THandle> =
+	| Connecting
+	| { status: "connected"; handle: THandle; disconnecting?: Promise<void> };
+
+const join = (
+	connecting: Connecting,
+	walletId: WalletId,
+	signal: AbortSignal | undefined,
+): Promise<void> => {
+	if (!signal) {
+		connecting.anchored = true;
+		return connecting.promise;
+	}
+	connecting.waiting++;
+	return new Promise<void>((resolve, reject) => {
+		const leave = () => {
+			if (connecting.answered) return;
+			reject(abortedError(walletId, "connect"));
+			connecting.waiting--;
+			if (!connecting.anchored && connecting.waiting === 0) connecting.abort();
+		};
+		signal.addEventListener("abort", leave, { once: true });
+		connecting.promise
+			.then(resolve, reject)
+			.finally(() => signal.removeEventListener("abort", leave));
+	});
+};
+
 /**
  * The shared engine behind every platform's injected-wallets stream: tracks
- * connected wallets (and their live handles), guards double
- * connect/disconnect, persists connected ids to the store for auto-reconnect,
- * and re-emits the wallet list whenever the registry or connection state
- * changes.
+ * each wallet's connection (pending attempt or live handle), shares one
+ * in-flight connect per wallet, persists connected ids to the store for
+ * auto-reconnect, and re-emits the wallet list whenever the registry or
+ * connection state changes.
  */
 export const createInjectedWallets$ = <
 	TSource,
@@ -92,55 +133,176 @@ export const createInjectedWallets$ = <
 	adapter: InjectedWalletsAdapter<TSource, TWallet, THandle>,
 ): Observable<TWallet[]> =>
 	new Observable<TWallet[]>((subscriber) => {
-		const handles$ = new BehaviorSubject<Map<WalletId, THandle>>(new Map());
+		const connections$ = new BehaviorSubject<
+			ReadonlyMap<WalletId, Connection<THandle>>
+		>(new Map());
+		const teardown = new AbortController();
+		let present = new Set<WalletId>();
 
-		const connect = async (source: TSource, walletId: WalletId) => {
-			if (handles$.value.has(walletId))
-				throw new KheopskitError(
-					"WALLET_ALREADY_CONNECTED",
-					`wallet ${walletId} is already connected`,
-					{ walletId },
-				);
-
-			const handle = await adapter.connect(source, walletId);
-
-			const next = new Map(handles$.value);
-			next.set(walletId, handle);
-			handles$.next(next);
-
-			store.rememberWallet(walletId);
+		const abortConnectsOfSourcesThatLeft = (sources: readonly TSource[]) => {
+			present = new Set(sources.map((source) => adapter.getWalletId(source)));
+			for (const [walletId, connection] of connections$.value)
+				if (connection.status === "connecting" && !present.has(walletId))
+					connection.abort();
 		};
 
-		const disconnect = async (source: TSource, walletId: WalletId) => {
-			if (!handles$.value.has(walletId))
-				throw new KheopskitError(
-					"WALLET_NOT_CONNECTED",
-					`wallet ${walletId} is not connected`,
-					{ walletId },
+		const setConnection = (
+			walletId: WalletId,
+			connection: Connection<THandle> | undefined,
+		) => {
+			const next = new Map(connections$.value);
+			if (connection) next.set(walletId, connection);
+			else next.delete(walletId);
+			connections$.next(next);
+		};
+
+		const startConnect = (
+			source: TSource,
+			walletId: WalletId,
+			signal: AbortSignal | undefined,
+		): Promise<void> => {
+			const controller = new AbortController();
+			const promise = new Promise<void>((resolve, reject) => {
+				controller.signal.addEventListener(
+					"abort",
+					() => {
+						setConnection(walletId, undefined);
+						reject(abortedError(walletId, "connect"));
+					},
+					{ once: true },
 				);
+				new Promise<THandle>((res) =>
+					res(adapter.connect(source, walletId)),
+				).then(
+					(handle) => {
+						connecting.answered = true;
+						if (controller.signal.aborted) {
+							adapter.releaseAbandonedHandle?.(handle, walletId);
+							return;
+						}
+						setConnection(walletId, { status: "connected", handle });
+						resolve();
+						store.rememberWallet(walletId);
+					},
+					(error) => {
+						connecting.answered = true;
+						if (controller.signal.aborted) return;
+						setConnection(walletId, undefined);
+						reject(
+							toConnectError(
+								error,
+								walletId,
+								adapter.isUserRejection ?? (() => false),
+							),
+						);
+					},
+				);
+			});
+			const connecting: Connecting = {
+				status: "connecting",
+				promise,
+				anchored: false,
+				waiting: 0,
+				answered: false,
+				abort: () => {
+					if (connections$.value.get(walletId) === connecting)
+						controller.abort();
+				},
+			};
+			setConnection(walletId, connecting);
+			return join(connecting, walletId, signal);
+		};
 
-			await adapter.disconnect?.(source, walletId);
+		const untilSettled = (
+			disconnecting: Promise<void>,
+			walletId: WalletId,
+			signal: AbortSignal | undefined,
+		): Promise<void> =>
+			new Promise<void>((resolve, reject) => {
+				const signals = signal ? [teardown.signal, signal] : [teardown.signal];
+				const settle = () => {
+					for (const s of signals) s.removeEventListener("abort", settle);
+					if (signals.some((s) => s.aborted))
+						reject(abortedError(walletId, "connect"));
+					else resolve();
+				};
+				if (signals.some((s) => s.aborted)) return settle();
+				for (const s of signals)
+					s.addEventListener("abort", settle, { once: true });
+				disconnecting.then(settle, settle);
+			});
 
-			const next = new Map(handles$.value);
-			next.delete(walletId);
-			handles$.next(next);
+		const connect = (
+			source: TSource,
+			walletId: WalletId,
+			options?: ConnectOptions,
+		): Promise<void> => {
+			if (teardown.signal.aborted || !present.has(walletId))
+				return Promise.reject(abortedError(walletId, "connect"));
+			const current = connections$.value.get(walletId);
+			if (current?.status === "connected") {
+				if (!current.disconnecting) return Promise.resolve();
+				return untilSettled(
+					current.disconnecting,
+					walletId,
+					options?.signal,
+				).then(() => connect(source, walletId, options));
+			}
+			if (options?.signal?.aborted)
+				return Promise.reject(abortedError(walletId, "connect"));
+			if (current?.status === "connecting")
+				return join(current, walletId, options?.signal);
+			return startConnect(source, walletId, options?.signal);
+		};
+
+		const disconnect = (source: TSource, walletId: WalletId): Promise<void> => {
+			const current = connections$.value.get(walletId);
+			if (!current) return Promise.resolve();
+			if (current.status === "connecting") {
+				current.abort();
+				return Promise.resolve();
+			}
+			if (current.disconnecting) return current.disconnecting;
 
 			store.forgetWallet(walletId);
-
-			adapter.onDisconnected?.(walletId);
+			const disconnecting = (async () => {
+				try {
+					await adapter.disconnect?.(source, walletId);
+				} catch (error) {
+					if (!teardown.signal.aborted) {
+						setConnection(walletId, {
+							status: "connected",
+							handle: current.handle,
+						});
+						store.rememberWallet(walletId);
+					}
+					throw error;
+				}
+				if (teardown.signal.aborted) return;
+				setConnection(walletId, undefined);
+				adapter.onDisconnected?.(walletId);
+			})();
+			setConnection(walletId, { ...current, disconnecting });
+			return disconnecting;
 		};
 
-		const sub = combineLatest([adapter.sources$, handles$])
+		const sub = combineLatest([
+			adapter.sources$.pipe(tap(abortConnectsOfSourcesThatLeft)),
+			connections$,
+		])
 			.pipe(
-				map(([sources, handles]) =>
+				map(([sources, connections]) =>
 					sources.map((source): TWallet => {
 						const walletId = adapter.getWalletId(source);
+						const connection = connections.get(walletId);
+						const connected =
+							connection?.status === "connected" ? connection : undefined;
 						return adapter.buildWallet({
 							source,
 							walletId,
-							handle: handles.get(walletId),
-							isConnected: handles.has(walletId),
-							connect: () => connect(source, walletId),
+							handle: connected?.handle,
+							isConnected: connected !== undefined,
+							connect: (options) => connect(source, walletId, options),
 							disconnect: () => disconnect(source, walletId),
 						});
 					}),
@@ -150,6 +312,9 @@ export const createInjectedWallets$ = <
 			.subscribe(subscriber);
 
 		return () => {
+			teardown.abort();
+			for (const connection of connections$.value.values())
+				if (connection.status === "connecting") connection.abort();
 			sub.unsubscribe();
 		};
 	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));

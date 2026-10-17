@@ -6,6 +6,7 @@ import type {
 } from "viem";
 import type { WalletAccountId } from "../../utils/WalletAccountId";
 import type { WalletId } from "../../utils/WalletId";
+import type { BaseWallet } from "../types";
 
 export type EthereumInjectedWallet = {
 	platform: "ethereum";
@@ -21,8 +22,8 @@ export type EthereumInjectedWallet = {
 	name: string;
 	icon: string;
 	isConnected: boolean;
-	connect: () => Promise<void>;
-	disconnect: () => Promise<void>;
+	connect: BaseWallet["connect"];
+	disconnect: BaseWallet["disconnect"];
 };
 
 export type EthereumWallet = EthereumInjectedWallet;

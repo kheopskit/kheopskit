@@ -7,7 +7,11 @@ import type {
 import { Observable, shareReplay } from "rxjs";
 import { clearCachedObservablesByPrefix } from "../../utils/getCachedObservable";
 import { getWalletId } from "../../utils/WalletId";
-import { KheopskitError } from "../errors";
+import {
+	isEip1193UserRejection,
+	isRefusalMessage,
+	KheopskitError,
+} from "../errors";
 import { createInjectedWallets$ } from "../injectedWallets";
 import type { KheopskitStore } from "../store";
 import { isSolanaChainId, type SolanaChainId } from "./chains";
@@ -76,6 +80,8 @@ export const getSolanaWallets$ = (store: KheopskitStore) =>
 
 			await feature.connect();
 		},
+		isUserRejection: (error) =>
+			isEip1193UserRejection(error) || isRefusalMessage(error),
 		// standard:disconnect is an optional feature. Await it when present so a
 		// failed disconnect rejects the returned promise; if absent we still
 		// clear local state.

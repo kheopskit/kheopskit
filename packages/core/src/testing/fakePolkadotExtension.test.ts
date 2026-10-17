@@ -101,7 +101,10 @@ describe("createFakePolkadotExtension", () => {
 		await nextMacrotask();
 		fake.rejectEnable();
 
-		await expect(connecting).rejects.toThrow("Rejected");
+		await expect(connecting).rejects.toMatchObject({
+			code: "USER_REJECTED",
+			cause: new Error("Rejected"),
+		});
 		expect((await kheopskit.wallet()).isConnected).toBe(false);
 	});
 
@@ -111,18 +114,23 @@ describe("createFakePolkadotExtension", () => {
 
 		const connecting = (await kheopskit.wallet()).connect();
 		await nextMacrotask();
-		fake.rejectEnable(new Error("Pending authorisation request"));
+		const pending = new Error("Pending authorisation request");
+		fake.rejectEnable(pending);
 
-		await expect(connecting).rejects.toThrow("Pending authorisation request");
+		await expect(connecting).rejects.toMatchObject({
+			code: "CONNECT_FAILED",
+			cause: pending,
+		});
 	});
 
 	it("rejects at once with Rejected", async () => {
 		const fake = install({ enable: "reject" });
 		const kheopskit = kheopskitFor(fake);
 
-		await expect((await kheopskit.wallet()).connect()).rejects.toThrow(
-			"Rejected",
-		);
+		await expect((await kheopskit.wallet()).connect()).rejects.toMatchObject({
+			code: "USER_REJECTED",
+			cause: new Error("Rejected"),
+		});
 		expect(fake.enableCalls()).toEqual(["Kit Test"]);
 	});
 
@@ -146,6 +154,17 @@ describe("createFakePolkadotExtension", () => {
 		);
 
 		expect(heard).toEqual([[alice.address]]);
+	});
+
+	it("answers accounts.get() with the current list", async () => {
+		const fake = install({ accounts: [alice] });
+		const extension = await window.injectedWeb3?.[fake.name]?.enable("app");
+		const addresses = async () =>
+			(await extension?.accounts.get())?.map((account) => account.address);
+
+		expect(await addresses()).toEqual([alice.address]);
+		fake.setAccounts([bob]);
+		expect(await addresses()).toEqual([bob.address]);
 	});
 
 	it("counts enable() calls and records signRaw calls", async () => {
