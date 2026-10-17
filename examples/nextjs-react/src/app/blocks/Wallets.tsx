@@ -1,6 +1,6 @@
 "use client";
 
-import { isWalletConnectWallet } from "@kheopskit/core";
+import { type BaseWallet, isWalletConnectWallet } from "@kheopskit/core";
 import Image from "next/image";
 import type { FC } from "react";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,30 @@ const WalletIcon: FC<{
 	);
 };
 
+const WalletButton = ({
+	wallet,
+}: {
+	wallet: Pick<BaseWallet, "status" | "connect" | "disconnect">;
+}) => {
+	if (wallet.status === "connected")
+		return (
+			<Button className="w-28" onClick={() => wallet.disconnect()}>
+				Disconnect
+			</Button>
+		);
+	if (wallet.status === "connecting")
+		return (
+			<Button className="w-28" disabled>
+				Connecting…
+			</Button>
+		);
+	return (
+		<Button className="w-28" onClick={() => wallet.connect()}>
+			Connect
+		</Button>
+	);
+};
+
 export const Wallets = () => {
 	const { wallets, accounts, isDiscovering } = useWallets();
 
@@ -77,22 +101,21 @@ export const Wallets = () => {
 							<TableCell>
 								<div className="flex gap-2 items-center">
 									<WalletIcon icon={wallet.icon} name={wallet.name} />
-									<div>{wallet.name}</div>
+									<div>
+										{wallet.name}
+										{wallet.error && (
+											<div className="text-xs text-destructive">
+												{wallet.error.message}
+											</div>
+										)}
+									</div>
 								</div>
 							</TableCell>
 							<TableCell className="text-right">
 								{accounts.filter((a) => a.walletId === wallet.id).length}
 							</TableCell>
 							<TableCell className="text-right">
-								{wallet.isConnected ? (
-									<Button className="w-28" onClick={() => wallet.disconnect()}>
-										Disconnect
-									</Button>
-								) : (
-									<Button className="w-28" onClick={() => wallet.connect()}>
-										Connect
-									</Button>
-								)}
+								<WalletButton wallet={wallet} />
 							</TableCell>
 						</TableRow>
 					))}

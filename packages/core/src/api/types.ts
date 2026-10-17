@@ -1,6 +1,7 @@
 import type { Observable } from "rxjs";
 import type { WalletAccountId } from "../utils";
 import type { WalletId } from "../utils/WalletId";
+import type { KheopskitError } from "./errors";
 
 export type WalletPlatform = "polkadot" | "ethereum" | "solana";
 
@@ -43,6 +44,12 @@ export type AppKitInstance = {
 
 export type WalletType = "injected" | "walletconnect";
 
+/**
+ * Where a wallet stands with the dapp. `connecting` covers a `connect()` call
+ * in flight and an auto-reconnect in flight alike.
+ */
+export type WalletStatus = "disconnected" | "connecting" | "connected";
+
 export type PolkadotAccountType = "sr25519" | "ed25519" | "ecdsa" | "ethereum";
 
 /** Options accepted by {@link BaseWallet.connect}. */
@@ -73,6 +80,20 @@ export type BaseWallet = {
 	type: WalletType;
 	name: string;
 	icon: string;
+	/**
+	 * `connecting` while a `connect()` call or an auto-reconnect waits for the
+	 * platform, `connected` once the platform granted it, `disconnected`
+	 * otherwise. On a reload, a remembered wallet kheopskit will reconnect is
+	 * `connecting` from the first frame.
+	 */
+	status: WalletStatus;
+	/**
+	 * The last `connect()` or auto-reconnect that the platform refused or
+	 * failed (`USER_REJECTED` or `CONNECT_FAILED`). Cleared when the next
+	 * attempt starts. An aborted attempt sets nothing.
+	 */
+	error?: KheopskitError;
+	/** `status === "connected"`. */
 	isConnected: boolean;
 	/**
 	 * Connects the wallet.
@@ -173,6 +194,16 @@ export type WalletConnectWallet = {
 	appKit: AppKitInstance;
 	name: string;
 	icon: string;
+	/**
+	 * `connecting` while `connect()` opens the modal, `connected` while a
+	 * session is live, `disconnected` otherwise. On a reload with a cached
+	 * session it is `connecting` until AppKit restores the session or hydration
+	 * ends.
+	 */
+	status: WalletStatus;
+	/** The last `connect()` whose modal failed to open. Cleared by the next call. */
+	error?: KheopskitError;
+	/** `status === "connected"`. */
 	isConnected: boolean;
 	/**
 	 * Opens the WalletConnect modal and resolves once it is open; `isConnected`
@@ -298,7 +329,38 @@ export type WalletOf<T> = T extends {
 export type KheopskitConfig<
 	P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],
 > = {
-	autoReconnect: boolean;
+	/**
+	 * Which remembered injected wallets kheopskit reconnects after a reload.
+	 *
+	 * A wallet is remembered on every successful `connect()` and forgotten on
+	 * `disconnect()`, whatever this option says; the list is the store's
+	 * `remembered`. `true` reconnects every remembered injected wallet, `false`
+	 * none, and a function is asked for each cached connected injected wallet
+	 * on the first frame, then for each remembered one with its live object
+	 * before the attempt. The function must be synchronous and pure. It runs on
+	 * the server and on the client for the same input and both must agree, or
+	 * the markup diverges. It receives the {@link BaseWallet} fields only, so
+	 * key on `id`.
+	 *
+	 * The WalletConnect row is not governed by this option: AppKit restores its
+	 * own session on load, and the row hydrates `connecting` while it does.
+	 *
+	 * A reconnect never prompts while the site stays authorised in the
+	 * extension. When the authorisation was revoked the extension prompts once;
+	 * a refusal forgets the wallet, so the next load stays silent. A manual
+	 * `connect()` or `disconnect()` on a remembered wallet ends its automatic
+	 * reconnect for the session, so a disconnect the user makes is never undone.
+	 * Automatic reconnect also ends when the wallet disappears mid-attempt; the
+	 * wallet stays remembered for the next load.
+	 *
+	 * A wallet this accepts shows `status: "connecting"` from the first frame
+	 * until its attempt settles. A wallet this rejects shows `disconnected`
+	 * from the first frame, without its cached accounts, so nothing flashes
+	 * from connected to disconnected.
+	 *
+	 * @default true
+	 */
+	autoReconnect: boolean | ((wallet: BaseWallet) => boolean);
 	/**
 	 * Platform plugins to enable, e.g. `[polkadot(), solana({ chain })]`.
 	 * Import factories from `@kheopskit/core/<platform>`.

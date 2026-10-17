@@ -7,17 +7,21 @@ import {
 	of,
 	shareReplay,
 	take,
+	tap,
 } from "rxjs";
 import { sortWallets } from "../utils/sortWallets";
 import { getWalletConnectWallet$ } from "./appKit";
-import { createReconnectPolicy } from "./reconnectPolicy";
+import { KheopskitError } from "./errors";
+import { createReconnectPolicy, reconnectAccepts } from "./reconnectPolicy";
 import type { KheopskitStore } from "./store";
 import type {
 	BaseWallet,
+	ConnectOptions,
 	KheopskitConfig,
 	PlatformContext,
 	WalletConnectWallet,
 } from "./types";
+import { isInjectedWallet } from "./types";
 
 export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 	// lock the list of wallets to auto reconnect on first call
@@ -33,13 +37,27 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 			plugin.getWallets$(ctx),
 		);
 
+		const reconnectPolicy = createReconnectPolicy();
+
+		const settleOnUserCall = <W extends BaseWallet>(wallet: W): W => ({
+			...wallet,
+			connect: (options?: ConnectOptions) => {
+				reconnectPolicy.settle(wallet.id);
+				return wallet.connect(options);
+			},
+			disconnect: () => {
+				reconnectPolicy.settle(wallet.id);
+				return wallet.disconnect();
+			},
+		});
+
 		const platformWallets$ = observables.length
 			? combineLatest(observables).pipe(map((wallets) => wallets.flat()))
 			: of<BaseWallet[]>([]);
 
 		// The single, platform-less WalletConnect connector is appended here (not
 		// emitted per platform). It sorts last (see sortWallets).
-		const wallets$ = combineLatest([
+		const rawWallets$ = combineLatest([
 			platformWallets$,
 			getWalletConnectWallet$(config),
 		]).pipe(
@@ -52,25 +70,53 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 			// Note: No startWith([]) here - the hydration buffer handles initial state
 		);
 
-		const reconnectPolicy = createReconnectPolicy();
-
-		const subAutoReconnect = combineLatest([wallets$, rememberedWalletIds$])
-			.pipe(
-				filter(([, walletIds]) => config.autoReconnect && !!walletIds?.length),
-				mergeMap(([wallets, walletIds]) =>
-					wallets.filter((wallet) => walletIds?.includes(wallet.id)),
+		const wallets$ = rawWallets$.pipe(
+			map((wallets) =>
+				wallets.map((wallet) =>
+					isInjectedWallet(wallet) ? settleOnUserCall(wallet) : wallet,
 				),
-			)
-			.subscribe(async (wallet) => {
-				if (wallet.isConnected) return;
-				try {
-					await reconnectPolicy.attempt(wallet.id, () => wallet.connect());
-				} catch (err) {
-					console.error("Failed to reconnect wallet %s", wallet.id, { err });
+			),
+		);
+
+		const reconnect = async (wallet: BaseWallet) => {
+			try {
+				await reconnectPolicy.attempt(wallet.id, () => wallet.connect());
+			} catch (err) {
+				if (subscriber.closed) return;
+				if (err instanceof KheopskitError) {
+					if (err.code === "USER_REJECTED") store.forgetWallet(wallet.id);
+					if (err.code === "USER_REJECTED" || err.code === "ABORTED")
+						reconnectPolicy.settle(wallet.id);
 				}
-			});
+				if (config.debug)
+					console.debug("[kheopskit] reconnect of %s failed", wallet.id, err);
+			}
+		};
 
 		const subWallets = wallets$.subscribe(subscriber);
+		if (subscriber.closed) return subWallets;
+
+		const subAutoReconnect = combineLatest([rawWallets$, rememberedWalletIds$])
+			.pipe(
+				filter(
+					([, walletIds]) =>
+						config.autoReconnect !== false && walletIds.length > 0,
+				),
+				mergeMap(([wallets, walletIds]) =>
+					wallets
+						.filter(isInjectedWallet)
+						.filter((wallet) => walletIds.includes(wallet.id)),
+				),
+				tap((wallet) => {
+					if (wallet.status === "connected") reconnectPolicy.settle(wallet.id);
+				}),
+				filter(
+					(wallet) =>
+						wallet.status === "disconnected" &&
+						reconnectAccepts(config.autoReconnect, wallet),
+				),
+			)
+			.subscribe(reconnect);
 
 		return () => {
 			subAutoReconnect.unsubscribe();

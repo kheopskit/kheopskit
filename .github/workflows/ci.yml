@@ -65,7 +65,7 @@ jobs:
           # `git merge-base main HEAD` fails where no refs/heads/main exists, and
           # a checkout of a pull request has none. That failure reaches the gate
           # as "no release plan", i.e. a bogus "Missing changeset".
-          git fetch --no-tags --force origin "+refs/heads/$BASE_REF:refs/heads/$BASE_REF"
+          git fetch --no-tags --force origin "+refs/heads/$BASE_REF:refs/heads/$BASE_REF" "+refs/heads/main:refs/heads/main"
           pnpm check:changeset
 
   e2e:

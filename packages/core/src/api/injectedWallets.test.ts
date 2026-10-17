@@ -21,12 +21,22 @@ const makeAdapter = (
 	sources$,
 	getWalletId: () => walletId,
 	connect: vi.fn().mockResolvedValue("handle"),
-	buildWallet: ({ walletId, handle, isConnected, connect, disconnect }) => ({
+	buildWallet: ({
+		walletId,
+		handle,
+		status,
+		error,
+		isConnected,
+		connect,
+		disconnect,
+	}) => ({
 		id: walletId,
 		platform: "polkadot",
 		type: "injected",
 		name: `Fake ${handle ?? ""}`.trim(),
 		icon: "",
+		status,
+		error,
 		isConnected,
 		connect,
 		disconnect,
@@ -708,6 +718,97 @@ describe("createInjectedWallets$", () => {
 
 		sources$.next([{ name: "fake" }]);
 		expect(emissions.length).toBe(1);
+
+		sub.unsubscribe();
+	});
+});
+
+describe("createInjectedWallets$ status", () => {
+	beforeEach(() => {
+		localStorage.clear();
+	});
+
+	it("a user connect shows connecting until it settles and records the error on failure", async () => {
+		const first = createDeferred<string>();
+		const second = createDeferred<string>();
+		const connect = vi
+			.fn()
+			.mockReturnValueOnce(first.promise)
+			.mockReturnValueOnce(second.promise);
+		const { sub, wallet } = setup({ connect });
+
+		expect([wallet().status, wallet().isConnected, wallet().error]).toEqual([
+			"disconnected",
+			false,
+			undefined,
+		]);
+
+		const attempt = wallet().connect();
+		expect([wallet().status, wallet().isConnected]).toEqual([
+			"connecting",
+			false,
+		]);
+
+		first.reject(new Error("locked"));
+		await expect(attempt).rejects.toMatchObject({ code: "CONNECT_FAILED" });
+		expect([wallet().status, wallet().isConnected]).toEqual([
+			"disconnected",
+			false,
+		]);
+		expect(wallet().error?.code).toBe("CONNECT_FAILED");
+		expect(wallet().error?.cause).toEqual(new Error("locked"));
+
+		const retry = wallet().connect();
+		expect([wallet().status, wallet().error]).toEqual([
+			"connecting",
+			undefined,
+		]);
+
+		second.resolve("handle");
+		await retry;
+		expect([wallet().status, wallet().isConnected, wallet().error]).toEqual([
+			"connected",
+			true,
+			undefined,
+		]);
+
+		sub.unsubscribe();
+	});
+
+	it("a disconnect on a wallet whose connect failed resolves at once and keeps the error", async () => {
+		const disconnect = vi.fn().mockResolvedValue(undefined);
+		const { sub, wallet } = setup({
+			connect: vi.fn().mockRejectedValue(new Error("locked")),
+			disconnect,
+		});
+
+		await expect(wallet().connect()).rejects.toMatchObject({
+			code: "CONNECT_FAILED",
+		});
+		await expect(wallet().disconnect()).resolves.toBeUndefined();
+
+		expect(disconnect).not.toHaveBeenCalled();
+		expect([wallet().status, wallet().error?.code]).toEqual([
+			"disconnected",
+			"CONNECT_FAILED",
+		]);
+
+		sub.unsubscribe();
+	});
+
+	it("an aborted connect leaves no error", async () => {
+		const deferred = createDeferred<string>();
+		const { sub, wallet } = setup({ connect: vi.fn(() => deferred.promise) });
+		const controller = new AbortController();
+
+		const attempt = wallet().connect({ signal: controller.signal });
+		controller.abort();
+		await expect(attempt).rejects.toMatchObject({ code: "ABORTED" });
+
+		expect([wallet().status, wallet().error]).toEqual([
+			"disconnected",
+			undefined,
+		]);
 
 		sub.unsubscribe();
 	});
