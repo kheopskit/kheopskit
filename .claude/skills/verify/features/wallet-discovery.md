@@ -37,7 +37,7 @@ Preconditions:
 .claude/skills/verify/scripts/run.sh vite-react e2e/tests/discovery-at-load.spec.ts
 ```
 
-- **Race.** The init script `e2e/mocks/late-wallet.js` injects `late-mock-wallet` 1500 ms after kheopskit's first `injectedWeb3` read, and inserts an image at `DOMContentLoaded` that the spec holds for 2500 ms, so `load` fires after the injection. The injection is timed from that first read, not from `DOMContentLoaded`, because nextjs-react and tanstack-start subscribe 200 to 350 ms after `DOMContentLoaded`, which leaves too little margin past the 1100 ms poll.
+- **Race.** The init script `e2e/mocks/late-wallet.js` injects `late-mock-wallet` 1500 ms after kheopskit's first `injectedWeb3` read, and inserts an image at `DOMContentLoaded`. The spec holds that image until the injection has happened, so `load` always fires after it. The injection is timed from that first read, not from `DOMContentLoaded`, because nextjs-react and tanstack-start subscribe 200 to 350 ms after `DOMContentLoaded`, which leaves too little margin past the 1100 ms poll.
 - **Expected end state.** `Looking for wallets…` is visible until `load` and hidden after. The `late-mock-wallet` row appears no later than 300 ms after `load`.
 - **Proof.** The spec attaches `discovery-timestamps.json` (registry reads, injection, `load`, first row frame, status shown and hidden) and logs the `load`-to-row delay.
 

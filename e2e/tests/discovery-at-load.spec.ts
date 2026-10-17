@@ -2,7 +2,6 @@ import path from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 
 const MOCKS_DIR = path.join(__dirname, "..", "mocks");
-const HOLD_LOAD_MS = 2500;
 const MAX_LOAD_TO_ROW_MS = 300;
 const POLL_TAIL_MS = 1100;
 
@@ -38,7 +37,11 @@ test("a wallet injected after the poll tail but before load is listed at load", 
 		(url) =>
 			url.pathname === "/kheopskit-square.svg" && url.search === "?hold-load",
 		async (route) => {
-			await new Promise((resolve) => setTimeout(resolve, HOLD_LOAD_MS));
+			await page.waitForFunction(
+				() =>
+					(window as unknown as { __discoveryMarks: DiscoveryMarks })
+						.__discoveryMarks.injected !== null,
+			);
 			await route.continue();
 		},
 	);
