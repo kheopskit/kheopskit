@@ -1,6 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createKheopskitStore } from "../api/store";
+import { parseCookie, type SyncableStorage } from "../utils/storage";
 import type { WalletId } from "../utils/WalletId";
+import type { KheopskitStoreData } from "./types";
 
 describe("createKheopskitStore", () => {
 	const STORAGE_KEY = "kheopskit";
@@ -18,9 +20,9 @@ describe("createKheopskitStore", () => {
 	});
 
 	describe("without ssrCookies (localStorage mode)", () => {
-		it("creates a store with empty autoReconnect by default", () => {
+		it("creates a store with empty remembered list by default", () => {
 			const kstore = createKheopskitStore();
-			const values: { autoReconnect?: WalletId[] }[] = [];
+			const values: { remembered?: WalletId[] }[] = [];
 			const sub = kstore.observable.subscribe((v) => values.push(v));
 			expect(values[0]).toEqual({});
 			sub.unsubscribe();
@@ -28,130 +30,208 @@ describe("createKheopskitStore", () => {
 
 		it("reads existing data from localStorage", () => {
 			const existingData = {
-				autoReconnect: ["polkadot:talisman"] as WalletId[],
+				remembered: ["polkadot:talisman"] as WalletId[],
 			};
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(existingData));
 
 			const kstore = createKheopskitStore();
-			const values: { autoReconnect?: WalletId[] }[] = [];
+			const values: { remembered?: WalletId[] }[] = [];
 			const sub = kstore.observable.subscribe((v) => values.push(v));
 			expect(values[0]).toEqual(existingData);
 			sub.unsubscribe();
 		});
 
-		it("addEnabledWalletId adds wallet to autoReconnect", () => {
+		it("rememberWallet adds wallet to remembered", () => {
 			const kstore = createKheopskitStore();
 			const walletId = "polkadot:polkadot-js" as WalletId;
 
-			kstore.addEnabledWalletId(walletId);
+			kstore.rememberWallet(walletId);
 
-			const values: { autoReconnect?: WalletId[] }[] = [];
+			const values: { remembered?: WalletId[] }[] = [];
 			const sub = kstore.observable.subscribe((v) => values.push(v));
-			expect(values[0]?.autoReconnect).toContain(walletId);
+			expect(values[0]?.remembered).toContain(walletId);
 			sub.unsubscribe();
 		});
 
-		it("addEnabledWalletId does not duplicate wallets", () => {
+		it("rememberWallet does not duplicate wallets", () => {
 			const kstore = createKheopskitStore();
 			const walletId = "polkadot:subwallet-js" as WalletId;
 
-			kstore.addEnabledWalletId(walletId);
-			kstore.addEnabledWalletId(walletId);
-			kstore.addEnabledWalletId(walletId);
+			kstore.rememberWallet(walletId);
+			kstore.rememberWallet(walletId);
+			kstore.rememberWallet(walletId);
 
-			const values: { autoReconnect?: WalletId[] }[] = [];
+			const values: { remembered?: WalletId[] }[] = [];
 			const sub = kstore.observable.subscribe((v) => values.push(v));
-			const count = values[0]?.autoReconnect?.filter(
+			const count = values[0]?.remembered?.filter(
 				(id) => id === walletId,
 			).length;
 			expect(count).toBe(1);
 			sub.unsubscribe();
 		});
 
-		it("addEnabledWalletId validates wallet ID format", () => {
+		it("rememberWallet validates wallet ID format", () => {
 			const kstore = createKheopskitStore();
 
 			// Invalid wallet IDs should throw
-			expect(() => kstore.addEnabledWalletId("invalid" as WalletId)).toThrow();
-			expect(() => kstore.addEnabledWalletId("" as WalletId)).toThrow();
+			expect(() => kstore.rememberWallet("invalid" as WalletId)).toThrow();
+			expect(() => kstore.rememberWallet("" as WalletId)).toThrow();
 		});
 
-		it("removeEnabledWalletId removes wallet from autoReconnect", () => {
+		it("forgetWallet removes wallet from remembered", () => {
 			const existingData = {
-				autoReconnect: [
-					"polkadot:talisman",
-					"polkadot:polkadot-js",
-				] as WalletId[],
+				remembered: ["polkadot:talisman", "polkadot:polkadot-js"] as WalletId[],
 			};
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(existingData));
 
 			const kstore = createKheopskitStore();
-			kstore.removeEnabledWalletId("polkadot:talisman" as WalletId);
+			kstore.forgetWallet("polkadot:talisman" as WalletId);
 
-			const values: { autoReconnect?: WalletId[] }[] = [];
+			const values: { remembered?: WalletId[] }[] = [];
 			const sub = kstore.observable.subscribe((v) => values.push(v));
-			expect(values[0]?.autoReconnect).not.toContain("polkadot:talisman");
-			expect(values[0]?.autoReconnect).toContain("polkadot:polkadot-js");
+			expect(values[0]?.remembered).not.toContain("polkadot:talisman");
+			expect(values[0]?.remembered).toContain("polkadot:polkadot-js");
 			sub.unsubscribe();
 		});
 
-		it("removeEnabledWalletId handles removing non-existent wallet", () => {
+		it("forgetWallet handles removing non-existent wallet", () => {
 			const kstore = createKheopskitStore();
 
 			// Should not throw when removing wallet that doesn't exist
 			expect(() =>
-				kstore.removeEnabledWalletId("polkadot:nonexistent" as WalletId),
+				kstore.forgetWallet("polkadot:nonexistent" as WalletId),
 			).not.toThrow();
+		});
+
+		it("migrates a legacy autoReconnect list on first read and rewrites it as remembered", () => {
+			localStorage.setItem(
+				STORAGE_KEY,
+				JSON.stringify({ autoReconnect: ["polkadot:talisman"] }),
+			);
+
+			const kstore = createKheopskitStore();
+			const values: KheopskitStoreData[] = [];
+			const sub = kstore.observable.subscribe((v) => values.push(v));
+			expect(values[0]).toEqual({ remembered: ["polkadot:talisman"] });
+			sub.unsubscribe();
+
+			kstore.setCachedState([], []);
+
+			expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}")).toEqual({
+				remembered: ["polkadot:talisman"],
+				cachedWallets: [],
+				cachedAccounts: [],
+			});
+		});
+
+		it("migrates a legacy autoReconnect list received from another tab", () => {
+			const kstore = createKheopskitStore();
+			const values: KheopskitStoreData[] = [];
+			const sub = kstore.observable.subscribe((v) => values.push(v));
+
+			window.dispatchEvent(
+				new StorageEvent("storage", {
+					key: STORAGE_KEY,
+					newValue: JSON.stringify({ autoReconnect: ["polkadot:talisman"] }),
+				}),
+			);
+
+			expect(values.at(-1)).toEqual({ remembered: ["polkadot:talisman"] });
+			sub.unsubscribe();
+		});
+
+		it("createKheopskitStore uses the given storage and destroy stops storage sync", () => {
+			const entries = new Map([
+				[STORAGE_KEY, JSON.stringify({ remembered: ["polkadot:talisman"] })],
+			]);
+			const unsubscribe = vi.fn();
+			let pushFromOtherTab: (value: string | null) => void = () => {};
+			const storage = {
+				getItem: vi.fn((key: string) => entries.get(key) ?? null),
+				setItem: vi.fn((key: string, value: string) => {
+					entries.set(key, value);
+				}),
+				removeItem: vi.fn(),
+				subscribe: vi.fn(
+					(_key: string, callback: (value: string | null) => void) => {
+						pushFromOtherTab = callback;
+						return unsubscribe;
+					},
+				),
+			} satisfies SyncableStorage;
+
+			const kstore = createKheopskitStore({ storage, ssrCookies: "" });
+			const values: KheopskitStoreData[] = [];
+			kstore.observable.subscribe((v) => values.push(v));
+			expect(values).toEqual([{ remembered: ["polkadot:talisman"] }]);
+
+			kstore.rememberWallet("polkadot:polkadot-js" as WalletId);
+			expect(storage.setItem).toHaveBeenCalledWith(
+				STORAGE_KEY,
+				JSON.stringify({
+					remembered: ["polkadot:talisman", "polkadot:polkadot-js"],
+				}),
+			);
+			expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+			expect(parseCookie(document.cookie, STORAGE_KEY)).toBeNull();
+
+			pushFromOtherTab(JSON.stringify({ remembered: [] }));
+			expect(values).toHaveLength(3);
+
+			kstore.destroy();
+			expect(unsubscribe).toHaveBeenCalledOnce();
+			pushFromOtherTab(JSON.stringify({ remembered: ["solana:Phantom"] }));
+			expect(values).toHaveLength(3);
 		});
 
 		it("persists changes to localStorage", () => {
 			const kstore = createKheopskitStore();
-			kstore.addEnabledWalletId("ethereum:metamask" as WalletId);
+			kstore.rememberWallet("ethereum:metamask" as WalletId);
 
 			const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-			expect(stored.autoReconnect).toContain("ethereum:metamask");
+			expect(stored.remembered).toContain("ethereum:metamask");
 		});
 	});
 
 	describe("with ssrCookies (cookie mode)", () => {
 		it("creates a store using cookie storage", () => {
 			const existingData = {
-				autoReconnect: ["polkadot:talisman"] as WalletId[],
+				remembered: ["polkadot:talisman"] as WalletId[],
 			};
 			const ssrCookies = `${STORAGE_KEY}=${encodeURIComponent(JSON.stringify(existingData))}`;
 
 			const kstore = createKheopskitStore({ ssrCookies });
 			// Store is created successfully
 			expect(kstore.observable).toBeDefined();
-			expect(kstore.addEnabledWalletId).toBeDefined();
-			expect(kstore.removeEnabledWalletId).toBeDefined();
+			expect(kstore.rememberWallet).toBeDefined();
+			expect(kstore.forgetWallet).toBeDefined();
 		});
 
-		it("addEnabledWalletId works with cookie storage", () => {
+		it("rememberWallet works with cookie storage", () => {
 			const kstore = createKheopskitStore({ ssrCookies: "" }); // Empty cookies, uses cookie storage
-			kstore.addEnabledWalletId("polkadot:polkadot-js" as WalletId);
+			kstore.rememberWallet("polkadot:polkadot-js" as WalletId);
 
 			// Should persist to cookies (verify via observable since document.cookie in jsdom may be cleared)
-			const values: { autoReconnect?: WalletId[] }[] = [];
+			const values: { remembered?: WalletId[] }[] = [];
 			const sub = kstore.observable.subscribe((v) => values.push(v));
-			expect(values[0]?.autoReconnect).toContain("polkadot:polkadot-js");
+			expect(values[0]?.remembered).toContain("polkadot:polkadot-js");
 			sub.unsubscribe();
 		});
 
-		it("removeEnabledWalletId works with cookie storage", () => {
+		it("forgetWallet works with cookie storage", () => {
 			// Pre-populate with a cookie
 			const existingData = {
-				autoReconnect: ["polkadot:talisman"] as WalletId[],
+				remembered: ["polkadot:talisman"] as WalletId[],
 			};
 			// biome-ignore lint/suspicious/noDocumentCookie: necessary for test setup
 			document.cookie = `${STORAGE_KEY}=${encodeURIComponent(JSON.stringify(existingData))};path=/`;
 
 			const kstore = createKheopskitStore();
-			kstore.removeEnabledWalletId("polkadot:talisman" as WalletId);
+			kstore.forgetWallet("polkadot:talisman" as WalletId);
 
-			const values: { autoReconnect?: WalletId[] }[] = [];
+			const values: { remembered?: WalletId[] }[] = [];
 			const sub = kstore.observable.subscribe((v) => values.push(v));
-			expect(values[0]?.autoReconnect).not.toContain("polkadot:talisman");
+			expect(values[0]?.remembered).not.toContain("polkadot:talisman");
 			sub.unsubscribe();
 		});
 
@@ -209,6 +289,51 @@ describe("createKheopskitStore", () => {
 
 			expect(cached.accounts).toHaveLength(1);
 			expect(cached.accounts[0]?.polkadotAccountType).toBeUndefined();
+		});
+	});
+
+	describe("cookie mode remembered list", () => {
+		const readRemembered = (
+			kstore: ReturnType<typeof createKheopskitStore>,
+		) => {
+			const values: KheopskitStoreData[] = [];
+			kstore.observable.subscribe((v) => values.push(v)).unsubscribe();
+			return values[0]?.remembered;
+		};
+		const readCompactCookie = () =>
+			JSON.parse(parseCookie(document.cookie, STORAGE_KEY) ?? "null");
+
+		it("cookie mode round-trips remembered under the compact key", () => {
+			// biome-ignore lint/suspicious/noDocumentCookie: necessary for test setup
+			document.cookie = `${STORAGE_KEY}=${encodeURIComponent(JSON.stringify({ v: 1, r: ["polkadot:talisman"] }))};path=/`;
+
+			const kstore = createKheopskitStore({ ssrCookies: document.cookie });
+			expect(readRemembered(kstore)).toEqual(["polkadot:talisman"]);
+
+			kstore.rememberWallet("ethereum:metamask" as WalletId);
+			expect(readCompactCookie()).toEqual({
+				v: 1,
+				r: ["polkadot:talisman", "ethereum:metamask"],
+			});
+
+			const reloaded = createKheopskitStore({ ssrCookies: document.cookie });
+			expect(readRemembered(reloaded)).toEqual([
+				"polkadot:talisman",
+				"ethereum:metamask",
+			]);
+		});
+
+		it("keeps the list of a legacy verbose autoReconnect cookie", () => {
+			// biome-ignore lint/suspicious/noDocumentCookie: necessary for test setup
+			document.cookie = `${STORAGE_KEY}=${encodeURIComponent(JSON.stringify({ autoReconnect: ["polkadot:talisman"] }))};path=/`;
+
+			const kstore = createKheopskitStore({ ssrCookies: document.cookie });
+
+			expect(readRemembered(kstore)).toEqual(["polkadot:talisman"]);
+			expect(readCompactCookie()).toMatchObject({
+				v: 1,
+				r: ["polkadot:talisman"],
+			});
 		});
 	});
 
@@ -303,10 +428,10 @@ describe("createKheopskitStore", () => {
 			},
 		);
 
-		it("ignores legacy data that only has autoReconnect", () => {
+		it("ignores data that only has a remembered list", () => {
 			localStorage.setItem(
 				STORAGE_KEY,
-				JSON.stringify({ autoReconnect: ["polkadot:talisman"], legacyKey: 1 }),
+				JSON.stringify({ remembered: ["polkadot:talisman"], legacyKey: 1 }),
 			);
 
 			const cached = createKheopskitStore().getCachedState();
@@ -356,28 +481,28 @@ describe("createKheopskitStore", () => {
 			sub.unsubscribe();
 		});
 
-		it("emits on addEnabledWalletId", () => {
+		it("emits on rememberWallet", () => {
 			const kstore = createKheopskitStore();
-			const values: { autoReconnect?: WalletId[] }[] = [];
+			const values: { remembered?: WalletId[] }[] = [];
 			const sub = kstore.observable.subscribe((v) => values.push(v));
 
-			kstore.addEnabledWalletId("polkadot:polkadot-js" as WalletId);
+			kstore.rememberWallet("polkadot:polkadot-js" as WalletId);
 
 			expect(values.length).toBe(2);
 			sub.unsubscribe();
 		});
 
-		it("emits on removeEnabledWalletId", () => {
+		it("emits on forgetWallet", () => {
 			const existingData = {
-				autoReconnect: ["polkadot:talisman"] as WalletId[],
+				remembered: ["polkadot:talisman"] as WalletId[],
 			};
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(existingData));
 
 			const kstore = createKheopskitStore();
-			const values: { autoReconnect?: WalletId[] }[] = [];
+			const values: { remembered?: WalletId[] }[] = [];
 			const sub = kstore.observable.subscribe((v) => values.push(v));
 
-			kstore.removeEnabledWalletId("polkadot:talisman" as WalletId);
+			kstore.forgetWallet("polkadot:talisman" as WalletId);
 
 			expect(values.length).toBe(2);
 			sub.unsubscribe();
@@ -390,12 +515,12 @@ describe("createKheopskitStore", () => {
 			// store2 not used but demonstrates multiple stores can be created
 			createKheopskitStore();
 
-			store1.addEnabledWalletId("polkadot:talisman" as WalletId);
+			store1.rememberWallet("polkadot:talisman" as WalletId);
 
 			// store2 won't see the update automatically (no cross-instance sync)
 			// but localStorage is shared
 			const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-			expect(stored.autoReconnect).toContain("polkadot:talisman");
+			expect(stored.remembered).toContain("polkadot:talisman");
 		});
 	});
 });
@@ -416,15 +541,15 @@ describe("wallet ID combinations", () => {
 		const kstore = createKheopskitStore();
 
 		for (const walletId of validWalletIds) {
-			kstore.addEnabledWalletId(walletId);
+			kstore.rememberWallet(walletId);
 		}
 
-		const values: { autoReconnect?: WalletId[] }[] = [];
+		const values: { remembered?: WalletId[] }[] = [];
 		const sub = kstore.observable.subscribe((v) => values.push(v));
 
-		expect(values[0]?.autoReconnect).toHaveLength(validWalletIds.length);
+		expect(values[0]?.remembered).toHaveLength(validWalletIds.length);
 		for (const walletId of validWalletIds) {
-			expect(values[0]?.autoReconnect).toContain(walletId);
+			expect(values[0]?.remembered).toContain(walletId);
 		}
 		sub.unsubscribe();
 	});
@@ -434,21 +559,21 @@ describe("wallet ID combinations", () => {
 
 		// Add all
 		for (const walletId of validWalletIds) {
-			kstore.addEnabledWalletId(walletId);
+			kstore.rememberWallet(walletId);
 		}
 
 		// Remove half
 		const [first, second] = validWalletIds;
-		if (first) kstore.removeEnabledWalletId(first);
-		if (second) kstore.removeEnabledWalletId(second);
-		const values: { autoReconnect?: WalletId[] }[] = [];
+		if (first) kstore.forgetWallet(first);
+		if (second) kstore.forgetWallet(second);
+		const values: { remembered?: WalletId[] }[] = [];
 		const sub = kstore.observable.subscribe((v) => values.push(v));
 
-		expect(values[0]?.autoReconnect).toHaveLength(2);
-		expect(values[0]?.autoReconnect).not.toContain(validWalletIds[0]);
-		expect(values[0]?.autoReconnect).not.toContain(validWalletIds[1]);
-		expect(values[0]?.autoReconnect).toContain(validWalletIds[2]);
-		expect(values[0]?.autoReconnect).toContain(validWalletIds[3]);
+		expect(values[0]?.remembered).toHaveLength(2);
+		expect(values[0]?.remembered).not.toContain(validWalletIds[0]);
+		expect(values[0]?.remembered).not.toContain(validWalletIds[1]);
+		expect(values[0]?.remembered).toContain(validWalletIds[2]);
+		expect(values[0]?.remembered).toContain(validWalletIds[3]);
 		sub.unsubscribe();
 	});
 });

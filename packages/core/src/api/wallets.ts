@@ -21,8 +21,8 @@ import type {
 
 export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 	// lock the list of wallets to auto reconnect on first call
-	const autoReconnectWalletIds$ = store.observable.pipe(
-		map((s) => s.autoReconnect ?? []),
+	const rememberedWalletIds$ = store.observable.pipe(
+		map((s) => s.remembered ?? []),
 		take(1),
 		shareReplay({ bufferSize: 1, refCount: true }),
 	);
@@ -54,7 +54,7 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 
 		const reconnectPolicy = createReconnectPolicy();
 
-		const subAutoReconnect = combineLatest([wallets$, autoReconnectWalletIds$])
+		const subAutoReconnect = combineLatest([wallets$, rememberedWalletIds$])
 			.pipe(
 				filter(([, walletIds]) => config.autoReconnect && !!walletIds?.length),
 				mergeMap(([wallets, walletIds]) =>

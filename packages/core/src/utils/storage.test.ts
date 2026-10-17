@@ -89,7 +89,7 @@ describe("parseCookie", () => {
 	});
 
 	it("handles JSON values", () => {
-		const json = { autoReconnect: ["polkadot:polkadot-js"] };
+		const json = { items: ["polkadot:polkadot-js"] };
 		const encoded = encodeURIComponent(JSON.stringify(json));
 		expect(parseCookie(`kheopskit=${encoded}`, "kheopskit")).toBe(
 			JSON.stringify(json),

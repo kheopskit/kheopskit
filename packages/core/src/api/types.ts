@@ -311,7 +311,8 @@ export type KheopskitState<
 
 /** Shape of the persisted store data (localStorage, or cookies in compact form). */
 export type KheopskitStoreData = {
-	autoReconnect?: WalletId[];
+	/** Wallets the user connected and has not disconnected */
+	remembered?: WalletId[];
 	/** Cached wallet state for SSR hydration to prevent UI flash */
 	cachedWallets?: CachedWallet[];
 	/** Cached account state for SSR hydration to prevent UI flash */
@@ -325,10 +326,12 @@ export type KheopskitStoreData = {
  */
 export type KheopskitStore = {
 	observable: Observable<KheopskitStoreData>;
-	addEnabledWalletId: (walletId: WalletId) => void;
-	removeEnabledWalletId: (walletId: WalletId) => void;
+	rememberWallet: (walletId: WalletId) => void;
+	forgetWallet: (walletId: WalletId) => void;
 	getCachedState: () => { wallets: CachedWallet[]; accounts: CachedAccount[] };
 	setCachedState: (wallets: CachedWallet[], accounts: CachedAccount[]) => void;
+	/** Stops cross-tab storage sync and completes `observable`. */
+	destroy: () => void;
 };
 
 /**

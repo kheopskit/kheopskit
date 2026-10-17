@@ -1,14 +1,17 @@
 import { uniq } from "lodash-es";
 import { createStore } from "../utils/createStore";
 import { isWalletPlatform } from "../utils/isWalletPlatform";
-import { safeLocalStorage } from "../utils/storage";
+import { type SyncableStorage, safeLocalStorage } from "../utils/storage";
 import {
 	isValidWalletId,
 	parseWalletId,
 	WALLET_CONNECT_WALLET_ID,
 	type WalletId,
 } from "../utils/WalletId";
-import { createCompactCookieStorage } from "./compactStore";
+import {
+	createCompactCookieStorage,
+	migratePreV6StoreData,
+} from "./compactStore";
 import { DEFAULT_STORAGE_KEY } from "./config";
 import type {
 	CachedAccount,
@@ -57,6 +60,11 @@ const isValidCachedAccount = (value: unknown): value is CachedAccount => {
 
 type CreateKheopskitStoreOptions = {
 	/**
+	 * Storage backend to persist into. When provided, it takes precedence over
+	 * `ssrCookies` and localStorage.
+	 */
+	storage?: SyncableStorage;
+	/**
 	 * Cookie string for SSR hydration.
 	 * When provided, uses cookieStorage instead of localStorage.
 	 */
@@ -70,8 +78,8 @@ type CreateKheopskitStoreOptions = {
 
 /**
  * Creates a kheopskit store with the appropriate storage backend.
- * Uses cookieStorage when ssrCookies is provided (for SSR hydration),
- * otherwise falls back to safeLocalStorage.
+ * Uses the given `storage` when provided, else cookieStorage when ssrCookies is
+ * provided (for SSR hydration), otherwise safeLocalStorage.
  *
  * @param options - Configuration options for the store
  */
@@ -80,25 +88,29 @@ export const createKheopskitStore = (
 ): KheopskitStore => {
 	const { ssrCookies, storageKey = DEFAULT_STORAGE_KEY } = options;
 	const storage =
-		ssrCookies !== undefined
+		options.storage ??
+		(ssrCookies !== undefined
 			? createCompactCookieStorage(ssrCookies)
-			: safeLocalStorage;
-	const store = createStore(storageKey, DEFAULT_SETTINGS, storage);
+			: safeLocalStorage);
+	const store = createStore(
+		storageKey,
+		DEFAULT_SETTINGS,
+		storage,
+		migratePreV6StoreData,
+	);
 
-	const addEnabledWalletId = (walletId: WalletId) => {
+	const rememberWallet = (walletId: WalletId) => {
 		parseWalletId(walletId); // validate walletId
 		store.mutate((prev) => ({
 			...prev,
-			autoReconnect: uniq((prev.autoReconnect ?? []).concat(walletId)),
+			remembered: uniq((prev.remembered ?? []).concat(walletId)),
 		}));
 	};
 
-	const removeEnabledWalletId = (walletId: WalletId) => {
+	const forgetWallet = (walletId: WalletId) => {
 		store.mutate((prev) => ({
 			...prev,
-			autoReconnect: uniq(
-				(prev.autoReconnect ?? []).filter((id) => id !== walletId),
-			),
+			remembered: uniq((prev.remembered ?? []).filter((id) => id !== walletId)),
 		}));
 	};
 
@@ -134,10 +146,11 @@ export const createKheopskitStore = (
 
 	return {
 		observable: store.observable,
-		addEnabledWalletId,
-		removeEnabledWalletId,
+		rememberWallet,
+		forgetWallet,
 		getCachedState,
 		setCachedState,
+		destroy: store.destroy,
 	};
 };
 
