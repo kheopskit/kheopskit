@@ -11,14 +11,6 @@
  * It matches bare import/require specifiers (e.g. `from "viem"` /
  * `require("viem")`) rather than substrings, so a comment or string mentioning
  * a package name won't trip it.
- *
- * Dynamic imports: a guarded `await import("pkg")` (e.g. @reown/appkit) is a
- * lazy boundary a tree-shaking dapp bundler keeps out of the eager graph. In
- * ESM output it stays `import("pkg")` and is intentionally NOT matched by the
- * runtime pass. tsup lowers it to `require("pkg")` in CJS output, which is
- * indistinguishable from a static require — so only packages that are *always*
- * statically imported belong in RULES (the per-platform SDKs are; @reown/appkit,
- * loaded dynamically and shared across platforms, deliberately is not).
  */
 
 import { readdirSync, readFileSync } from "node:fs";
@@ -37,10 +29,30 @@ const RULES = {
 		"@solana/kit",
 		"@wallet-standard/app",
 		"polkadot-api",
+		"@reown/appkit",
 	],
-	polkadot: ["viem", "mipd", "@solana/kit", "@wallet-standard/app"],
-	ethereum: ["@solana/kit", "@wallet-standard/app", "polkadot-api"],
-	solana: ["viem", "mipd", "polkadot-api"],
+	polkadot: [
+		"viem",
+		"mipd",
+		"@solana/kit",
+		"@wallet-standard/app",
+		"@reown/appkit",
+	],
+	ethereum: [
+		"@solana/kit",
+		"@wallet-standard/app",
+		"polkadot-api",
+		"@reown/appkit",
+	],
+	solana: ["viem", "mipd", "polkadot-api", "@reown/appkit"],
+	internal: ["@reown/appkit"],
+	walletconnect: [
+		"viem",
+		"mipd",
+		"@solana/kit",
+		"@wallet-standard/app",
+		"polkadot-api",
+	],
 };
 
 // Runtime bundle formats and the matching type-definition formats. Both must be
@@ -48,22 +60,17 @@ const RULES = {
 const RUNTIME_FORMATS = [".mjs", ".js"];
 const DTS_FORMATS = [".d.ts", ".d.mts"];
 
-// Static specifiers only: `import ... from "x"`, side-effect `import "x"`, and
-// `require("x")`. Excludes dynamic `import("x")` (lazy in ESM). Used for both
-// runtime chunk traversal and runtime leak detection.
-const STATIC_SPEC_RES = [
+// Dynamic import() counts: a lazy import still lands in the dapp's bundle graph.
+const SPEC_RES = [
 	/\bfrom\s*["']([^"']+)["']/g,
 	/\bimport\s*["']([^"']+)["']/g,
 	/\brequire\(\s*["']([^"']+)["']/g,
+	/\bimport\s*\(\s*["']([^"']+)["']/g,
 ];
 
-// Type-definition specifiers: the static forms plus inline `import("x")` type
-// references, which in a .d.ts are ordinary type deps, not lazy boundaries.
-const DTS_SPEC_RES = [...STATIC_SPEC_RES, /\bimport\s*\(\s*["']([^"']+)["']/g];
-
-const specifiers = (source, regexes) => {
+const specifiers = (source) => {
 	const specs = new Set();
-	for (const re of regexes)
+	for (const re of SPEC_RES)
 		for (const [, spec] of source.matchAll(re)) specs.add(spec);
 	return specs;
 };
@@ -91,16 +98,13 @@ const resolveDts = (spec) =>
 		.replace(/\.mjs$/, ".d.mts")
 		.replace(/\.js$/, ".d.ts");
 
-// Chunks reachable from an entry by following relative imports of the given
-// kind, resolved with `resolveSpec`.
-const reachableChunks = (entry, regexes, resolveSpec, seen = new Set()) => {
+const reachableChunks = (entry, resolveSpec, seen = new Set()) => {
 	if (seen.has(entry)) return seen;
 	seen.add(entry);
 	const source = readDist(entry);
 	if (source === null) return seen;
-	for (const spec of specifiers(source, regexes)) {
-		if (isRelative(spec))
-			reachableChunks(resolveSpec(spec), regexes, resolveSpec, seen);
+	for (const spec of specifiers(source)) {
+		if (isRelative(spec)) reachableChunks(resolveSpec(spec), resolveSpec, seen);
 	}
 	return seen;
 };
@@ -123,13 +127,13 @@ if (!dist.includes("index.mjs")) {
 let failed = false;
 let checked = 0;
 
-const checkEntry = (entry, forbidden, regexes, resolveSpec) => {
-	const chunks = reachableChunks(entry, regexes, resolveSpec);
+const checkEntry = (entry, forbidden, resolveSpec) => {
+	const chunks = reachableChunks(entry, resolveSpec);
 	const found = new Set();
 	for (const chunk of chunks) {
 		const source = readDist(chunk);
 		if (source === null) continue;
-		for (const spec of specifiers(source, regexes)) {
+		for (const spec of specifiers(source)) {
 			if (isRelative(spec)) continue;
 			for (const pkg of forbidden) {
 				if (matchesPkg(spec, pkg)) found.add(pkg);
@@ -150,13 +154,11 @@ const checkEntry = (entry, forbidden, regexes, resolveSpec) => {
 for (const [name, forbidden] of Object.entries(RULES)) {
 	for (const fmt of RUNTIME_FORMATS) {
 		const entry = `${name}${fmt}`;
-		if (dist.includes(entry))
-			checkEntry(entry, forbidden, STATIC_SPEC_RES, resolveRuntime);
+		if (dist.includes(entry)) checkEntry(entry, forbidden, resolveRuntime);
 	}
 	for (const fmt of DTS_FORMATS) {
 		const entry = `${name}${fmt}`;
-		if (dist.includes(entry))
-			checkEntry(entry, forbidden, DTS_SPEC_RES, resolveDts);
+		if (dist.includes(entry)) checkEntry(entry, forbidden, resolveDts);
 	}
 }
 

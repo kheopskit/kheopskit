@@ -17,15 +17,13 @@ import { createKheopskitStore } from "./store";
 import type {
 	KheopskitConfig,
 	KheopskitState,
+	WalletConnectPlugin,
 	WalletConnectWallet,
 } from "./types";
 import { getWallets$ } from "./wallets";
 
-const { injected, walletConnect } = vi.hoisted(() => ({
+const { injected } = vi.hoisted(() => ({
 	injected: { names: [] as string[] },
-	walletConnect: {
-		connector$: undefined as unknown as Subject<WalletConnectWallet | null>,
-	},
 }));
 
 vi.mock("polkadot-api/pjs-signer", () => ({
@@ -39,10 +37,6 @@ vi.mock("./wallets", () => ({
 
 vi.mock("./accounts", () => ({
 	getAccounts$: vi.fn(() => of([])),
-}));
-
-vi.mock("./appKit", () => ({
-	getWalletConnectWallet$: () => walletConnect.connector$,
 }));
 
 const setReadyState = (value: DocumentReadyState) =>
@@ -235,12 +229,18 @@ describe("getKheopskit$ discovery", () => {
 
 describe("getKheopskit$ discovery while the WalletConnect connector loads", () => {
 	let subscription: Subscription | undefined;
+	let connector$: Subject<WalletConnectWallet | null>;
+	const walletConnectPlugin: WalletConnectPlugin = {
+		type: "walletconnect",
+		metadata: { name: "Test Dapp", description: "", url: "", icons: [] },
+		getWallet$: () => connector$,
+	};
 
 	beforeEach(async () => {
 		localStorage.clear();
 		vi.useFakeTimers();
 		injected.names = [];
-		walletConnect.connector$ = new Subject();
+		connector$ = new Subject();
 		const actual =
 			await vi.importActual<typeof import("./wallets")>("./wallets");
 		vi.mocked(getWallets$).mockImplementation(actual.getWallets$);
@@ -273,7 +273,7 @@ describe("getKheopskit$ discovery while the WalletConnect connector loads", () =
 		);
 		const states: KheopskitState[] = [];
 		subscription = getKheopskit$(
-			{ platforms: [polkadot()] },
+			{ platforms: [polkadot()], walletConnect: walletConnectPlugin },
 			{ store },
 		).subscribe((state) => states.push(state));
 
@@ -281,7 +281,7 @@ describe("getKheopskit$ discovery while the WalletConnect connector loads", () =
 		injected.names = ["talisman"];
 		await fireLoad();
 		await vi.advanceTimersByTimeAsync(20);
-		walletConnect.connector$.next(null);
+		connector$.next(null);
 		await vi.advanceTimersByTimeAsync(20);
 
 		const settled = states.find((s) => s.isDiscovering === false);
@@ -370,9 +370,6 @@ describe("getKheopskit$ reload with a cached connected wallet", () => {
 		vi.useFakeTimers();
 		setReadyState("complete");
 		injected.names = ["talisman"];
-		walletConnect.connector$ = new BehaviorSubject<WalletConnectWallet | null>(
-			null,
-		);
 		const actual =
 			await vi.importActual<typeof import("./wallets")>("./wallets");
 		vi.mocked(getWallets$).mockImplementation(actual.getWallets$);

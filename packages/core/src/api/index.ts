@@ -12,7 +12,6 @@ export {
 	parseWalletId,
 	type WalletId,
 } from "../utils/WalletId";
-export { resetAppKitCache } from "./appKit";
 export { DEFAULT_STORAGE_KEY, resolveConfig } from "./config";
 export { KheopskitError, type KheopskitErrorCode } from "./errors";
 export {
