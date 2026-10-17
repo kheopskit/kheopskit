@@ -1,4 +1,3 @@
-import { connectInjectedExtension } from "polkadot-api/pjs-signer";
 import {
 	BehaviorSubject,
 	firstValueFrom,
@@ -29,7 +28,6 @@ const { injected } = vi.hoisted(() => ({
 
 vi.mock("polkadot-api/pjs-signer", () => ({
 	getInjectedExtensions: () => injected.names,
-	connectInjectedExtension: vi.fn(),
 }));
 
 vi.mock("./wallets", () => ({
@@ -374,16 +372,26 @@ describe("getKheopskit$ reload with a cached connected wallet", () => {
 		const actual =
 			await vi.importActual<typeof import("./wallets")>("./wallets");
 		vi.mocked(getWallets$).mockImplementation(actual.getWallets$);
-		vi.mocked(connectInjectedExtension).mockImplementation(
-			() =>
-				new Promise((resolve) =>
-					setTimeout(() => resolve({ disconnect: vi.fn() } as never), 300),
-				),
-		);
+		window.injectedWeb3 = {
+			talisman: {
+				enable: () =>
+					new Promise((resolve) =>
+						setTimeout(
+							() =>
+								resolve({
+									accounts: { get: async () => [], subscribe: () => () => {} },
+									signer: { signPayload: vi.fn(), signRaw: vi.fn() },
+								}),
+							300,
+						),
+					),
+			},
+		};
 	});
 
 	afterEach(() => {
 		subscription?.unsubscribe();
+		delete window.injectedWeb3;
 		vi.restoreAllMocks();
 		Reflect.deleteProperty(document, "readyState");
 		vi.useRealTimers();

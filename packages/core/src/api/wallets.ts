@@ -15,6 +15,7 @@ import { createReconnectPolicy, reconnectAccepts } from "./reconnectPolicy";
 import type { KheopskitStore } from "./store";
 import type {
 	BaseWallet,
+	ConnectOptions,
 	KheopskitConfig,
 	PlatformContext,
 	WalletConnectWallet,
@@ -35,6 +36,20 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 			plugin.getWallets$(ctx),
 		);
 
+		const reconnectPolicy = createReconnectPolicy();
+
+		const settleOnUserCall = <W extends BaseWallet>(wallet: W): W => ({
+			...wallet,
+			connect: (options?: ConnectOptions) => {
+				reconnectPolicy.settle(wallet.id);
+				return wallet.connect(options);
+			},
+			disconnect: () => {
+				reconnectPolicy.settle(wallet.id);
+				return wallet.disconnect();
+			},
+		});
+
 		const platformWallets$ = observables.length
 			? combineLatest(observables).pipe(map((wallets) => wallets.flat()))
 			: of<BaseWallet[]>([]);
@@ -52,9 +67,17 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 						),
 					)
 				: platformWallets$;
-		const wallets$ = unsortedWallets$.pipe(map((all) => all.sort(sortWallets)));
+		const rawWallets$ = unsortedWallets$.pipe(
+			map((all) => all.sort(sortWallets)),
+		);
 
-		const reconnectPolicy = createReconnectPolicy();
+		const wallets$ = rawWallets$.pipe(
+			map((wallets) =>
+				wallets.map((wallet) =>
+					isInjectedWallet(wallet) ? settleOnUserCall(wallet) : wallet,
+				),
+			),
+		);
 
 		const reconnect = async (wallet: BaseWallet) => {
 			try {
@@ -72,8 +95,9 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 		};
 
 		const subWallets = wallets$.subscribe(subscriber);
+		if (subscriber.closed) return subWallets;
 
-		const subAutoReconnect = combineLatest([wallets$, rememberedWalletIds$])
+		const subAutoReconnect = combineLatest([rawWallets$, rememberedWalletIds$])
 			.pipe(
 				filter(
 					([, walletIds]) =>
@@ -85,8 +109,7 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 						.filter((wallet) => walletIds.includes(wallet.id)),
 				),
 				tap((wallet) => {
-					if (wallet.status !== "disconnected")
-						reconnectPolicy.settle(wallet.id);
+					if (wallet.status === "connected") reconnectPolicy.settle(wallet.id);
 				}),
 				filter(
 					(wallet) =>
