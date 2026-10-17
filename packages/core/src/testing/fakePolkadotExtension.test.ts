@@ -136,6 +136,18 @@ describe("createFakePolkadotExtension", () => {
 		expect(kheopskit.names.at(-1)).toEqual(["Alice", "Bob"]);
 	});
 
+	it("calls a new account subscriber back at once, as Talisman does", async () => {
+		const fake = install({ accounts: [alice] });
+		const extension = await window.injectedWeb3?.[fake.name]?.enable("app");
+		const heard: string[][] = [];
+
+		extension?.accounts.subscribe((accounts) =>
+			heard.push(accounts.map((account) => account.address)),
+		);
+
+		expect(heard).toEqual([[alice.address]]);
+	});
+
 	it("counts enable() calls and records signRaw calls", async () => {
 		const fake = install({ accounts: [alice] });
 		const injected = window.injectedWeb3?.[fake.name];
