@@ -122,21 +122,22 @@ It resolves the hex signature. A string is sent as text and a `Uint8Array` as
 `0x` hex. Injected accounts go through the extension's `signer.signRaw`,
 WalletConnect accounts through `polkadot_signMessage`.
 
-`options.type` is sent as given and defaults to `"bytes"`, the value
-`txCreator.signBytes` sends. The default may change in a later release; pass
-`type` explicitly to be unaffected. From their sources: Talisman, polkadot.js,
-SubWallet and Nova ignore it and decode `data` by shape; Enkrypt reads it as
-the encoding of `data`, `"payload"` for UTF-8 text and `"bytes"` for hex. Only
-Talisman was driven live.
+With no `options.type`, a string is sent as text with `type: "payload"` and a
+`Uint8Array` as `0x` hex with `type: "bytes"`. An explicit `options.type` is
+sent as given for either input. A hex-looking string is sent as text; pass a
+`Uint8Array` for bytes. From their sources: Talisman, polkadot.js, SubWallet
+and Nova ignore `type` and decode `data` by shape; Enkrypt reads it as the
+encoding of `data`, `"payload"` for UTF-8 text and `"bytes"` for hex, so it
+needs the value the derived default sends. Only Talisman was driven live.
 
 Talisman 3.11.0 opens its Sign In screen when the text parses as a SIWS
 message and its generic Sign Request screen otherwise, hex included. The
-`type` value plays no part in that choice: live receipts with the same text and
-both values show the same screen. The SIWS `Version` line must read `1.0.0`;
+screen follows the text `data`, not `type`: live receipts with the same text
+and both values show the same screen. The SIWS `Version` line must read `1.0.0`;
 Talisman's parser rejects `1` and falls back to the generic screen.
 
 ```ts
-const signature = await account.signRaw(siwsMessage, { type: "payload" });
+const signature = await account.signRaw(siwsMessage);
 ```
 
 `txCreator.signBytes` is unchanged.
@@ -186,7 +187,7 @@ and the fourth factory argument (the signature type) is ignored by
 ### What to delete in your app
 
 - A second `enable()` call made to reach `signer.signRaw` for a Sign-In With
-  Substrate message. Call `account.signRaw(message, { type: "payload" })`.
+  Substrate message. Call `account.signRaw(message)`.
 - A hand-built `ecdsaTxCreator` for ethereum-format accounts, and a
   `signatureTypeOf` helper that maps `ethereum` to `ecdsa`.
 - A memoised second `enable()` and a `pjsSignerOf` helper that rebuilds a pjs

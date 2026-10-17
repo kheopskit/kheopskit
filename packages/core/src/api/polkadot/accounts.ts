@@ -24,13 +24,19 @@ import type {
 	PolkadotAccount,
 	PolkadotInjectedAccount,
 	PolkadotInjectedWallet,
+	PolkadotSignRawType,
 	PolkadotWallet,
 } from "./types";
 
 type RawSignature = `0x${string}`;
 
-const encodeRawData = (data: string | Uint8Array): string =>
-	typeof data === "string" ? data : `0x${hex.encode(data)}`;
+const encodeRawData = (
+	data: string | Uint8Array,
+	type?: PolkadotSignRawType,
+): { data: string; type: PolkadotSignRawType } =>
+	typeof data === "string"
+		? { data, type: type ?? "payload" }
+		: { data: `0x${hex.encode(data)}`, type: type ?? "bytes" };
 
 /**
  * pjs-signer's signature-type map knows ed25519, sr25519 and ecdsa only, so an
@@ -62,13 +68,8 @@ const getInjectedWalletAccounts$ = (
 				walletId: wallet.id,
 				[field]: factory(address, signPayload, signRaw, toSignerType(type)),
 				signRaw: async (data, options) =>
-					(
-						await signRaw({
-							address,
-							data: encodeRawData(data),
-							type: options?.type ?? "bytes",
-						})
-					).signature,
+					(await signRaw({ address, ...encodeRawData(data, options?.type) }))
+						.signature,
 			} as PolkadotAccount;
 		};
 
@@ -207,7 +208,7 @@ const getAppKitPolkadotSigning = (appKit: AppKitInstance, address: string) => {
 	);
 
 	const signRaw: PolkadotAccount["signRaw"] = async (data) =>
-		(await signMessage(encodeRawData(data))).signature;
+		(await signMessage(encodeRawData(data).data)).signature;
 
 	return { [field]: signer, signRaw };
 };

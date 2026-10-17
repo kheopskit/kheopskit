@@ -14,8 +14,8 @@ import type { KheopskitConfig } from "../types";
 import type { PolkadotInjected, PolkadotInjectedWallet } from "./types";
 
 type EnableResult = {
-	accounts: Partial<PolkadotInjected["accounts"]>;
-	signer: Partial<PolkadotInjected["signer"]>;
+	accounts?: Partial<PolkadotInjected["accounts"]>;
+	signer?: Partial<PolkadotInjected["signer"]>;
 	metadata?: unknown;
 	provider?: unknown;
 };
@@ -23,16 +23,17 @@ type EnableResult = {
 type InjectedWeb3Window = {
 	injectedWeb3?: Record<
 		string,
-		{ enable(appName: string): Promise<EnableResult> } | undefined
+		| { enable(appName: string): Promise<EnableResult | null | undefined> }
+		| undefined
 	>;
 };
 
 const isPolkadotInjected = (
-	injected: EnableResult,
+	injected: EnableResult | null | undefined,
 ): injected is PolkadotInjected =>
-	typeof injected.accounts.get === "function" &&
+	typeof injected?.accounts?.get === "function" &&
 	typeof injected.accounts.subscribe === "function" &&
-	typeof injected.signer.signPayload === "function" &&
+	typeof injected.signer?.signPayload === "function" &&
 	typeof injected.signer.signRaw === "function";
 
 const enableExtension = async (identifier: string, appName: string) => {
