@@ -1,18 +1,21 @@
 import {
 	BehaviorSubject,
 	firstValueFrom,
-	of,
 	Subject,
 	type Subscription,
 	take,
 } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getWalletAccountId } from "../utils/WalletAccountId";
-import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../utils/WalletId";
-import { getAccounts$ } from "./accounts";
+import {
+	cachedAccountOf,
+	cachedWalletOf,
+	createFakePolkadotExtension,
+	createMemoryStorage,
+	type FakePolkadotExtension,
+} from "../testing";
+import { WALLET_CONNECT_WALLET_ID } from "../utils/WalletId";
 import { getKheopskit$ } from "./kheopskit";
 import { polkadot } from "./polkadot/plugin";
-import type { PolkadotAccount, PolkadotWallet } from "./polkadot/types";
 import { createKheopskitStore } from "./store";
 import {
 	type AppKitInstance,
@@ -22,24 +25,23 @@ import {
 	type WalletConnectPlugin,
 	type WalletConnectWallet,
 } from "./types";
-import { getWallets$ } from "./wallets";
 
-const { injected } = vi.hoisted(() => ({
-	injected: { names: [] as string[] },
-}));
+const ALICE = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 
-vi.mock("polkadot-api/pjs-signer", () => ({
-	getInjectedExtensions: () => injected.names,
-	getTxCreatorFromPjs: (address: string) => ({ address }),
-}));
+const fakes: FakePolkadotExtension[] = [];
 
-vi.mock("./wallets", () => ({
-	getWallets$: vi.fn(() => of([])),
-}));
+const install = (...args: Parameters<typeof createFakePolkadotExtension>) => {
+	const fake = createFakePolkadotExtension(...args);
+	fakes.push(fake);
+	return fake;
+};
 
-vi.mock("./accounts", () => ({
-	getAccounts$: vi.fn(() => of([])),
-}));
+const memoryStore = () =>
+	createKheopskitStore({ storage: createMemoryStorage() });
+
+afterEach(() => {
+	for (const fake of fakes.splice(0)) fake.uninstall();
+});
 
 const setReadyState = (value: DocumentReadyState) =>
 	Object.defineProperty(document, "readyState", {
@@ -68,41 +70,24 @@ const fireLoad = async () => {
 };
 
 describe("getKheopskit$ cached account filtering", () => {
-	beforeEach(() => {
-		localStorage.clear();
-	});
-
-	it("filters cached polkadot accounts that are not allowed by the plugin", async () => {
-		const store = createKheopskitStore();
-		const walletId = "polkadot:talisman" as WalletId;
-
+	const seededStore = (polkadotAccountType: "ecdsa" | "ed25519") => {
+		const store = memoryStore();
+		const talisman = cachedWalletOf("polkadot:talisman", "Talisman");
 		store.setCachedState(
-			[
-				{
-					id: walletId,
-					platform: "polkadot",
-					type: "injected",
-					name: "Talisman",
-					isConnected: true,
-				},
-			],
-			[
-				{
-					id: `${walletId}::5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY`,
-					platform: "polkadot",
-					address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-					walletId,
-					walletName: "Talisman",
-					polkadotAccountType: "ecdsa",
-				},
-			],
+			[talisman],
+			[{ ...cachedAccountOf(talisman, ALICE), polkadotAccountType }],
 		);
+		return store;
+	};
 
-		const { getKheopskit$ } = await import("./kheopskit");
-		const state = await firstValueFrom(
+	const firstState = (
+		store: ReturnType<typeof memoryStore>,
+		accountTypes: ("sr25519" | "ed25519")[],
+	) =>
+		firstValueFrom(
 			getKheopskit$(
 				{
-					platforms: [polkadot({ accountTypes: ["sr25519"] })],
+					platforms: [polkadot({ accountTypes })],
 					autoReconnect: true,
 					debug: false,
 					storageKey: "kheopskit",
@@ -111,56 +96,20 @@ describe("getKheopskit$ cached account filtering", () => {
 				{ store },
 			).pipe(take(1)),
 		);
+
+	it("filters cached polkadot accounts that are not allowed by the plugin", async () => {
+		const state = await firstState(seededStore("ecdsa"), ["sr25519"]);
 
 		expect(state.accounts).toEqual([]);
 	});
 
 	it("keeps cached polkadot accounts when the key type is allowed", async () => {
-		const store = createKheopskitStore();
-		const walletId = "polkadot:talisman" as WalletId;
-
-		store.setCachedState(
-			[
-				{
-					id: walletId,
-					platform: "polkadot",
-					type: "injected",
-					name: "Talisman",
-					isConnected: true,
-				},
-			],
-			[
-				{
-					id: `${walletId}::5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY`,
-					platform: "polkadot",
-					address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-					walletId,
-					walletName: "Talisman",
-					polkadotAccountType: "ed25519",
-				},
-			],
-		);
-
-		const { getKheopskit$ } = await import("./kheopskit");
-		const state = await firstValueFrom(
-			getKheopskit$(
-				{
-					platforms: [polkadot({ accountTypes: ["ed25519"] })],
-					autoReconnect: true,
-					debug: false,
-					storageKey: "kheopskit",
-					hydrationGracePeriod: 500,
-				},
-				{ store },
-			).pipe(take(1)),
-		);
+		const state = await firstState(seededStore("ed25519"), ["ed25519"]);
 
 		expect(state.accounts).toHaveLength(1);
 		const account = state.accounts[0];
 		expect(account?.platform).toBe("polkadot");
-		expect(account?.address).toBe(
-			"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-		);
+		expect(account?.address).toBe(ALICE);
 	});
 });
 
@@ -169,19 +118,15 @@ describe("getKheopskit$ discovery", () => {
 
 	const recordStates = () => {
 		const states: KheopskitState[] = [];
-		subscription = getKheopskit$({ platforms: [polkadot()] }).subscribe(
-			(state) => states.push(state),
-		);
+		subscription = getKheopskit$(
+			{ platforms: [polkadot()] },
+			{ store: memoryStore() },
+		).subscribe((state) => states.push(state));
 		return states;
 	};
 
 	beforeEach(() => {
-		localStorage.clear();
 		vi.useFakeTimers();
-		injected.names = [];
-		vi.mocked(getWallets$).mockImplementation((config, store) =>
-			polkadot().getWallets$({ config, store }),
-		);
 		captureLoadListeners();
 	});
 
@@ -191,7 +136,6 @@ describe("getKheopskit$ discovery", () => {
 		vi.restoreAllMocks();
 		Reflect.deleteProperty(document, "readyState");
 		vi.useRealTimers();
-		vi.mocked(getWallets$).mockImplementation(() => of([]));
 	});
 
 	it("isDiscovering is true before load and false after", async () => {
@@ -212,7 +156,7 @@ describe("getKheopskit$ discovery", () => {
 		const states = recordStates();
 
 		await vi.advanceTimersByTimeAsync(1200);
-		injected.names = ["talisman"];
+		install({ name: "talisman" });
 		await fireLoad();
 		await vi.advanceTimersByTimeAsync(20);
 
@@ -238,14 +182,9 @@ describe("getKheopskit$ discovery while the WalletConnect connector loads", () =
 		getWallet$: () => connector$,
 	};
 
-	beforeEach(async () => {
-		localStorage.clear();
+	beforeEach(() => {
 		vi.useFakeTimers();
-		injected.names = [];
 		connector$ = new Subject();
-		const actual =
-			await vi.importActual<typeof import("./wallets")>("./wallets");
-		vi.mocked(getWallets$).mockImplementation(actual.getWallets$);
 		captureLoadListeners();
 	});
 
@@ -255,22 +194,13 @@ describe("getKheopskit$ discovery while the WalletConnect connector loads", () =
 		vi.restoreAllMocks();
 		Reflect.deleteProperty(document, "readyState");
 		vi.useRealTimers();
-		vi.mocked(getWallets$).mockImplementation(() => of([]));
 	});
 
 	it("with a cached state, the emission that ends discovery already lists the extension present at load", async () => {
 		setReadyState("interactive");
-		const store = createKheopskitStore();
+		const store = memoryStore();
 		store.setCachedState(
-			[
-				{
-					id: "polkadot:cached" as WalletId,
-					platform: "polkadot",
-					type: "injected",
-					name: "Cached",
-					isConnected: false,
-				},
-			],
+			[{ ...cachedWalletOf("polkadot:cached", "Cached"), isConnected: false }],
 			[],
 		);
 		const states: KheopskitState[] = [];
@@ -280,7 +210,7 @@ describe("getKheopskit$ discovery while the WalletConnect connector loads", () =
 		).subscribe((state) => states.push(state));
 
 		await vi.advanceTimersByTimeAsync(1200);
-		injected.names = ["talisman"];
+		install({ name: "talisman" });
 		await fireLoad();
 		await vi.advanceTimersByTimeAsync(20);
 		connector$.next(null);
@@ -292,8 +222,6 @@ describe("getKheopskit$ discovery while the WalletConnect connector loads", () =
 });
 
 describe("getKheopskit$ account changes", () => {
-	const walletId = "polkadot:talisman" as WalletId;
-	const address = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 	const config: KheopskitConfig = {
 		platforms: [polkadot({ accountTypes: ["sr25519"] })],
 		autoReconnect: true,
@@ -303,7 +231,6 @@ describe("getKheopskit$ account changes", () => {
 	};
 
 	beforeEach(() => {
-		localStorage.clear();
 		vi.useFakeTimers();
 	});
 
@@ -312,29 +239,10 @@ describe("getKheopskit$ account changes", () => {
 	});
 
 	it("re-emits and re-persists when an account is renamed", async () => {
-		const wallet = {
-			id: walletId,
-			platform: "polkadot",
-			type: "injected",
-			name: "Talisman",
-			icon: "",
-			isConnected: true,
-		} as PolkadotWallet;
-		const account = {
-			id: getWalletAccountId(walletId, address),
-			platform: "polkadot",
-			address,
-			name: "Alice",
-			type: "sr25519",
-			walletId,
-			walletName: "Talisman",
-		} as PolkadotAccount;
-		const accounts$ = new BehaviorSubject([account]);
-		vi.mocked(getWallets$).mockReturnValueOnce(of([wallet]));
-		vi.mocked(getAccounts$).mockReturnValueOnce(accounts$);
-
-		const store = createKheopskitStore();
-		const { getKheopskit$ } = await import("./kheopskit");
+		const alice = { address: ALICE, name: "Alice", type: "sr25519" as const };
+		const talisman = install({ name: "talisman", accounts: [alice] });
+		const store = memoryStore();
+		store.rememberWallet(talisman.walletId);
 		const states: KheopskitState[] = [];
 		const sub = getKheopskit$(config, { store }).subscribe((state) =>
 			states.push(state),
@@ -343,7 +251,7 @@ describe("getKheopskit$ account changes", () => {
 		expect(store.getCachedState().accounts[0]?.name).toBe("Alice");
 		const emissionsBeforeRename = states.length;
 
-		accounts$.next([{ ...account, name: "Alice (renamed)" }]);
+		talisman.setAccounts([{ ...alice, name: "Alice (renamed)" }]);
 		await vi.advanceTimersByTimeAsync(100);
 
 		expect(states).toHaveLength(emissionsBeforeRename + 1);
@@ -353,52 +261,28 @@ describe("getKheopskit$ account changes", () => {
 		await vi.advanceTimersByTimeAsync(1000);
 		expect(store.getCachedState().accounts[0]?.name).toBe("Alice (renamed)");
 		sub.unsubscribe();
+		store.destroy();
 	});
 });
 
 describe("getKheopskit$ reload with a cached connected wallet", () => {
 	let subscription: Subscription | undefined;
-	const walletId = "polkadot:talisman" as WalletId;
-	const cachedAccount = {
-		id: `${walletId}::5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY`,
-		platform: "polkadot" as const,
-		address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-		walletId,
-		walletName: "Talisman",
-	};
+	let talisman: FakePolkadotExtension;
+	const walletId = "polkadot:talisman";
+	const cachedWallet = cachedWalletOf(walletId, "Talisman");
+	const cachedAccount = cachedAccountOf(cachedWallet, ALICE);
 
-	beforeEach(async () => {
-		localStorage.clear();
+	beforeEach(() => {
 		vi.useFakeTimers();
 		setReadyState("complete");
-		injected.names = ["talisman"];
-		const actual =
-			await vi.importActual<typeof import("./wallets")>("./wallets");
-		vi.mocked(getWallets$).mockImplementation(actual.getWallets$);
-		window.injectedWeb3 = {
-			talisman: {
-				enable: () =>
-					new Promise((resolve) =>
-						setTimeout(
-							() =>
-								resolve({
-									accounts: { get: async () => [], subscribe: () => () => {} },
-									signer: { signPayload: vi.fn(), signRaw: vi.fn() },
-								}),
-							300,
-						),
-					),
-			},
-		};
+		talisman = install({ name: "talisman", enable: "hold" });
 	});
 
 	afterEach(() => {
 		subscription?.unsubscribe();
-		delete window.injectedWeb3;
 		vi.restoreAllMocks();
 		Reflect.deleteProperty(document, "readyState");
 		vi.useRealTimers();
-		vi.mocked(getWallets$).mockImplementation(() => of([]));
 	});
 
 	const statusesOf = (states: KheopskitState[]) =>
@@ -407,20 +291,9 @@ describe("getKheopskit$ reload with a cached connected wallet", () => {
 			.filter((status, i, all) => i === 0 || status !== all[i - 1]);
 
 	it("isConnected is true only when status is connected", async () => {
-		const store = createKheopskitStore();
-		store.rememberWallet(walletId);
-		store.setCachedState(
-			[
-				{
-					id: walletId,
-					platform: "polkadot",
-					type: "injected",
-					name: "Talisman",
-					isConnected: true,
-				},
-			],
-			[cachedAccount],
-		);
+		const store = memoryStore();
+		store.rememberWallet(talisman.walletId);
+		store.setCachedState([cachedWallet], [cachedAccount]);
 		const states: KheopskitState[] = [];
 		subscription = getKheopskit$(
 			{ platforms: [polkadot()], hydrationGracePeriod: 500 },
@@ -437,6 +310,7 @@ describe("getKheopskit$ reload with a cached connected wallet", () => {
 			cachedAccount.id,
 		]);
 
+		talisman.resolveEnable();
 		await vi.advanceTimersByTimeAsync(300);
 		const after = states.at(-1)?.wallets.find((w) => w.id === walletId);
 		expect([after?.status, after?.isConnected]).toEqual(["connected", true]);
@@ -445,60 +319,36 @@ describe("getKheopskit$ reload with a cached connected wallet", () => {
 		for (const state of states)
 			for (const wallet of state.wallets)
 				expect(wallet.isConnected).toBe(wallet.status === "connected");
+		store.destroy();
 	});
 });
 
 describe("getKheopskit$ placeholders", () => {
 	let subscription: Subscription | undefined;
-	const walletId = "polkadot:talisman" as WalletId;
-	const addresses = [
-		"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-		"5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-	];
-	const injectedAccounts = addresses.map((address) => ({
+	const walletId = "polkadot:talisman";
+	const addresses = [ALICE, "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty"];
+	const accounts = addresses.map((address) => ({
 		address,
 		type: "sr25519" as const,
 	}));
-	const extensionListing = (accounts: {
-		get: () => Promise<typeof injectedAccounts>;
-		subscribe: (
-			callback: (list: typeof injectedAccounts) => void,
-		) => () => void;
-	}) => ({ accounts, signer: { signPayload: vi.fn(), signRaw: vi.fn() } });
-	const extension = extensionListing({
-		get: async () => injectedAccounts,
-		subscribe: () => () => {},
-	});
-	const enable = vi.fn<() => Promise<unknown>>();
 
 	const seedStore = (isConnected: boolean) => {
-		const store = createKheopskitStore();
-		if (isConnected) store.rememberWallet(walletId);
+		const store = memoryStore();
+		const talisman = { ...cachedWalletOf(walletId, "Talisman"), isConnected };
+		if (isConnected) store.rememberWallet(talisman.id);
 		store.setCachedState(
-			[
-				{
-					id: walletId,
-					platform: "polkadot",
-					type: "injected",
-					name: "Talisman",
-					isConnected,
-				},
-			],
+			[talisman],
 			isConnected
 				? addresses.map((address) => ({
-						id: getWalletAccountId(walletId, address),
-						platform: "polkadot" as const,
-						address,
+						...cachedAccountOf(talisman, address),
 						polkadotAccountType: "sr25519" as const,
-						walletId,
-						walletName: "Talisman",
 					}))
 				: [],
 		);
 		return store;
 	};
 
-	const record = (store: ReturnType<typeof createKheopskitStore>) => {
+	const record = (store: ReturnType<typeof memoryStore>) => {
 		const states: KheopskitState[] = [];
 		subscription = getKheopskit$(
 			{ platforms: [polkadot()], hydrationGracePeriod: 500 },
@@ -510,22 +360,8 @@ describe("getKheopskit$ placeholders", () => {
 	const walletIn = (state: KheopskitState | undefined) =>
 		state?.wallets.find((w) => w.id === walletId);
 
-	const enableAfter = (ms: number) =>
-		enable.mockImplementation(
-			() => new Promise((resolve) => setTimeout(() => resolve(extension), ms)),
-		);
-
-	beforeEach(async () => {
-		localStorage.clear();
+	beforeEach(() => {
 		vi.useFakeTimers();
-		enable.mockReset();
-		window.injectedWeb3 = { talisman: { enable } } as never;
-		const actualWallets =
-			await vi.importActual<typeof import("./wallets")>("./wallets");
-		const actualAccounts =
-			await vi.importActual<typeof import("./accounts")>("./accounts");
-		vi.mocked(getWallets$).mockImplementation(actualWallets.getWallets$);
-		vi.mocked(getAccounts$).mockImplementation(actualAccounts.getAccounts$);
 	});
 
 	afterEach(() => {
@@ -534,21 +370,21 @@ describe("getKheopskit$ placeholders", () => {
 		vi.restoreAllMocks();
 		Reflect.deleteProperty(document, "readyState");
 		vi.useRealTimers();
-		vi.mocked(getWallets$).mockImplementation(() => of([]));
-		vi.mocked(getAccounts$).mockImplementation(() => of([]));
-		delete window.injectedWeb3;
 	});
 
 	describe("with the wallet injected", () => {
+		let talisman: FakePolkadotExtension;
+
 		beforeEach(() => {
 			setReadyState("complete");
-			injected.names = ["talisman"];
-			enableAfter(300);
+			talisman = install({ name: "talisman", accounts, enable: "hold" });
 		});
 
 		it("placeholders are flagged during hydration and gone after", async () => {
 			const states = record(seedStore(true));
-			await vi.advanceTimersByTimeAsync(4000);
+			await vi.advanceTimersByTimeAsync(300);
+			talisman.resolveEnable();
+			await vi.advanceTimersByTimeAsync(3700);
 
 			const accountFlags = (state: KheopskitState) =>
 				state.accounts.map((a) => [a.isPlaceholder, "txCreator" in a]);
@@ -590,6 +426,7 @@ describe("getKheopskit$ placeholders", () => {
 				true,
 			]);
 
+			talisman.resolveEnable();
 			await vi.advanceTimersByTimeAsync(300);
 			expect(walletIn(states.at(-1))).toMatchObject({
 				isPlaceholder: false,
@@ -602,17 +439,13 @@ describe("getKheopskit$ placeholders", () => {
 		});
 
 		it("live accounts identical to their placeholders emit before hydration ends", async () => {
-			enable.mockImplementation(async () =>
-				extensionListing({
-					get: async () => [],
-					subscribe: (callback) => {
-						const timeout = setTimeout(() => callback(injectedAccounts), 200);
-						return () => clearTimeout(timeout);
-					},
-				}),
-			);
+			talisman.setAccounts([]);
 			const states = record(seedStore(true));
-			await vi.advanceTimersByTimeAsync(4000);
+			await vi.advanceTimersByTimeAsync(0);
+			talisman.resolveEnable();
+			await vi.advanceTimersByTimeAsync(200);
+			talisman.setAccounts(accounts);
+			await vi.advanceTimersByTimeAsync(3800);
 
 			const firstLive = states.findIndex((s) =>
 				s.accounts.some((a) => !a.isPlaceholder),
@@ -629,9 +462,7 @@ describe("getKheopskit$ placeholders", () => {
 	describe("placeholder connect defers to the live wallet", () => {
 		beforeEach(() => {
 			setReadyState("loading");
-			injected.names = [];
 			captureLoadListeners();
-			enableAfter(50);
 		});
 
 		const placeholderOf = async (states: KheopskitState[]) => {
@@ -650,14 +481,13 @@ describe("getKheopskit$ placeholders", () => {
 				settledIn = states.at(-1);
 			});
 			await vi.advanceTimersByTimeAsync(200);
-			expect(enable).not.toHaveBeenCalled();
 
-			injected.names = ["talisman"];
+			const talisman = install({ name: "talisman", accounts });
 			await fireLoad();
 			await vi.advanceTimersByTimeAsync(200);
 			await connecting;
 
-			expect(enable).toHaveBeenCalledTimes(1);
+			expect(talisman.enableCalls()).toHaveLength(1);
 			expect(walletIn(settledIn)).toMatchObject({
 				isPlaceholder: false,
 				status: "connected",
@@ -684,10 +514,10 @@ describe("getKheopskit$ placeholders", () => {
 			await vi.advanceTimersByTimeAsync(0);
 			expect(outcome).toMatchObject({ code: "ABORTED", walletId });
 
-			injected.names = ["talisman"];
+			const talisman = install({ name: "talisman", accounts });
 			await fireLoad();
 			await vi.advanceTimersByTimeAsync(200);
-			expect(enable).not.toHaveBeenCalled();
+			expect(talisman.enableCalls()).toEqual([]);
 		});
 
 		it("rejects WALLET_PENDING when hydration ends without the wallet", async () => {
@@ -705,11 +535,10 @@ describe("getKheopskit$ placeholders", () => {
 
 			expect(await result).toMatchObject({ code: "WALLET_PENDING", walletId });
 			expect(rejectedIn?.isHydrating).toBe(false);
-			expect(enable).not.toHaveBeenCalled();
 		});
 
 		it("rejects ABORTED without connecting when the consumer unsubscribes as the wallet goes live", async () => {
-			const store = createKheopskitStore();
+			const store = memoryStore();
 			store.setCachedState(
 				[
 					{
@@ -778,7 +607,7 @@ describe("getKheopskit$ placeholders", () => {
 		});
 
 		it("a cached WalletConnect session's placeholder has no appKit and the restored connector has it", async () => {
-			const store = createKheopskitStore();
+			const store = memoryStore();
 			store.setCachedState(
 				[
 					{

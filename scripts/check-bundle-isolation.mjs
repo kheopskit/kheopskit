@@ -53,6 +53,14 @@ const RULES = {
 		"@wallet-standard/app",
 		"polkadot-api",
 	],
+	testing: [
+		"viem",
+		"mipd",
+		"@solana/kit",
+		"@wallet-standard/app",
+		"polkadot-api",
+		"@reown/appkit",
+	],
 };
 
 // Runtime bundle formats and the matching type-definition formats. Both must be
