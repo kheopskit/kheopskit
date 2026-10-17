@@ -271,7 +271,7 @@ accounts from `state.accounts`; kheopskit owns the subscription. As in v5,
 `connect()` reads `accounts.get()` before it resolves, so the emission that
 first shows the wallet connected already lists its accounts; the list then
 follows `accounts.subscribe`. The field is `undefined` while the wallet is
-disconnected and while `state.isHydrating` is `true`.
+disconnected, and a placeholder (section 6) has none.
 
 ```diff
 - const accounts = wallet.extension?.getAccounts() ?? [];
@@ -301,6 +301,7 @@ and both values show the same screen. The SIWS `Version` line must read `1.0.0`;
 Talisman's parser rejects `1` and falls back to the generic screen.
 
 ```ts
+if (account.isPlaceholder) return;
 const signature = await account.signRaw(siwsMessage);
 ```
 
@@ -508,6 +509,7 @@ union on it:
 | `PolkadotInjectedWallet` | `extension`, `sourceId` |
 | `EthereumInjectedWallet` | `provider`, `sourceId` |
 | `SolanaInjectedWallet` | `wallet`, `chains`, `sourceId` |
+| `WalletConnectWallet` | `appKit` |
 
 In v5 these fields were typed as present and were `undefined` at runtime until
 hydration ended. In v6 reading one without narrowing is a compile error:

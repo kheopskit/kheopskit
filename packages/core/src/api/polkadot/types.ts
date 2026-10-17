@@ -73,8 +73,8 @@ type LivePolkadotInjectedWallet = {
 	sourceId: string;
 	/**
 	 * The raw object `enable(appName)` returned. Use it for extension calls
-	 * kheopskit does not wrap. `undefined` while the wallet is disconnected and
-	 * while `state.isHydrating` is `true`.
+	 * kheopskit does not wrap. `undefined` while the wallet is disconnected; a
+	 * placeholder has none.
 	 */
 	extension: PolkadotInjected | undefined;
 	name: string;
