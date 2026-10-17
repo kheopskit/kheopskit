@@ -132,14 +132,12 @@ try {
 - **No throttle on the stream.** `throttleTime(16)` is replaced by a microtask
   coalesce: a synchronous burst (wallets, then accounts) becomes one emission,
   so no emission shows a connected wallet with a previous connection's
-  accounts, or a disconnected wallet still listing accounts. The live account
-  list is filtered by the live wallets' `isConnected` before the state is
-  built, so a wallet's accounts leave the state in the same emission that shows
-  it disconnected, even while another wallet's accounts are being re-read.
-  Accounts a platform lists asynchronously (Ethereum `eth_accounts`) may
-  arrive in a later emission. The first emission can arrive one microtask
-  after subscribe. `KheopskitProvider` still paints the cached snapshot
-  synchronously.
+  accounts, or a disconnected wallet still listing accounts. A wallet's
+  accounts leave the state in the same emission that shows it disconnected,
+  even while another wallet's accounts are being re-read. Accounts a platform
+  lists asynchronously (Ethereum `eth_accounts`) may arrive in a later
+  emission. The first emission can arrive one microtask after subscribe.
+  `KheopskitProvider` still paints the cached snapshot synchronously.
 
 ### What to delete in your app
 
