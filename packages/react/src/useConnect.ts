@@ -14,10 +14,11 @@ export type UseConnectResult = {
 	/**
 	 * Connects the wallet. Resolves once the state shows it connected. Unmounting
 	 * the component or changing `walletId` aborts a pending connect, which then
-	 * resolves without connecting. A connect that starts after unmount rejects
-	 * `ABORTED` without asking the wallet. Rejects with the wallet's
-	 * `KheopskitError` otherwise, such as `USER_REJECTED`, and with an `Error`
-	 * when the state lists no wallet with this id.
+	 * resolves without connecting. A connect that starts after unmount, or
+	 * through a `connect` captured before `walletId` changed, rejects `ABORTED`
+	 * without asking the wallet. Rejects with the wallet's `KheopskitError`
+	 * otherwise, such as `USER_REJECTED`, and with an `Error` when the state
+	 * lists no wallet with this id.
 	 */
 	connect: () => Promise<void>;
 	/** Disconnects the wallet. Resolves once the state shows it disconnected. */
@@ -30,6 +31,10 @@ export type UseConnectResult = {
 
 const useIsomorphicLayoutEffect =
 	typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+// React runs every layout setup of a commit synchronously, so once this
+// microtask runs a mounted owner has renewed its scope.
+const afterThisCommitsLayoutEffects = () => Promise.resolve();
 
 const createWalletActions = (
 	store: KheopskitExternalStore,
@@ -47,11 +52,12 @@ const createWalletActions = (
 
 	return {
 		connect: async () => {
+			if (scope.signal.aborted) await afterThisCommitsLayoutEffects();
 			const { signal } = scope;
 			if (signal.aborted)
 				throw new KheopskitError(
 					"ABORTED",
-					`connect of wallet ${walletId} started after useConnect unmounted`,
+					`connect of wallet ${walletId} started after useConnect unmounted or switched wallet`,
 					{ walletId },
 				);
 			try {
@@ -65,10 +71,10 @@ const createWalletActions = (
 			}
 		},
 		disconnect: async () => currentWallet().disconnect(),
-		mount: () => {
+		renew: () => {
 			if (scope.signal.aborted) scope = new AbortController();
-			return () => scope.abort();
 		},
+		abort: () => scope.abort(),
 	};
 };
 
@@ -93,7 +99,8 @@ export const useConnect = (walletId: WalletId): UseConnectResult => {
 		[store, walletId],
 	);
 
-	useIsomorphicLayoutEffect(actions.mount, [actions]);
+	useIsomorphicLayoutEffect(() => actions.renew(), [actions]);
+	useEffect(() => () => actions.abort(), [actions]);
 
 	return {
 		connect: actions.connect,

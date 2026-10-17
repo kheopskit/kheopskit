@@ -143,8 +143,10 @@ const ConnectButton = ({ walletId }: { walletId: WalletId }) => {
   the extension, the hook aborts the connect. The wallet stays disconnected
   and is not remembered, and `connect()` resolves.
 - A `connect()` that starts after the component unmounted, such as from an
-  async handler that resumes later, rejects `ABORTED` without asking the
-  extension.
+  async handler that resumes later, or through a `connect` captured before
+  `walletId` changed, rejects `ABORTED` without asking the extension.
+- A Suspense fallback shown over the component, or a StrictMode remount, aborts
+  nothing. Only a real unmount or a `walletId` change does.
 - Every other failure rejects with the wallet's `KheopskitError`, such as
   `USER_REJECTED`, and also shows in `error`.
 - `connect` and `disconnect` keep their identity while `walletId` stays the
