@@ -110,11 +110,9 @@ test.describe("polkadot mock wallet", () => {
 			walletRow.getByRole("button", { name: "Disconnect" }),
 		).toBeVisible();
 
-		expect(await buttonSequence(page)).toEqual([
-			"Connect",
-			"Connecting… (disabled)",
-			"Disconnect",
-		]);
+		await expect
+			.poll(() => buttonSequence(page))
+			.toEqual(["Connect", "Connecting… (disabled)", "Disconnect"]);
 		expect(
 			await page.evaluate(
 				() => (window as { __dotEnableCalls?: number }).__dotEnableCalls,

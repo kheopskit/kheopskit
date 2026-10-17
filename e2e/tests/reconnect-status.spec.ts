@@ -61,10 +61,9 @@ test("a remembered wallet shows Connecting… before Disconnect after a reload",
 		timeout: 15_000,
 	});
 
-	expect(await buttonSequence(page)).toEqual([
-		"Connecting… (disabled)",
-		"Disconnect",
-	]);
+	await expect
+		.poll(() => buttonSequence(page))
+		.toEqual(["Connecting… (disabled)", "Disconnect"]);
 	expect(
 		await page.evaluate(
 			() => (window as { __dotEnableCalls?: number }).__dotEnableCalls,
