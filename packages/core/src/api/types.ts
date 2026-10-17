@@ -251,21 +251,15 @@ export type WalletConnectMetadata = {
 	icons: string[];
 };
 
-export type WalletConnectConfig = {
-	projectId: string;
-	metadata: WalletConnectMetadata;
-	/** Defaults to wss://relay.walletconnect.com */
-	relayUrl?: string;
-	/**
-	 * Networks AppKit should enable. Pass `AppKitNetwork[]` from
-	 * `@reown/appkit/networks` (see
-	 * https://docs.reown.com/advanced/multichain/polkadot/dapp-integration-guide#walletconnect-code%2Fcomponent-setup).
-	 * Loosely typed (`unknown`) so core doesn't depend on `@reown/appkit`'s
-	 * types — the value is forwarded to AppKit as-is.
-	 */
-	networks: [unknown, ...unknown[]];
-	themeMode?: "light" | "dark";
-	themeVariables?: Record<string, string | number>;
+/**
+ * The WalletConnect connector for `config.walletConnect`. Create it with
+ * `walletConnect()` from `@kheopskit/core/walletconnect`; that entry is the only
+ * one that loads Reown AppKit.
+ */
+export type WalletConnectPlugin = {
+	readonly type: "walletconnect";
+	readonly metadata: WalletConnectMetadata;
+	getWallet$(ctx: PlatformContext): Observable<WalletConnectWallet | null>;
 };
 
 /**
@@ -366,7 +360,8 @@ export type KheopskitConfig<
 	 * Import factories from `@kheopskit/core/<platform>`.
 	 */
 	platforms: P;
-	walletConnect?: WalletConnectConfig;
+	/** Create with `walletConnect()` from `@kheopskit/core/walletconnect`. */
+	walletConnect?: WalletConnectPlugin;
 	/**
 	 * Dapp name sent to Polkadot injected extensions on connect. Some
 	 * extensions (e.g. polkadot.js) warn about a suspicious origin when it's

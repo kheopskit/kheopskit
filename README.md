@@ -37,13 +37,40 @@ Each platform lives behind its own entry point and brings its own (optional) pee
 | Ethereum | `@kheopskit/core/ethereum` | `pnpm add viem mipd` |
 | Solana | `@kheopskit/core/solana` | `pnpm add @solana/kit @wallet-standard/app @wallet-standard/base` |
 
-WalletConnect support (via Reown AppKit, across any platform) is also optional — install it only if you pass `config.walletConnect`:
+WalletConnect support (via Reown AppKit, across any platform) is also optional. It lives behind its own entry point, `@kheopskit/core/walletconnect`; install it only if you import that entry:
 
 | Feature | Install |
 |---------|---------|
 | WalletConnect | `pnpm add @reown/appkit` |
 
-`rxjs` is always required. Everything else is an optional peer dependency: a Polkadot-only dapp that doesn't use WalletConnect installs neither the Ethereum/Solana SDKs nor `@reown/appkit`, and none of their code is pulled into your bundle. If `config.walletConnect` is set but `@reown/appkit` isn't installed, WalletConnect is disabled with a console error while injected wallets keep working.
+`rxjs` is always required. Everything else is an optional peer dependency: a Polkadot-only dapp that doesn't use WalletConnect installs neither the Ethereum/Solana SDKs nor `@reown/appkit`, and none of their code, nor kheopskit's AppKit glue, is pulled into your bundle. If `@reown/appkit` isn't installed, WalletConnect is disabled with a console error while injected wallets keep working.
+
+To enable WalletConnect, pass the plugin to `config.walletConnect`:
+
+```ts
+import { getKheopskit$ } from "@kheopskit/core";
+import { polkadot } from "@kheopskit/core/polkadot";
+import { walletConnect } from "@kheopskit/core/walletconnect";
+import { defineChain } from "@reown/appkit/networks";
+
+const polkadotNetwork = defineChain({
+  id: "91b171bb158e2d3848fa23a9f1c25182",
+  name: "Polkadot",
+  nativeCurrency: { name: "Polkadot", symbol: "DOT", decimals: 10 },
+  rpcUrls: { default: { http: ["https://rpc.polkadot.io"] } },
+  chainNamespace: "polkadot",
+  caipNetworkId: "polkadot:91b171bb158e2d3848fa23a9f1c25182",
+});
+
+const kheopskit$ = getKheopskit$({
+  platforms: [polkadot()],
+  walletConnect: walletConnect({
+    projectId: "<your Reown project id>",
+    metadata: { name: "My Dapp", description: "", url: "https://my.dapp", icons: [] },
+    networks: [polkadotNetwork],
+  }),
+});
+```
 
 ---
 
@@ -152,7 +179,7 @@ const config = {
 
 ### Polkadot app name
 
-Set `appName` in the config to name your dapp to Polkadot extensions on connect. When it's unset, kheopskit sends `walletConnect.metadata.name`, then `window.location.hostname`, because polkadot.js warns about a suspicious origin when the name is empty.
+Set `appName` in the config to name your dapp to Polkadot extensions on connect. When it's unset, kheopskit sends the WalletConnect plugin's `metadata.name`, then `window.location.hostname`, because polkadot.js warns about a suspicious origin when the name is empty.
 
 ### Solana
 

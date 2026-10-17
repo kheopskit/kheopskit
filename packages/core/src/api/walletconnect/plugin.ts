@@ -1,0 +1,349 @@
+import type { AppKit } from "@reown/appkit/core";
+import {
+	BehaviorSubject,
+	distinctUntilChanged,
+	from,
+	map,
+	Observable,
+	of,
+	shareReplay,
+	switchMap,
+	tap,
+} from "rxjs";
+import { clearCachedObservablesByPrefix } from "../../utils/getCachedObservable";
+import { WALLET_CONNECT_WALLET_ID } from "../../utils/WalletId";
+import { type KheopskitError, toConnectError } from "../errors";
+import type {
+	AppKitInstance,
+	WalletConnectMetadata,
+	WalletConnectPlugin,
+	WalletConnectWallet,
+	WalletPlatform,
+} from "../types";
+
+export type WalletConnectOptions = {
+	projectId: string;
+	metadata: WalletConnectMetadata;
+	/**
+	 * Networks AppKit should enable. Pass `AppKitNetwork[]` from
+	 * `@reown/appkit/networks` (see
+	 * https://docs.reown.com/advanced/multichain/polkadot/dapp-integration-guide#walletconnect-code%2Fcomponent-setup).
+	 * Loosely typed (`unknown`) so the declarations don't depend on
+	 * `@reown/appkit`'s types; the value is forwarded to AppKit as-is.
+	 */
+	networks: [unknown, ...unknown[]];
+	themeMode?: "light" | "dark";
+	themeVariables?: Record<string, string | number>;
+};
+
+/**
+ * Dynamically import @reown/appkit/core to avoid loading browser-only code
+ * during SSR or in edge runtimes like Cloudflare Workers.
+ * The AppKit library uses Lit for web components which requires document.
+ */
+const loadAppKit = async () => {
+	try {
+		const { createAppKit } = await import("@reown/appkit/core");
+		return createAppKit;
+	} catch (cause) {
+		console.error(
+			"[kheopskit] WalletConnect is configured but @reown/appkit could not be loaded. " +
+				"Install it with `pnpm add @reown/appkit` (or remove config.walletConnect). " +
+				"WalletConnect wallets are disabled; injected wallets still work.",
+			cause,
+		);
+		return null;
+	}
+};
+
+const WALLET_CONNECT_ICON =
+	"data:image/svg+xml;base64,PHN2ZyBmaWxsPSJub25lIiBoZWlnaHQ9IjQwMCIgdmlld0JveD0iMCAwIDQwMCA0MDAiIHdpZHRoPSI0MDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiPjxjbGlwUGF0aCBpZD0iYSI+PHBhdGggZD0ibTAgMGg0MDB2NDAwaC00MDB6Ii8+PC9jbGlwUGF0aD48ZyBjbGlwLXBhdGg9InVybCgjYSkiPjxjaXJjbGUgY3g9IjIwMCIgY3k9IjIwMCIgZmlsbD0iIzMzOTZmZiIgcj0iMTk5LjUiIHN0cm9rZT0iIzY2YjFmZiIvPjxwYXRoIGQ9Im0xMjIuNTE5IDE0OC45NjVjNDIuNzkxLTQxLjcyOSAxMTIuMTcxLTQxLjcyOSAxNTQuOTYyIDBsNS4xNSA1LjAyMmMyLjE0IDIuMDg2IDIuMTQgNS40NjkgMCA3LjU1NWwtMTcuNjE3IDE3LjE4Yy0xLjA3IDEuMDQzLTIuODA0IDEuMDQzLTMuODc0IDBsLTcuMDg3LTYuOTExYy0yOS44NTMtMjkuMTExLTc4LjI1My0yOS4xMTEtMTA4LjEwNiAwbC03LjU5IDcuNDAxYy0xLjA3IDEuMDQzLTIuODA0IDEuMDQzLTMuODc0IDBsLTE3LjYxNy0xNy4xOGMtMi4xNC0yLjA4Ni0yLjE0LTUuNDY5IDAtNy41NTV6bTE5MS4zOTcgMzUuNTI5IDE1LjY3OSAxNS4yOWMyLjE0IDIuMDg2IDIuMTQgNS40NjkgMCA3LjU1NWwtNzAuNyA2OC45NDRjLTIuMTM5IDIuMDg3LTUuNjA4IDIuMDg3LTcuNzQ4IDBsLTUwLjE3OC00OC45MzFjLS41MzUtLjUyMi0xLjQwMi0uNTIyLTEuOTM3IDBsLTUwLjE3OCA0OC45MzFjLTIuMTM5IDIuMDg3LTUuNjA4IDIuMDg3LTcuNzQ4IDBsLTcwLjcwMTUtNjguOTQ1Yy0yLjEzOTYtMi4wODYtMi4xMzk2LTUuNDY5IDAtNy41NTVsMTUuNjc5NS0xNS4yOWMyLjEzOTYtMi4wODYgNS42MDg1LTIuMDg2IDcuNzQ4MSAwbDUwLjE3ODkgNDguOTMyYy41MzUuNTIyIDEuNDAyLjUyMiAxLjkzNyAwbDUwLjE3Ny00OC45MzJjMi4xMzktMi4wODcgNS42MDgtMi4wODcgNy43NDggMGw1MC4xNzkgNDguOTMyYy41MzUuNTIyIDEuNDAyLjUyMiAxLjkzNyAwbDUwLjE3OS00OC45MzFjMi4xMzktMi4wODcgNS42MDgtMi4wODcgNy43NDggMHoiIGZpbGw9IiNmZmYiLz48L2c+PC9zdmc+";
+
+// Once it exists, the appKit object should never be recreated. Anchored on
+// globalThis so it stays a single instance even if this module is duplicated
+// across bundle chunks (e.g. CJS subpath entries).
+const APPKIT_SYMBOL = Symbol.for("kheopskit.cachedAppKit");
+// The projectId AppKit was first initialised with. AppKit is a process-wide
+// singleton, so a later call with a different WalletConnect config is silently
+// ignored — we keep this to warn loudly instead of letting it pass unnoticed.
+const APPKIT_PROJECT_ID_SYMBOL = Symbol.for("kheopskit.cachedAppKitProjectId");
+type AppKitGlobal = Record<
+	symbol,
+	Observable<WalletConnectWallet | null> | string | undefined
+>;
+const getCachedAppKit = ():
+	| Observable<WalletConnectWallet | null>
+	| undefined =>
+	(globalThis as unknown as AppKitGlobal)[APPKIT_SYMBOL] as
+		| Observable<WalletConnectWallet | null>
+		| undefined;
+const getCachedAppKitProjectId = (): string | undefined =>
+	(globalThis as unknown as AppKitGlobal)[APPKIT_PROJECT_ID_SYMBOL] as
+		| string
+		| undefined;
+const setCachedAppKit = (
+	value: Observable<WalletConnectWallet | null> | undefined,
+	projectId?: string,
+): void => {
+	(globalThis as unknown as AppKitGlobal)[APPKIT_SYMBOL] = value;
+	(globalThis as unknown as AppKitGlobal)[APPKIT_PROJECT_ID_SYMBOL] = projectId;
+};
+
+/**
+ * Clears the cached AppKit observable.
+ * Use when configuration changes or for testing purposes.
+ * Note: This does NOT destroy the appKit instance created by Reown.
+ */
+export const resetAppKitCache = (): void => {
+	setCachedAppKit(undefined);
+};
+
+/**
+ * Keys are `accounts:<walletId>:...`; the trailing colon scopes the prefix to
+ * this wallet and avoids matching a sibling whose id is a string prefix.
+ */
+const dropAccountsCache = (platform: WalletPlatform): void => {
+	clearCachedObservablesByPrefix(
+		`accounts:${WALLET_CONNECT_WALLET_ID}:${platform}:`,
+	);
+};
+
+const namespaceOf: Record<WalletPlatform, string> = {
+	polkadot: "polkadot",
+	ethereum: "eip155",
+	solana: "solana",
+};
+const allPlatforms: WalletPlatform[] = ["polkadot", "ethereum", "solana"];
+
+const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
+	// Exposed on the wallet as the (decoupled) AppKitInstance escape hatch.
+	const appKitInstance = appKit as unknown as AppKitInstance;
+
+	const status$ = new BehaviorSubject<{
+		isPolkadotConnected: boolean;
+		isEthereumConnected: boolean;
+		isSolanaConnected: boolean;
+		opening: boolean;
+		error: KheopskitError | undefined;
+	}>({
+		isPolkadotConnected: false,
+		isEthereumConnected: false,
+		isSolanaConnected: false,
+		opening: false,
+		error: undefined,
+	});
+
+	const syncProviders = (providers: Partial<Record<string, unknown>>) => {
+		status$.next({
+			...status$.value,
+			isPolkadotConnected: !!providers.polkadot,
+			isEthereumConnected: !!providers.eip155,
+			isSolanaConnected: !!providers.solana,
+		});
+	};
+
+	const openModal = async () => {
+		status$.next({ ...status$.value, opening: true, error: undefined });
+		try {
+			await appKit.open();
+		} catch (cause) {
+			const error = toConnectError(
+				cause,
+				WALLET_CONNECT_WALLET_ID,
+				() => false,
+			);
+			status$.next({ ...status$.value, opening: false, error });
+			throw error;
+		}
+		status$.next({ ...status$.value, opening: false });
+	};
+
+	const enabledPlatforms = allPlatforms.filter((p) =>
+		(appKit.chainNamespaces as string[]).includes(namespaceOf[p]),
+	);
+
+	let prevConnected = {
+		polkadot: false,
+		ethereum: false,
+		solana: false,
+	};
+
+	const wallet$ = status$.pipe(
+		map((s) => ({
+			polkadot: s.isPolkadotConnected,
+			ethereum: s.isEthereumConnected,
+			solana: s.isSolanaConnected,
+			opening: s.opening,
+			error: s.error,
+		})),
+		distinctUntilChanged(
+			(a, b) =>
+				a.polkadot === b.polkadot &&
+				a.ethereum === b.ethereum &&
+				a.solana === b.solana &&
+				a.opening === b.opening &&
+				a.error === b.error,
+		),
+		tap((connected) => {
+			// Drop caches for namespaces that just went disconnected.
+			for (const platform of allPlatforms)
+				if (prevConnected[platform] && !connected[platform])
+					dropAccountsCache(platform);
+			prevConnected = connected;
+		}),
+		map(({ opening, error, ...connected }): WalletConnectWallet => {
+			const platforms = enabledPlatforms.filter((p) => connected[p]);
+			const isConnected = platforms.length > 0;
+			const walletInfo = appKit.getWalletInfo();
+			return {
+				id: WALLET_CONNECT_WALLET_ID,
+				type: "walletconnect",
+				platforms,
+				appKit: appKitInstance,
+				name: walletInfo?.name ?? "WalletConnect",
+				icon: walletInfo?.icon ?? WALLET_CONNECT_ICON,
+				// One shared session: connecting opens the modal; the wallet
+				// approves namespaces in that single pairing. Disconnect is
+				// session-wide; re-pair to change the approved set.
+				connect: async () => {
+					if (!isConnected) await openModal();
+				},
+				disconnect: async () => {
+					if (isConnected) await appKit.disconnect();
+				},
+				status: isConnected
+					? "connected"
+					: opening
+						? "connecting"
+						: "disconnected",
+				error,
+				isConnected,
+			};
+		}),
+	);
+
+	return new Observable<WalletConnectWallet>((subscriber) => {
+		for (const platform of allPlatforms) dropAccountsCache(platform);
+		// AppKit's subscribeProviders only reports later changes, so read the
+		// state that may have changed while nobody observed.
+		syncProviders({
+			polkadot: appKit.getProvider("polkadot"),
+			eip155: appKit.getProvider("eip155"),
+			solana: appKit.getProvider("solana"),
+		});
+		const unsubProviders = appKit.subscribeProviders(syncProviders);
+		const sub = wallet$.subscribe(subscriber);
+		return () => {
+			sub.unsubscribe();
+			unsubProviders();
+		};
+	});
+};
+
+/**
+ * @remarks
+ * The AppKit instance is a process-wide singleton: a second instance would
+ * share AppKit's module-level controller state with the first, so it is
+ * created once. The **first** call with a `walletConnect` config wins;
+ * later calls with a *different* `walletConnect` config reuse that first
+ * instance. Call {@link resetAppKitCache} before re-initialising if the
+ * WalletConnect config must change.
+ *
+ * One WalletConnect session is shared across every namespace, and a namespace
+ * can only be established during the initial pairing — it can't be added to a
+ * live session afterwards. So this exposes ONE connector (not one per platform):
+ * `connect()` opens the modal; the wallet approves whichever namespaces it
+ * supports in that single pairing, and `platforms` reflects what the live
+ * session carries. Per-namespace accounts are derived by each platform plugin.
+ */
+const getWalletConnectWallet$ = (
+	walletConnect: WalletConnectOptions,
+	debug: boolean,
+): Observable<WalletConnectWallet | null> => {
+	// SSR guard - don't try to load AppKit on the server
+	if (typeof window === "undefined") return of(null);
+
+	const cachedProjectId = getCachedAppKitProjectId();
+	if (
+		cachedProjectId !== undefined &&
+		cachedProjectId !== walletConnect.projectId
+	) {
+		console.warn(
+			"[kheopskit] WalletConnect is already initialised with projectId %s; " +
+				"AppKit is a process-wide singleton, so the first configuration wins and " +
+				"projectId %s is ignored. Call resetAppKitCache() before re-initialising " +
+				"if the WalletConnect config must change.",
+			cachedProjectId,
+			walletConnect.projectId,
+		);
+	}
+
+	let cachedAppKit = getCachedAppKit();
+	if (!cachedAppKit) {
+		// Dynamic import avoids loading @reown/appkit at module-eval time (SSR /
+		// edge runtimes like Cloudflare Workers).
+		const connectorOnce$ = from(loadAppKit()).pipe(
+			map((createAppKit) =>
+				// @reown/appkit missing (optional peer dep) — degrade gracefully.
+				createAppKit
+					? createConnector$(
+							createAppKit({
+								projectId: walletConnect.projectId,
+								metadata: walletConnect.metadata,
+								networks: walletConnect.networks as never,
+								themeMode: walletConnect.themeMode,
+								themeVariables: walletConnect.themeVariables as never,
+								universalProviderConfigOverride: {
+									methods: {
+										polkadot: [
+											"polkadot_signTransaction",
+											"polkadot_signMessage",
+										],
+										solana: [
+											"solana_signTransaction",
+											"solana_signMessage",
+											"solana_signAndSendTransaction",
+										],
+									},
+								},
+								allWallets: "HIDE",
+								debug,
+								allowUnsupportedChain: true,
+							}),
+						)
+					: null,
+			),
+			shareReplay({ refCount: false, bufferSize: 1 }),
+		);
+		cachedAppKit = connectorOnce$.pipe(
+			switchMap((wallet$) => wallet$ ?? of(null)),
+			shareReplay({ refCount: true, bufferSize: 1 }),
+		);
+		setCachedAppKit(cachedAppKit, walletConnect.projectId);
+	}
+
+	return cachedAppKit;
+};
+
+/**
+ * The WalletConnect plugin for `config.walletConnect`. Importing this entry is
+ * what brings Reown AppKit into a dapp's bundle; a dapp that never imports it
+ * ships none of it.
+ *
+ * @example
+ * ```ts
+ * import { walletConnect } from "@kheopskit/core/walletconnect";
+ *
+ * getKheopskit$({
+ *   platforms: [polkadot()],
+ *   walletConnect: walletConnect({ projectId, metadata, networks }),
+ * });
+ * ```
+ */
+export const walletConnect = (
+	options: WalletConnectOptions,
+): WalletConnectPlugin => ({
+	type: "walletconnect",
+	metadata: options.metadata,
+	getWallet$: ({ config }) => getWalletConnectWallet$(options, config.debug),
+});
