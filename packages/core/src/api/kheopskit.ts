@@ -5,7 +5,10 @@ import {
 	filter,
 	map,
 	Observable,
+	of,
 	shareReplay,
+	switchMap,
+	take,
 	throttleTime,
 } from "rxjs";
 import {
@@ -149,7 +152,16 @@ export const getKheopskit$ = <
 		const subscription = combineLatest({
 			wallets: sharedWallets$,
 			accounts: sharedAccounts$,
-			isDiscovering: pageLoaded$.pipe(map((loaded) => !loaded)),
+			isDiscovering: pageLoaded$.pipe(
+				switchMap((loaded) =>
+					loaded
+						? liveWallets$.pipe(
+								take(1),
+								map(() => false),
+							)
+						: of(true),
+				),
+			),
 		})
 			.pipe(
 				map(({ wallets, accounts, isDiscovering }) => {
