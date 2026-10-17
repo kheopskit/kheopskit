@@ -1,11 +1,13 @@
 import { BehaviorSubject, firstValueFrom, of, type Subscription } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { SyncableStorage } from "../utils/storage";
 import type { WalletId } from "../utils/WalletId";
 import { resolveConfig } from "./config";
 import {
 	createInjectedWallets$,
 	type InjectedWalletsAdapter,
 } from "./injectedWallets";
+import { getKheopskit$ } from "./kheopskit";
 import { createKheopskitStore } from "./store";
 import type { BaseWallet, KheopskitConfig, KheopskitPlatform } from "./types";
 import { getWallets$ } from "./wallets";
@@ -73,6 +75,14 @@ const remembered = (): string[] =>
 const connectedIds = (calls: unknown[][]) =>
 	calls.map(([, walletId]) => walletId);
 
+const spiedStorage = () => ({
+	getItem: (key: string) => localStorage.getItem(key),
+	setItem: vi.fn((key: string, value: string) =>
+		localStorage.setItem(key, value),
+	),
+	removeItem: (key: string) => localStorage.removeItem(key),
+});
+
 describe("getWallets$ auto-reconnect", () => {
 	let sub: Subscription | undefined;
 
@@ -91,8 +101,10 @@ describe("getWallets$ auto-reconnect", () => {
 		sources = [{ id: walletA }] as Source[],
 		adapter = {} as Partial<Adapter>,
 		autoReconnect = true as KheopskitConfig["autoReconnect"],
+		storage = undefined as SyncableStorage | undefined,
+		onEmission = (_wallets: BaseWallet[]) => {},
 	} = {}) => {
-		const store = createKheopskitStore();
+		const store = createKheopskitStore({ storage });
 		for (const id of rememberedIds) store.rememberWallet(id);
 		const sources$ = new BehaviorSubject<Source[]>(sources);
 		const connect = vi.fn(adapter.connect ?? (async () => "handle"));
@@ -102,9 +114,10 @@ describe("getWallets$ auto-reconnect", () => {
 			debug: false,
 		});
 		const emissions: BaseWallet[][] = [];
-		sub = getWallets$(config, store).subscribe((wallets) =>
-			emissions.push(wallets as BaseWallet[]),
-		);
+		sub = getWallets$(config, store).subscribe((wallets) => {
+			emissions.push(wallets as BaseWallet[]);
+			onEmission(wallets as BaseWallet[]);
+		});
 		const walletById = (id: WalletId) => {
 			const wallet = emissions.at(-1)?.find((w) => w.id === id);
 			if (!wallet) throw new Error(`wallet ${id} not emitted`);
@@ -130,23 +143,22 @@ describe("getWallets$ auto-reconnect", () => {
 
 	it("a remembered wallet shows connecting while it reconnects, then connected", async () => {
 		const deferred = createDeferred();
-		const { emissions } = setup({
+		const { walletById } = setup({
 			adapter: { connect: () => deferred.promise },
 		});
 
 		await flush();
-		expect(emissions.map((wallets) => wallets[0]?.status)).toEqual([
-			"connecting",
-		]);
-		expect(emissions[0]?.[0]?.isConnected).toBe(false);
+		expect([
+			walletById(walletA).status,
+			walletById(walletA).isConnected,
+		]).toEqual(["connecting", false]);
 
 		deferred.resolve("handle");
 		await flush();
-		expect(emissions.map((wallets) => wallets[0]?.status)).toEqual([
-			"connecting",
-			"connected",
-		]);
-		expect(emissions[1]?.[0]?.isConnected).toBe(true);
+		expect([
+			walletById(walletA).status,
+			walletById(walletA).isConnected,
+		]).toEqual(["connected", true]);
 	});
 
 	it("a reconnect that fails sets error and keeps the wallet remembered", async () => {
@@ -188,6 +200,77 @@ describe("getWallets$ auto-reconnect", () => {
 		expect(connectedIds(connect.mock.calls)).toEqual([walletA]);
 	});
 
+	it("a rejection handled after the last subscriber left writes nothing to storage", async () => {
+		const storage = spiedStorage();
+		let writesAtUnsubscribe: number | undefined;
+		const { connect } = setup({
+			storage,
+			adapter: {
+				connect: () => Promise.reject(new Error("refused")),
+				isUserRejection: () => true,
+			},
+			onEmission: (wallets) => {
+				if (wallets[0]?.error?.code !== "USER_REJECTED") return;
+				writesAtUnsubscribe = storage.setItem.mock.calls.length;
+				sub?.unsubscribe();
+			},
+		});
+
+		await flush();
+		await flush();
+		expect(connectedIds(connect.mock.calls)).toEqual([walletA]);
+		expect(writesAtUnsubscribe).toBe(1);
+		expect(storage.setItem.mock.calls.length).toBe(1);
+		expect(remembered()).toEqual([walletA]);
+	});
+
+	it("a disconnect during a pending auto-reconnect is not undone by a later wallets emission", async () => {
+		const deferred = createDeferred();
+		let calls = 0;
+		const { connect, walletById, sources$ } = setup({
+			adapter: {
+				connect: () =>
+					++calls === 1 ? deferred.promise : Promise.resolve("handle"),
+			},
+		});
+
+		await flush();
+		expect(walletById(walletA).status).toBe("connecting");
+		await walletById(walletA).disconnect();
+		await flush();
+		expect(walletById(walletA).status).toBe("disconnected");
+
+		sources$.next([{ id: walletA }, { id: walletB }]);
+		await flush();
+		expect(connectedIds(connect.mock.calls)).toEqual([walletA]);
+		expect(walletById(walletA).status).toBe("disconnected");
+	});
+
+	it("a user disconnect after a failed auto-reconnect and a manual connect is not undone", async () => {
+		let calls = 0;
+		const { connect, walletById } = setup({
+			adapter: {
+				connect: () =>
+					++calls === 1
+						? Promise.reject(new Error("locked"))
+						: Promise.resolve("handle"),
+			},
+		});
+
+		await flush();
+		expect(walletById(walletA).error?.code).toBe("CONNECT_FAILED");
+		await walletById(walletA).connect();
+		await flush();
+		expect(walletById(walletA).status).toBe("connected");
+
+		await walletById(walletA).disconnect();
+		await flush();
+		await flush();
+		expect(connectedIds(connect.mock.calls)).toEqual([walletA, walletA]);
+		expect(walletById(walletA).status).toBe("disconnected");
+		expect(remembered()).toEqual([]);
+	});
+
 	it("reconnects only wallets the predicate accepts", async () => {
 		const { connect, walletById } = setup({
 			rememberedIds: [walletA, walletB],
@@ -213,6 +296,24 @@ describe("getWallets$ auto-reconnect", () => {
 		sources$.next([{ id: walletA }, { id: walletB }]);
 		await flush();
 		expect(connectedIds(connect.mock.calls)).toEqual([walletA, walletB]);
+	});
+
+	it("a remembered wallet discovered after subscribe shows connecting while its reconnect pends", async () => {
+		const deferred = createDeferred();
+		const { connect, walletById, sources$ } = setup({
+			sources: [],
+			adapter: { connect: () => deferred.promise },
+		});
+
+		await flush();
+		sources$.next([{ id: walletA }]);
+		await flush();
+		expect(connectedIds(connect.mock.calls)).toEqual([walletA]);
+		expect(walletById(walletA).status).toBe("connecting");
+
+		deferred.resolve("handle");
+		await flush();
+		expect(walletById(walletA).status).toBe("connected");
 	});
 
 	it("does not auto-connect a wallet remembered by another tab after subscribe", async () => {
@@ -249,5 +350,54 @@ describe("getWallets$ auto-reconnect", () => {
 		});
 		const wallets = await firstValueFrom(getWallets$(config, store));
 		expect(wallets.map((w) => w.id)).toEqual([walletA]);
+	});
+});
+
+describe("getKheopskit$ with a cached connected wallet discovered after subscribe", () => {
+	const wait = (ms: number) =>
+		new Promise((resolve) => setTimeout(resolve, ms));
+
+	it("stays connecting until its reconnect settles, then connected", async () => {
+		localStorage.clear();
+		const store = createKheopskitStore();
+		store.rememberWallet(walletA);
+		store.setCachedState(
+			[
+				{
+					id: walletA,
+					platform: "polkadot",
+					type: "injected",
+					name: "A",
+					isConnected: true,
+				},
+			],
+			[],
+		);
+		const sources$ = new BehaviorSubject<Source[]>([]);
+		const deferred = createDeferred();
+		const statuses: (string | undefined)[] = [];
+		const sub = getKheopskit$(
+			{
+				platforms: [
+					enginePlugin(sources$, { connect: () => deferred.promise }),
+				],
+				hydrationGracePeriod: 500,
+			},
+			{ store },
+		).subscribe((state) => {
+			statuses.push(state.wallets.find((w) => w.id === walletA)?.status);
+		});
+
+		await wait(50);
+		sources$.next([{ id: walletA }]);
+		await wait(50);
+		expect(statuses.at(-1)).toBe("connecting");
+
+		deferred.resolve("handle");
+		await wait(50);
+		sub.unsubscribe();
+		expect(
+			statuses.filter((status, i, all) => i === 0 || status !== all[i - 1]),
+		).toEqual(["connecting", "connected"]);
 	});
 });
