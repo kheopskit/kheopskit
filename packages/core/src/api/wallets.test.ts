@@ -40,7 +40,7 @@ describe("getWallets$ auto-reconnect", () => {
 
 	const setup = async (configOverrides: { autoReconnect?: boolean } = {}) => {
 		const store = createKheopskitStore();
-		store.addEnabledWalletId(walletId);
+		store.rememberWallet(walletId);
 		const wallet = makeWallet();
 		const wallets$ = new BehaviorSubject<BaseWallet[]>([wallet]);
 		const config = resolveConfig({
@@ -52,7 +52,7 @@ describe("getWallets$ auto-reconnect", () => {
 		return { store, wallet, wallets$, live$: getWallets$(config, store) };
 	};
 
-	it("reconnects wallets listed in the store's autoReconnect ids", async () => {
+	it("reconnects wallets listed in the store's remembered ids", async () => {
 		const { wallet, live$ } = await setup();
 
 		const sub = live$.subscribe();

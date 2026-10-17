@@ -4,7 +4,7 @@ import { sortAccounts } from "./sortAccounts";
 import { getWalletId } from "./WalletId";
 
 const createAccount = (
-	platform: "polkadot" | "ethereum",
+	platform: "polkadot" | "ethereum" | "solana",
 	walletName: string,
 	name: string | undefined,
 	address: string,
@@ -95,58 +95,6 @@ describe("sortAccounts", () => {
 			expect(sortAccounts(alphaWallet, betaWallet)).toBeLessThan(0);
 			expect(sortAccounts(betaWallet, alphaWallet)).toBeGreaterThan(0);
 		});
-
-		it("sorts by account name when wallet names match", () => {
-			const account1 = createAccount(
-				"polkadot",
-				"subwallet",
-				"Alice",
-				"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-			);
-			const account2 = createAccount(
-				"polkadot",
-				"subwallet",
-				"Bob",
-				"5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-			);
-
-			expect(sortAccounts(account1, account2)).toBeLessThan(0);
-		});
-
-		it("sorts by address when wallet and account names match", () => {
-			const account1 = createAccount(
-				"polkadot",
-				"subwallet",
-				"Account",
-				"5AAAaaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-			);
-			const account2 = createAccount(
-				"polkadot",
-				"subwallet",
-				"Account",
-				"5ZZZzzEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-			);
-
-			expect(sortAccounts(account1, account2)).toBeLessThan(0);
-		});
-
-		it("handles undefined account names", () => {
-			const account1 = createAccount(
-				"polkadot",
-				"subwallet",
-				undefined,
-				"5AAAaaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-			);
-			const account2 = createAccount(
-				"polkadot",
-				"subwallet",
-				"Named Account",
-				"5ZZZzzEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-			);
-
-			// Empty string sorts before "Named Account"
-			expect(sortAccounts(account1, account2)).toBeLessThan(0);
-		});
 	});
 
 	describe("ethereum account sorting", () => {
@@ -184,26 +132,63 @@ describe("sortAccounts", () => {
 
 			expect(sortAccounts(metamask, rainbow)).toBeLessThan(0);
 		});
-
-		it("sorts by id when wallet names match", () => {
-			const account1 = createAccount(
-				"ethereum",
-				"MetaMask",
-				"Account 1",
-				"0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
-			);
-			const account2 = createAccount(
-				"ethereum",
-				"MetaMask",
-				"Account 2",
-				"0x742d35Cc6634C0532925a3b844Bc9e7595f8fEb2",
-			);
-
-			expect(sortAccounts(account1, account2)).toBeLessThan(0);
-		});
 	});
 
 	describe("sorting an array of accounts", () => {
+		it("keeps a wallet's accounts in the order the extension reported", () => {
+			const reported = [
+				createAccount(
+					"solana",
+					"Phantom",
+					"Sol",
+					"So11111111111111111111111111111111111111112",
+				),
+				createAccount(
+					"ethereum",
+					"Talisman",
+					"Eth",
+					"0x742d35Cc6634C0532925a3b844Bc9e7595f8fEb2",
+				),
+				createAccount(
+					"polkadot",
+					"SubWallet",
+					"Zed",
+					"5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+				),
+				createAccount(
+					"polkadot",
+					"SubWallet",
+					"Amy",
+					"5DAAnrj7VHTznn2AWBemMuyBwZWs6FNFjdyVXUeYum3PTXFy",
+				),
+				createAccount(
+					"polkadot",
+					"Talisman",
+					"Zoe",
+					"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+				),
+				createAccount(
+					"polkadot",
+					"Talisman",
+					"Ann",
+					"5HGjWAeFDfFCWPsjFQdVV2Msvz2XtMktvgocEZcCj68kUMaw",
+				),
+			];
+
+			const sorted = [...reported].sort(sortAccounts);
+
+			expect(
+				sorted.map((a) => `${a.platform}/${a.walletName}/${a.name}`),
+			).toEqual([
+				"polkadot/Talisman/Zoe",
+				"polkadot/Talisman/Ann",
+				"polkadot/SubWallet/Zed",
+				"polkadot/SubWallet/Amy",
+				"ethereum/Talisman/Eth",
+				"solana/Phantom/Sol",
+			]);
+		});
+
 		it("sorts accounts correctly with Array.sort", () => {
 			const accounts = [
 				createAccount(

@@ -244,7 +244,7 @@ export const getPolkadotAccounts$ = (
 ) => {
 	if (polkadotAccountTypes.length === 0) {
 		console.warn(
-			"[kheopskit] config.polkadotAccountTypes is empty; all Polkadot accounts will be filtered out.",
+			"[kheopskit] polkadot({ accountTypes }) is empty; all Polkadot accounts will be filtered out.",
 		);
 	}
 

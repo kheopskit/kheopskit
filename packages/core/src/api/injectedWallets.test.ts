@@ -57,7 +57,7 @@ describe("createInjectedWallets$", () => {
 		expect(emissions.at(-1)).toEqual([true]);
 		// Connected id persisted for auto-reconnect
 		expect(
-			JSON.parse(localStorage.getItem("kheopskit") || "{}").autoReconnect,
+			JSON.parse(localStorage.getItem("kheopskit") || "{}").remembered,
 		).toContain(walletId);
 
 		sub.unsubscribe();
@@ -105,7 +105,7 @@ describe("createInjectedWallets$", () => {
 
 		expect(calls).toEqual(["platform-disconnect", "on-disconnected"]);
 		expect(
-			JSON.parse(localStorage.getItem("kheopskit") || "{}").autoReconnect,
+			JSON.parse(localStorage.getItem("kheopskit") || "{}").remembered,
 		).not.toContain(walletId);
 
 		sub.unsubscribe();

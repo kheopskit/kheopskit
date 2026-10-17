@@ -55,11 +55,13 @@ export const createPlatformAccounts$ = <
 	mapAccounts,
 	accountChangeKey = (account) => account.id,
 }: PlatformAccountsOptions<TWallet, TAccount>): Observable<TAccount[]> => {
+	const nameAndChangeKey = (account: TAccount) =>
+		`${account.name ?? ""}|${accountChangeKey(account)}`;
 	const accountsListEqual = (a: TAccount[], b: TAccount[]) =>
 		a.length === b.length &&
 		a.every((account, i) => {
 			const other = b[i];
-			return !!other && accountChangeKey(account) === accountChangeKey(other);
+			return !!other && nameAndChangeKey(account) === nameAndChangeKey(other);
 		});
 
 	return new Observable<TAccount[]>((subscriber) => {
