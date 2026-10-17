@@ -1,4 +1,4 @@
-import { BehaviorSubject } from "rxjs";
+import { BehaviorSubject, Observable } from "rxjs";
 import { type SyncableStorage, safeLocalStorage } from "./storage";
 
 export const createStore = <T>(
@@ -8,16 +8,33 @@ export const createStore = <T>(
 	normalize: (value: T) => T = (value) => value,
 ) => {
 	const read = (str: string | null) => normalize(parseData(str, defaultValue));
+	const syncsAcrossTabs =
+		typeof window !== "undefined" && storage.subscribe !== undefined;
 	const subject = new BehaviorSubject<T>(read(storage.getItem(key)));
+	let observers = 0;
+	let stopSync: (() => void) | undefined;
 
-	// Cross-tab sync via storage.subscribe (uses storage event for localStorage, BroadcastChannel for cookies)
-	// Only subscribe if window is available (client-side) and storage supports it
-	let unsubscribeStorage: (() => void) | undefined;
-	if (typeof window !== "undefined" && storage.subscribe) {
-		unsubscribeStorage = storage.subscribe(key, (newValue) => {
-			subject.next(read(newValue));
-		});
-	}
+	const latestValue = () => {
+		if (syncsAcrossTabs && observers === 0)
+			subject.next(read(storage.getItem(key)));
+		return subject.getValue();
+	};
+
+	const observable = new Observable<T>((subscriber) => {
+		if (observers === 0 && syncsAcrossTabs) {
+			latestValue();
+			stopSync = storage.subscribe?.(key, (newValue) => {
+				subject.next(read(newValue));
+			});
+		}
+		observers++;
+		const subscription = subject.subscribe(subscriber);
+		return () => {
+			subscription.unsubscribe();
+			observers--;
+			if (observers === 0) stopSync?.();
+		};
+	});
 
 	const update = (val: T) => {
 		setStoredData(key, val, storage);
@@ -25,18 +42,11 @@ export const createStore = <T>(
 	};
 
 	return {
-		observable: subject.asObservable(),
+		observable,
 		set: (val: T) => update(val),
-		mutate: (transform: (prev: T) => T) =>
-			update(transform(subject.getValue())),
-		get: () => structuredClone(subject.getValue()),
-		/**
-		 * Cleanup subscriptions. Call this when the store is no longer needed.
-		 */
-		destroy: () => {
-			unsubscribeStorage?.();
-			subject.complete();
-		},
+		mutate: (transform: (prev: T) => T) => update(transform(latestValue())),
+		get: () => structuredClone(latestValue()),
+		destroy: () => subject.complete(),
 	};
 };
 

@@ -88,14 +88,6 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 		[ssrCookies, resolvedConfig.storageKey],
 	);
 
-	// Not destroyed on unmount: StrictMode remounts with the same memoized store
-	const previousKheopskitStoreRef = useRef(kheopskitStore);
-	useEffect(() => {
-		if (previousKheopskitStoreRef.current !== kheopskitStore)
-			previousKheopskitStoreRef.current.destroy();
-		previousKheopskitStoreRef.current = kheopskitStore;
-	}, [kheopskitStore]);
-
 	// Read cached state from the store for SSR hydration.
 	// Icons stay OFF: this snapshot must match the server-rendered markup, and the
 	// server never sees the localStorage icon cache (see GetHydratedSnapshotOptions).

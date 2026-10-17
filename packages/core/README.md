@@ -139,7 +139,8 @@ store.destroy();
 ```
 
 `subscribe` is optional; implement it to receive changes made by other tabs.
-`store.destroy()` stops that subscription and completes `store.observable`.
+The store holds that subscription only while `store.observable` has subscribers.
+`store.destroy()` completes `store.observable`, which ends it.
 `store.rememberWallet(walletId)` and `store.forgetWallet(walletId)` edit the
 remembered list directly.
 
