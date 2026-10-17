@@ -57,13 +57,17 @@ const createMockStandardWallet = () => {
 
 const createMockInjectedWallet = (
 	standardWallet: ReturnType<typeof createMockStandardWallet>,
-	overrides: Partial<SolanaInjectedWallet> = {},
+	overrides: Partial<
+		Exclude<SolanaInjectedWallet, { isPlaceholder: true }>
+	> = {},
 ): SolanaInjectedWallet => ({
 	platform: "solana",
 	type: "injected",
 	id: "solana:Phantom" as WalletId,
 	sourceId: "Phantom",
-	wallet: standardWallet as unknown as SolanaInjectedWallet["wallet"],
+	wallet: standardWallet as unknown as NonNullable<
+		SolanaInjectedWallet["wallet"]
+	>,
 	chains: ["solana:mainnet", "solana:devnet"],
 	name: "Phantom",
 	icon: "data:image/svg+xml;base64,AAAA",
@@ -143,7 +147,9 @@ describe("getSolanaAccounts$", () => {
 			expect(accounts).toHaveLength(1);
 			expect(accounts[0]?.platform).toBe("solana");
 			expect(accounts[0]?.address).toBe(ADDRESS_1);
-			expect(typeof accounts[0]?.signer.modifyAndSignMessages).toBe("function");
+			expect(typeof accounts[0]?.signer?.modifyAndSignMessages).toBe(
+				"function",
+			);
 			expect(typeof accounts[0]?.getSigner).toBe("function");
 		});
 
@@ -215,7 +221,8 @@ describe("getSolanaAccounts$", () => {
 				getSolanaAccounts$(of([wallet]), "solana:mainnet"),
 			);
 			const account = accounts[0];
-			if (!account) throw new Error("expected an account");
+			if (!account || account.isPlaceholder)
+				throw new Error("expected a live account");
 
 			const [signed] = await account.signer.modifyAndSignMessages([
 				createSignableMessage(new Uint8Array([1, 2, 3])),
@@ -241,7 +248,8 @@ describe("getSolanaAccounts$", () => {
 				getSolanaAccounts$(of([wallet]), "solana:mainnet"),
 			);
 			const account = accounts[0];
-			if (!account) throw new Error("expected an account");
+			if (!account || account.isPlaceholder)
+				throw new Error("expected a live account");
 
 			await expect(
 				account.signer.modifyAndSignMessages([

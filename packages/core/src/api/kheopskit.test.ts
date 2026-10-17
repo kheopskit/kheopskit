@@ -8,7 +8,7 @@ import {
 } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getWalletAccountId } from "../utils/WalletAccountId";
-import type { WalletId } from "../utils/WalletId";
+import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../utils/WalletId";
 import { getAccounts$ } from "./accounts";
 import { getKheopskit$ } from "./kheopskit";
 import { polkadot } from "./polkadot/plugin";
@@ -30,6 +30,7 @@ const { injected, walletConnect } = vi.hoisted(() => ({
 
 vi.mock("polkadot-api/pjs-signer", () => ({
 	getInjectedExtensions: () => injected.names,
+	getTxCreatorFromPjs: (address: string) => ({ address }),
 }));
 
 vi.mock("./wallets", () => ({
@@ -445,5 +446,325 @@ describe("getKheopskit$ reload with a cached connected wallet", () => {
 		for (const state of states)
 			for (const wallet of state.wallets)
 				expect(wallet.isConnected).toBe(wallet.status === "connected");
+	});
+});
+
+describe("getKheopskit$ placeholders", () => {
+	let subscription: Subscription | undefined;
+	const walletId = "polkadot:talisman" as WalletId;
+	const addresses = [
+		"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+		"5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+	];
+	const injectedAccounts = addresses.map((address) => ({
+		address,
+		type: "sr25519" as const,
+	}));
+	const extensionListing = (accounts: {
+		get: () => Promise<typeof injectedAccounts>;
+		subscribe: (
+			callback: (list: typeof injectedAccounts) => void,
+		) => () => void;
+	}) => ({ accounts, signer: { signPayload: vi.fn(), signRaw: vi.fn() } });
+	const extension = extensionListing({
+		get: async () => injectedAccounts,
+		subscribe: () => () => {},
+	});
+	const enable = vi.fn<() => Promise<unknown>>();
+
+	const seedStore = (isConnected: boolean) => {
+		const store = createKheopskitStore();
+		if (isConnected) store.rememberWallet(walletId);
+		store.setCachedState(
+			[
+				{
+					id: walletId,
+					platform: "polkadot",
+					type: "injected",
+					name: "Talisman",
+					isConnected,
+				},
+			],
+			isConnected
+				? addresses.map((address) => ({
+						id: getWalletAccountId(walletId, address),
+						platform: "polkadot" as const,
+						address,
+						polkadotAccountType: "sr25519" as const,
+						walletId,
+						walletName: "Talisman",
+					}))
+				: [],
+		);
+		return store;
+	};
+
+	const record = (store: ReturnType<typeof createKheopskitStore>) => {
+		const states: KheopskitState[] = [];
+		subscription = getKheopskit$(
+			{ platforms: [polkadot()], hydrationGracePeriod: 500 },
+			{ store },
+		).subscribe((state) => states.push(state));
+		return states;
+	};
+
+	const walletIn = (state: KheopskitState | undefined) =>
+		state?.wallets.find((w) => w.id === walletId);
+
+	const enableAfter = (ms: number) =>
+		enable.mockImplementation(
+			() => new Promise((resolve) => setTimeout(() => resolve(extension), ms)),
+		);
+
+	beforeEach(async () => {
+		localStorage.clear();
+		vi.useFakeTimers();
+		enable.mockReset();
+		window.injectedWeb3 = { talisman: { enable } } as never;
+		walletConnect.connector$ = new BehaviorSubject<WalletConnectWallet | null>(
+			null,
+		);
+		const actualWallets =
+			await vi.importActual<typeof import("./wallets")>("./wallets");
+		const actualAccounts =
+			await vi.importActual<typeof import("./accounts")>("./accounts");
+		vi.mocked(getWallets$).mockImplementation(actualWallets.getWallets$);
+		vi.mocked(getAccounts$).mockImplementation(actualAccounts.getAccounts$);
+	});
+
+	afterEach(() => {
+		subscription?.unsubscribe();
+		loadListeners.length = 0;
+		vi.restoreAllMocks();
+		Reflect.deleteProperty(document, "readyState");
+		vi.useRealTimers();
+		vi.mocked(getWallets$).mockImplementation(() => of([]));
+		vi.mocked(getAccounts$).mockImplementation(() => of([]));
+		delete window.injectedWeb3;
+	});
+
+	describe("with the wallet injected", () => {
+		beforeEach(() => {
+			setReadyState("complete");
+			injected.names = ["talisman"];
+			enableAfter(300);
+		});
+
+		it("placeholders are flagged during hydration and gone after", async () => {
+			const states = record(seedStore(true));
+			await vi.advanceTimersByTimeAsync(4000);
+
+			const accountFlags = (state: KheopskitState) =>
+				state.accounts.map((a) => [a.isPlaceholder, "txCreator" in a]);
+			const firstLive = states.findIndex((s) =>
+				s.accounts.some((a) => !a.isPlaceholder),
+			);
+			expect(firstLive).toBeGreaterThan(0);
+			for (const state of states.slice(0, firstLive))
+				expect(accountFlags(state)).toEqual([
+					[true, false],
+					[true, false],
+				]);
+			expect(accountFlags(states[firstLive] as KheopskitState)).toEqual([
+				[false, true],
+				[false, true],
+			]);
+
+			const ended = states.findIndex((s) => !s.isHydrating);
+			expect(ended).toBeGreaterThan(-1);
+			for (const state of states.slice(ended))
+				expect(
+					[...state.wallets, ...state.accounts].map((i) => i.isPlaceholder),
+				).not.toContain(true);
+		});
+
+		it("a merged wallet is not a placeholder", async () => {
+			const states = record(seedStore(true));
+
+			await vi.advanceTimersByTimeAsync(100);
+			const pending = walletIn(states.at(-1));
+			expect([
+				pending?.isPlaceholder,
+				pending?.status,
+				pending?.isConnected,
+				pending && "sourceId" in pending ? pending.sourceId : undefined,
+			]).toEqual([false, "connecting", false, "talisman"]);
+			expect(states.at(-1)?.accounts.map((a) => a.isPlaceholder)).toEqual([
+				true,
+				true,
+			]);
+
+			await vi.advanceTimersByTimeAsync(300);
+			expect(walletIn(states.at(-1))).toMatchObject({
+				isPlaceholder: false,
+				status: "connected",
+			});
+			expect(states.at(-1)?.accounts.map((a) => a.isPlaceholder)).toEqual([
+				false,
+				false,
+			]);
+		});
+
+		it("live accounts identical to their placeholders emit before hydration ends", async () => {
+			enable.mockImplementation(async () =>
+				extensionListing({
+					get: async () => [],
+					subscribe: (callback) => {
+						const timeout = setTimeout(() => callback(injectedAccounts), 200);
+						return () => clearTimeout(timeout);
+					},
+				}),
+			);
+			const states = record(seedStore(true));
+			await vi.advanceTimersByTimeAsync(4000);
+
+			const firstLive = states.findIndex((s) =>
+				s.accounts.some((a) => !a.isPlaceholder),
+			);
+			expect(firstLive).toBeGreaterThan(0);
+			expect(walletIn(states[firstLive - 1])?.status).toBe("connected");
+			expect(
+				states[firstLive]?.accounts.map((a) => [a.isPlaceholder, a.address]),
+			).toEqual(addresses.map((address) => [false, address]));
+			expect(states[firstLive]?.isHydrating).toBe(true);
+		});
+	});
+
+	describe("placeholder connect defers to the live wallet", () => {
+		beforeEach(() => {
+			setReadyState("loading");
+			injected.names = [];
+			captureLoadListeners();
+			enableAfter(50);
+		});
+
+		const placeholderOf = async (states: KheopskitState[]) => {
+			await vi.advanceTimersByTimeAsync(0);
+			const placeholder = walletIn(states[0]);
+			expect(placeholder?.isPlaceholder).toBe(true);
+			return placeholder as NonNullable<typeof placeholder>;
+		};
+
+		it("connects the live wallet once it appears", async () => {
+			const states = record(seedStore(false));
+			const placeholder = await placeholderOf(states);
+
+			let settledIn: KheopskitState | undefined;
+			const connecting = placeholder.connect().then(() => {
+				settledIn = states.at(-1);
+			});
+			await vi.advanceTimersByTimeAsync(200);
+			expect(enable).not.toHaveBeenCalled();
+
+			injected.names = ["talisman"];
+			await fireLoad();
+			await vi.advanceTimersByTimeAsync(200);
+			await connecting;
+
+			expect(enable).toHaveBeenCalledTimes(1);
+			expect(walletIn(settledIn)).toMatchObject({
+				isPlaceholder: false,
+				status: "connected",
+				isConnected: true,
+			});
+		});
+
+		it("rejects ABORTED when its signal aborts", async () => {
+			const states = record(seedStore(false));
+			const placeholder = await placeholderOf(states);
+
+			const controller = new AbortController();
+			let outcome: unknown = "pending";
+			placeholder.connect({ signal: controller.signal }).then(
+				() => {
+					outcome = "resolved";
+				},
+				(error: unknown) => {
+					outcome = error;
+				},
+			);
+			await vi.advanceTimersByTimeAsync(100);
+			controller.abort();
+			await vi.advanceTimersByTimeAsync(0);
+			expect(outcome).toMatchObject({ code: "ABORTED", walletId });
+
+			injected.names = ["talisman"];
+			await fireLoad();
+			await vi.advanceTimersByTimeAsync(200);
+			expect(enable).not.toHaveBeenCalled();
+		});
+
+		it("rejects WALLET_PENDING when hydration ends without the wallet", async () => {
+			const states = record(seedStore(false));
+			const placeholder = await placeholderOf(states);
+
+			let rejectedIn: KheopskitState | undefined;
+			const result = placeholder.connect().catch((error: unknown) => {
+				rejectedIn = states.at(-1);
+				return error;
+			});
+			await vi.advanceTimersByTimeAsync(200);
+			await fireLoad();
+			await vi.advanceTimersByTimeAsync(4000);
+
+			expect(await result).toMatchObject({ code: "WALLET_PENDING", walletId });
+			expect(rejectedIn?.isHydrating).toBe(false);
+			expect(enable).not.toHaveBeenCalled();
+		});
+
+		it("rejects ABORTED without connecting when the consumer unsubscribes as the wallet goes live", async () => {
+			const store = createKheopskitStore();
+			store.setCachedState(
+				[
+					{
+						id: WALLET_CONNECT_WALLET_ID,
+						type: "walletconnect",
+						name: "WalletConnect",
+						isConnected: false,
+					},
+				],
+				[],
+			);
+			const isLive = (state: KheopskitState) =>
+				state.wallets.some(
+					(w) => w.id === WALLET_CONNECT_WALLET_ID && !w.isPlaceholder,
+				);
+			const states: KheopskitState[] = [];
+			subscription = getKheopskit$(
+				{ platforms: [polkadot()], hydrationGracePeriod: 500 },
+				{ store },
+			).subscribe((state) => {
+				states.push(state);
+				if (isLive(state)) subscription?.unsubscribe();
+			});
+			await vi.advanceTimersByTimeAsync(0);
+			const placeholder = states[0]?.wallets.find(
+				(w) => w.id === WALLET_CONNECT_WALLET_ID,
+			);
+			expect(placeholder?.isPlaceholder).toBe(true);
+
+			const connect = vi.fn(async () => {});
+			const result = placeholder?.connect().catch((error: unknown) => error);
+			walletConnect.connector$.next({
+				id: WALLET_CONNECT_WALLET_ID,
+				type: "walletconnect",
+				platforms: [],
+				appKit: {} as WalletConnectWallet["appKit"],
+				name: "WalletConnect",
+				icon: "",
+				status: "disconnected",
+				isConnected: false,
+				connect,
+				disconnect: async () => {},
+			});
+			await vi.advanceTimersByTimeAsync(200);
+
+			expect(states.some(isLive)).toBe(true);
+			expect(await result).toMatchObject({
+				code: "ABORTED",
+				walletId: WALLET_CONNECT_WALLET_ID,
+			});
+			expect(connect).not.toHaveBeenCalled();
+		});
 	});
 });

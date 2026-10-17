@@ -71,7 +71,7 @@ const getInjectedWalletAccounts$ = (
 				signRaw: async (data, options) =>
 					(await signRaw({ address, ...encodeRawData(data, options?.type) }))
 						.signature,
-			} as PolkadotAccount;
+			} as Exclude<PolkadotAccount, { isPlaceholder: true }>;
 		};
 
 		const toAccounts = (accounts: PolkadotInjectedAccount[]) =>
