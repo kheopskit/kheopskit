@@ -1,4 +1,5 @@
 import {
+	asapScheduler,
 	combineLatest,
 	debounceTime,
 	distinctUntilChanged,
@@ -9,7 +10,7 @@ import {
 	shareReplay,
 	switchMap,
 	take,
-	throttleTime,
+	tap,
 } from "rxjs";
 import {
 	createAccountHydrationBuffer,
@@ -21,8 +22,10 @@ import { logObservable } from "../utils/logObservable";
 import { pageLoaded$ } from "../utils/pageLoad";
 import { sortAccounts } from "../utils/sortAccounts";
 import { sortWallets } from "../utils/sortWallets";
+import type { WalletId } from "../utils/WalletId";
 import { getAccounts$ } from "./accounts";
 import { resolveConfig } from "./config";
+import { abortedError } from "./errors";
 import { getHydratedSnapshot } from "./hydration";
 import { createKheopskitStore } from "./store";
 import type {
@@ -33,7 +36,7 @@ import type {
 	KheopskitState,
 	WalletConnectWallet,
 } from "./types";
-import { isWalletConnectWallet } from "./types";
+import { isInjectedWallet, isWalletConnectWallet } from "./types";
 import { getWallets$ } from "./wallets";
 
 export type { KheopskitConfig, KheopskitState } from "./types";
@@ -87,9 +90,73 @@ export const getKheopskit$ = <
 	}
 
 	return new Observable<KheopskitState>((subscriber) => {
+		let latest: KheopskitState | undefined;
+		let closed = false;
+		const waiters = new Set<StateWaiter>();
+		const wrapped = new WeakMap<BaseWallet, BaseWallet>();
+
+		const abandon = (waiter: StateWaiter) => {
+			waiters.delete(waiter);
+			if (waiter.isConnected)
+				waiter.reject(abortedError(waiter.walletId, "connect"));
+			else waiter.resolve();
+		};
+
+		const settleIn = (waiter: StateWaiter, state: KheopskitState) => {
+			const wallet = state.wallets.find((w) => w.id === waiter.walletId);
+			if (!wallet || wallet.isConnected === waiter.isConnected) {
+				waiters.delete(waiter);
+				waiter.resolve();
+			}
+		};
+
+		const supersede = (walletId: WalletId, isConnected: boolean) => {
+			for (const waiter of waiters)
+				if (waiter.walletId === walletId && waiter.isConnected !== isConnected)
+					abandon(waiter);
+		};
+
+		const whenState = (walletId: WalletId, isConnected: boolean) =>
+			new Promise<void>((resolve, reject) => {
+				const waiter = { walletId, isConnected, resolve, reject };
+				waiters.add(waiter);
+				if (latest) settleIn(waiter, latest);
+				if (closed && waiters.has(waiter)) abandon(waiter);
+			});
+
+		const settleWithState = (
+			wallet: BaseWallet | WalletConnectWallet,
+		): BaseWallet | WalletConnectWallet => {
+			if (!isInjectedWallet(wallet)) return wallet;
+			const existing = wrapped.get(wallet);
+			if (existing) return existing;
+			const settled: BaseWallet = {
+				...wallet,
+				connect: async (options) => {
+					if (closed) throw abortedError(wallet.id, "connect");
+					await wallet.connect(options);
+					supersede(wallet.id, true);
+					await whenState(wallet.id, true);
+				},
+				disconnect: async () => {
+					if (closed) throw abortedError(wallet.id, "disconnect");
+					await wallet.disconnect();
+					supersede(wallet.id, false);
+					await whenState(wallet.id, false);
+				},
+			};
+			wrapped.set(wallet, settled);
+			return settled;
+		};
+
 		// Get live wallets and accounts
 		const liveWallets$ = getWallets$(kc, store);
-		const liveAccounts$ = getAccounts$(kc, liveWallets$);
+		const liveAccounts$ = combineLatest([
+			liveWallets$,
+			getAccounts$(kc, liveWallets$),
+		]).pipe(
+			map(([wallets, accounts]) => accountsOfConnected(wallets, accounts)),
+		);
 
 		// Apply hydration buffer to wallets
 		const bufferedWallets$ = createHydrationBuffer(
@@ -181,11 +248,17 @@ export const getKheopskit$ = <
 					// without this the list visibly reorders as wallets come back.
 					return {
 						config: kc,
-						wallets: [...wallets.items].sort(sortWallets),
+						wallets: [...wallets.items].sort(sortWallets).map(settleWithState),
 						accounts: [...accounts.items].sort(sortAccounts),
 						isHydrating: wallets.isHydrating || accounts.isHydrating,
 						isDiscovering,
 					};
+				}),
+				debounceTime(0, asapScheduler),
+				distinctUntilChanged(statesEqual),
+				tap((state) => {
+					latest = state;
+					for (const waiter of waiters) settleIn(waiter, state);
 				}),
 			)
 			.subscribe(subscriber);
@@ -253,15 +326,32 @@ export const getKheopskit$ = <
 		return () => {
 			subscription.unsubscribe();
 			persistSub.unsubscribe();
+			closed = true;
+			for (const waiter of waiters) abandon(waiter);
 		};
 	}).pipe(
-		distinctUntilChanged(statesEqual),
-		throttleTime(16, undefined, { leading: true, trailing: true }), // ~1 frame at 60fps
 		logObservable("kheopskit$", { enabled: kc.debug, printValue: true }),
 		shareReplay({ bufferSize: 1, refCount: true }),
 		// The runtime objects are the concrete per-plugin wallet/account types;
 		// recover the precise KheopskitState<P> the caller's plugins imply.
 	) as unknown as Observable<KheopskitState<P>>;
+};
+
+type StateWaiter = {
+	walletId: WalletId;
+	isConnected: boolean;
+	resolve: () => void;
+	reject: (error: unknown) => void;
+};
+
+const accountsOfConnected = (
+	wallets: (BaseWallet | WalletConnectWallet)[],
+	accounts: BaseWalletAccount[],
+): BaseWalletAccount[] => {
+	const connected = new Set(
+		wallets.filter((w) => w.isConnected).map((w) => w.id),
+	);
+	return accounts.filter((account) => connected.has(account.walletId));
 };
 
 const arraysEqual = (a: string[], b: string[]) =>

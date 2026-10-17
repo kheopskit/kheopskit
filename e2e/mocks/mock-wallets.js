@@ -68,11 +68,18 @@ const dotAccounts = [
 	{ address: DOT_ADDRESS, name: "Mock Account", type: "sr25519" },
 ];
 
+window.__dotEnableCalls = 0;
+
 window.injectedWeb3 = window.injectedWeb3 || {};
 window.injectedWeb3["mock-polkadot-wallet"] = {
 	version: "1.0.0",
 	enable: async (dappName) => {
+		window.__dotEnableCalls += 1;
 		window.__dotEnableDappName = dappName;
+		const delayMs = window.__dotEnableDelayMs ?? 0;
+		if (delayMs > 0) {
+			await new Promise((resolve) => setTimeout(resolve, delayMs));
+		}
 		return {
 			accounts: {
 				get: async () => dotAccounts,

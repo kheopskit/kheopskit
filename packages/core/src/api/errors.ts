@@ -5,10 +5,20 @@ import type { WalletId } from "../utils/WalletId";
  * branch on `error.code` instead of matching message strings.
  */
 export type KheopskitErrorCode =
-	/** `connect()` called on a wallet that is already connected. */
-	| "WALLET_ALREADY_CONNECTED"
-	/** `disconnect()` called on a wallet that is not connected. */
-	| "WALLET_NOT_CONNECTED"
+	/**
+	 * This `connect()` or `disconnect()` call was abandoned. For `connect()`:
+	 * its `signal` fired before the platform answered, `disconnect()` was
+	 * called while it pended, its wallet disappeared, or the last `kheopskit$`
+	 * subscriber unsubscribed.
+	 * For either call: the wallet object came from a subscription that had
+	 * already ended, in which case the call rejects without asking the platform
+	 * and without changing the remembered list.
+	 */
+	| "ABORTED"
+	/** The user refused the wallet's connect prompt. `cause` holds the platform error. */
+	| "USER_REJECTED"
+	/** The wallet's connect call failed for another reason. `cause` holds the platform error. */
+	| "CONNECT_FAILED"
 	/** The wallet does not advertise a capability kheopskit needs to proceed. */
 	| "FEATURE_NOT_SUPPORTED"
 	/** No active WalletConnect session for the requested operation. */
@@ -29,8 +39,8 @@ export type KheopskitErrorCode =
  * try {
  *   await wallet.connect();
  * } catch (error) {
- *   if (error instanceof KheopskitError && error.code === "WALLET_ALREADY_CONNECTED") {
- *     // ignore
+ *   if (error instanceof KheopskitError && error.code === "USER_REJECTED") {
+ *     // the user closed or refused the wallet prompt
  *   } else throw error;
  * }
  * ```
@@ -51,3 +61,82 @@ export class KheopskitError extends Error {
 		this.walletId = options?.walletId;
 	}
 }
+
+export const abortedError = (
+	walletId: WalletId,
+	operation: "connect" | "disconnect",
+): KheopskitError =>
+	new KheopskitError(
+		"ABORTED",
+		`${operation} of wallet ${walletId} was aborted`,
+		{ walletId },
+	);
+
+export const toConnectError = (
+	error: unknown,
+	walletId: WalletId,
+	isUserRejection: (error: unknown) => boolean,
+): KheopskitError => {
+	if (error instanceof KheopskitError) return error;
+	return isUserRejection(error)
+		? new KheopskitError(
+				"USER_REJECTED",
+				`the user rejected the connect request of wallet ${walletId}`,
+				{ walletId, cause: error },
+			)
+		: new KheopskitError(
+				"CONNECT_FAILED",
+				`wallet ${walletId} failed to connect`,
+				{ walletId, cause: error },
+			);
+};
+
+const EIP1193_USER_REJECTED_REQUEST = 4001;
+
+export const isEip1193UserRejection = (error: unknown): boolean =>
+	typeof error === "object" &&
+	error !== null &&
+	(error as { code?: unknown }).code === EIP1193_USER_REJECTED_REQUEST;
+
+type RefusalMessage = {
+	pattern: RegExp;
+	wallet: string;
+	evidence: "live" | "inferred";
+};
+
+/**
+ * How Polkadot extensions and Wallet Standard wallets reject a refused connect
+ * prompt. They send a plain `Error`, so the message is the only signal.
+ * `evidence` records whether the row was observed live or inferred from the
+ * wallet's source or documentation.
+ */
+const REFUSAL_MESSAGES: readonly RefusalMessage[] = [
+	{
+		pattern: /^Site .+ has not been authorised for Talisman yet$/,
+		wallet: "Talisman 3.11.0, Reject button or prompt window closed",
+		evidence: "live",
+	},
+	{
+		pattern: /^Connection request was (rejected|cancelled) by the user\.$/,
+		wallet: "polkadot-js extension (extension-base 0.64 State.ts)",
+		evidence: "inferred",
+	},
+	{
+		pattern: /^(Rejected|Cancelled)$/,
+		wallet: "SubWallet (Extension.ts)",
+		evidence: "inferred",
+	},
+	{
+		pattern: /^User rejected the request\.$/,
+		wallet: "Phantom (Wallet Standard)",
+		evidence: "inferred",
+	},
+];
+
+export const isRefusalMessage = (error: unknown): boolean => {
+	const message = (error as { message?: unknown } | null | undefined)?.message;
+	return (
+		typeof message === "string" &&
+		REFUSAL_MESSAGES.some((row) => row.pattern.test(message))
+	);
+};

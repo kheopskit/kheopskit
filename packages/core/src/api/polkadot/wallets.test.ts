@@ -35,8 +35,10 @@ const connectWith = async (config: Partial<KheopskitConfig>) => {
 		store: createKheopskitStore(),
 		config: resolveConfig({ ...config, platforms: [plugin] }),
 	});
+	const subscription = wallets$.subscribe();
 	const [wallet] = await firstValueFrom(wallets$);
 	await wallet?.connect();
+	subscription.unsubscribe();
 };
 
 describe("polkadot wallet connect", () => {
@@ -154,7 +156,10 @@ describe("polkadot wallet enable() result", () => {
 			await (await walletById("polkadot:good")).connect();
 			await expect(
 				(await walletById("polkadot:bad")).connect(),
-			).rejects.toThrow('Unsupported extension: "bad"');
+			).rejects.toMatchObject({
+				code: "CONNECT_FAILED",
+				cause: new Error('Unsupported extension: "bad"'),
+			});
 
 			const wallets = await firstValueFrom(wallets$);
 			expect(wallets.map((w) => [w.id, w.isConnected])).toEqual([

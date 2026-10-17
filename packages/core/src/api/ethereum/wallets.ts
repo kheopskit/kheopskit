@@ -6,6 +6,7 @@ import { Observable, shareReplay } from "rxjs";
 import type { EIP1193Provider } from "viem";
 import { clearCachedObservable } from "../../utils/getCachedObservable";
 import { getWalletId } from "../../utils/WalletId";
+import { isEip1193UserRejection } from "../errors";
 import { createInjectedWallets$ } from "../injectedWallets";
 import type { KheopskitStore } from "../store";
 import type { EthereumInjectedWallet } from "./types";
@@ -50,6 +51,7 @@ export const getEthereumWallets$ = (store: KheopskitStore) =>
 				method: "eth_requestAccounts",
 			});
 		},
+		isUserRejection: isEip1193UserRejection,
 		// Drop the cached account observable so a later reconnect rebuilds it
 		// against the current provider, not a stale closure.
 		onDisconnected: (walletId) => clearCachedObservable(`accounts:${walletId}`),
