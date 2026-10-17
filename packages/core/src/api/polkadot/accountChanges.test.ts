@@ -3,14 +3,14 @@ import { getKheopskit$ } from "../kheopskit";
 import { createKheopskitStore } from "../store";
 import type { KheopskitState } from "../types";
 import { polkadot } from "./plugin";
-import type { PolkadotInjectedAccount } from "./types";
 
-const account = (address: string, name: string): PolkadotInjectedAccount => ({
+const account = (address: string, name: string) => ({
 	address,
 	name,
-	type: "sr25519",
+	type: "sr25519" as const,
 	genesisHash: null,
 });
+type Listed = ReturnType<typeof account>;
 const ALICE = account(
 	"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
 	"Alice",
@@ -29,16 +29,16 @@ type Replay = "never" | "async";
 
 const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const makeExtension = (initial: PolkadotInjectedAccount[], replay: Replay) => {
+const makeExtension = (initial: Listed[], replay: Replay) => {
 	let current = initial;
-	const listeners = new Set<(accounts: PolkadotInjectedAccount[]) => void>();
+	const listeners = new Set<(accounts: Listed[]) => void>();
 	return {
 		entry: {
 			version: "1.0.0",
 			enable: async () => ({
 				accounts: {
 					get: async () => current,
-					subscribe: (cb: (accounts: PolkadotInjectedAccount[]) => void) => {
+					subscribe: (cb: (accounts: Listed[]) => void) => {
 						listeners.add(cb);
 						if (replay === "async")
 							setTimeout(() => {
@@ -55,7 +55,7 @@ const makeExtension = (initial: PolkadotInjectedAccount[], replay: Replay) => {
 				},
 			}),
 		},
-		change: (next: PolkadotInjectedAccount[]) => {
+		change: (next: Listed[]) => {
 			current = next;
 			for (const cb of listeners) cb(next);
 		},
