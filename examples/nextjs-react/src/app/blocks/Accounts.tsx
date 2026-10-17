@@ -71,12 +71,11 @@ const AccountRow: FC<{ account: WalletAccount }> = ({ account }) => {
 };
 
 const SignButton: FC<{ account: WalletAccount }> = ({ account }) => {
-	// SDK fields (signer/client/txCreator) are absent while hydrating;
-	// disable signing until hydration completes. See MIGRATING_TO_V4.md.
 	const { isHydrating } = useWallets();
 	const MESSAGE = "Kheopskit rocks!";
 
 	const handleClick = useCallback(async () => {
+		if (account.isPlaceholder) return;
 		switch (account.platform) {
 			case "polkadot": {
 				const bytes = Binary.fromText(MESSAGE);
