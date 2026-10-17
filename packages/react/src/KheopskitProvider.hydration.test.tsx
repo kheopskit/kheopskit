@@ -438,23 +438,50 @@ describe("KheopskitProvider snapshots under an autoReconnect predicate", () => {
 		container.remove();
 	});
 
-	it("without ssrCookies the server renders no wallets and the client applies the predicate to its cache", () => {
+	it("without ssrCookies, hydrating the empty server markup raises no warning and then shows the client cache under the predicate", async () => {
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(cachedState));
 		const tree = (
 			<KheopskitProvider config={config}>
 				<WalletsConsumer />
 			</KheopskitProvider>
 		);
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		const recoverable: unknown[] = [];
+		const container = document.createElement("div");
+		container.innerHTML = renderToString(tree);
+		document.body.appendChild(container);
+		const textOf = (testId: string) =>
+			container.querySelector(`[data-testid="${testId}"]`)?.textContent;
+		const server = {
+			status: textOf("wallet-status"),
+			accounts: textOf("account-order"),
+		};
 
-		const html = renderToString(tree);
-		expect(html).toContain(`data-testid="wallet-status"></span>`);
+		let root: Root | undefined;
+		await act(async () => {
+			root = hydrateRoot(container, tree, {
+				onRecoverableError: (error) => recoverable.push(error),
+			});
+		});
 
-		render(tree);
-		expect(screen.getByTestId("wallet-status")).toHaveTextContent(
-			expectedStatuses,
-		);
-		expect(screen.getByTestId("account-order")).toHaveTextContent(
-			expectedAccounts,
-		);
+		expect({
+			server,
+			client: {
+				status: textOf("wallet-status"),
+				accounts: textOf("account-order"),
+			},
+			recoverable,
+			consoleErrors: consoleError.mock.calls,
+		}).toEqual({
+			server: { status: "", accounts: "" },
+			client: { status: expectedStatuses, accounts: expectedAccounts },
+			recoverable: [],
+			consoleErrors: [],
+		});
+
+		await act(async () => root?.unmount());
+		container.remove();
 	});
 });

@@ -41,7 +41,6 @@ const walletsEqual = <
  * @typeParam TSource - a wallet as the platform's registry reports it
  * @typeParam TWallet - the platform's wallet type
  * @typeParam THandle - live connection handle retained while connected
- *   (Polkadot keeps the `InjectedExtension`; platforms with no handle use void)
  */
 export type InjectedWalletsAdapter<
 	TSource,
@@ -53,9 +52,8 @@ export type InjectedWalletsAdapter<
 	/** Stable wallet id for a registry entry. */
 	getWalletId: (source: TSource) => WalletId;
 	/**
-	 * Platform connect call (e.g. `connectInjectedExtension`,
-	 * `eth_requestAccounts`, `standard:connect`). The resolved value is retained
-	 * as the wallet's live handle until disconnect.
+	 * Platform connect call. The resolved value is retained as the wallet's
+	 * live handle until disconnect.
 	 */
 	connect: (source: TSource, walletId: WalletId) => Promise<THandle>;
 	/** `true` maps the platform's rejection to `USER_REJECTED`; absent means never. */

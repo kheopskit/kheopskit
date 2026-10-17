@@ -1,9 +1,5 @@
 import { isEqual } from "lodash-es";
-import {
-	connectInjectedExtension,
-	getInjectedExtensions,
-	type InjectedExtension,
-} from "polkadot-api/pjs-signer";
+import { getInjectedExtensions } from "polkadot-api/pjs-signer";
 import { distinctUntilChanged, Observable, shareReplay, skip } from "rxjs";
 import { pageLoaded$ } from "../../utils/pageLoad";
 import { POLKADOT_EXTENSIONS } from "../../utils/polkadotExtensions";
@@ -16,7 +12,55 @@ import { isRefusalMessage } from "../errors";
 import { createInjectedWallets$ } from "../injectedWallets";
 import type { KheopskitStore } from "../store";
 import type { KheopskitConfig } from "../types";
-import type { PolkadotInjectedWallet } from "./types";
+import type {
+	PolkadotInjected,
+	PolkadotInjectedAccount,
+	PolkadotInjectedWallet,
+} from "./types";
+
+type EnableResult = {
+	accounts?: Partial<PolkadotInjected["accounts"]>;
+	signer?: Partial<PolkadotInjected["signer"]>;
+	metadata?: unknown;
+	provider?: unknown;
+};
+
+type InjectedWeb3Window = {
+	injectedWeb3?: Record<
+		string,
+		| { enable(appName: string): Promise<EnableResult | null | undefined> }
+		| undefined
+	>;
+};
+
+const isPolkadotInjected = (
+	injected: EnableResult | null | undefined,
+): injected is PolkadotInjected =>
+	typeof injected?.accounts?.get === "function" &&
+	typeof injected.accounts.subscribe === "function" &&
+	typeof injected.signer?.signPayload === "function" &&
+	typeof injected.signer.signRaw === "function";
+
+/**
+ * The list each extension last reported: read when its connect was granted,
+ * so the emission that first shows the wallet connected already lists it, and
+ * updated by every `subscribe` callback, so an accounts stream that restarts
+ * resumes from the current list rather than the connect-time one.
+ */
+export const latestAccounts = new WeakMap<
+	PolkadotInjected,
+	PolkadotInjectedAccount[]
+>();
+
+const connectExtension = async (identifier: string, appName: string) => {
+	const entry = (globalThis as InjectedWeb3Window).injectedWeb3?.[identifier];
+	if (!entry) throw new Error(`Unavailable extension: "${identifier}"`);
+	const injected = await entry.enable(appName);
+	if (!isPolkadotInjected(injected))
+		throw new Error(`Unsupported extension: "${identifier}"`);
+	latestAccounts.set(injected, await injected.accounts.get());
+	return injected;
+};
 
 const getInjectedWalletsIds = () =>
 	typeof window === "undefined"
@@ -74,22 +118,19 @@ export const getPolkadotWallets$ = (
 	store: KheopskitStore,
 	config: Pick<KheopskitConfig, "appName" | "walletConnect">,
 ) =>
-	createInjectedWallets$<WalletId, PolkadotInjectedWallet, InjectedExtension>(
+	createInjectedWallets$<WalletId, PolkadotInjectedWallet, PolkadotInjected>(
 		store,
 		{
 			sources$: createWalletIdsPoller$(),
 			getWalletId: (walletId) => walletId,
-			connect: (walletId) => {
-				const { identifier } = parseWalletId(walletId);
-				return connectInjectedExtension(
-					identifier,
+			connect: (walletId) =>
+				connectExtension(
+					parseWalletId(walletId).identifier,
 					config.appName ||
 						config.walletConnect?.metadata.name ||
 						window.location.hostname,
-				);
-			},
+				),
 			isUserRejection: isRefusalMessage,
-			releaseAbandonedHandle: (handle) => handle.disconnect(),
 			buildWallet: ({
 				walletId,
 				handle,

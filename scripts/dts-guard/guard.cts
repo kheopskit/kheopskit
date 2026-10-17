@@ -15,6 +15,7 @@ import type {
 } from "@kheopskit/core/internal";
 import type {
 	PolkadotAccount,
+	PolkadotInjectedWallet,
 	PolkadotWallet,
 	polkadot,
 } from "@kheopskit/core/polkadot";
@@ -42,6 +43,11 @@ type NoneAny<T extends readonly unknown[]> = T extends readonly [
 	: true;
 
 type Expect<T extends true> = T;
+
+type Equal<X, Y> =
+	(<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2
+		? true
+		: false;
 
 type Bound = ReturnType<typeof createKheopskit<readonly [KheopskitPlatform]>>;
 
@@ -97,6 +103,14 @@ export const polkadotTxCreator = (account: PolkadotAccount) => {
 	return narrowed;
 };
 
+export const polkadotSignRaw = (account: PolkadotAccount) => {
+	// @ts-expect-error a placeholder has no signRaw
+	const unnarrowed: Present<PolkadotAccount["signRaw"]> = account.signRaw;
+	if (account.isPlaceholder) return unnarrowed;
+	const narrowed: Present<PolkadotAccount["signRaw"]> = account.signRaw;
+	return narrowed;
+};
+
 export const ethereumClient = (account: EthereumAccount) => {
 	// @ts-expect-error a placeholder has no client
 	const unnarrowed: Present<EthereumAccount["client"]> = account.client;
@@ -120,3 +134,16 @@ export const ethereumProvider = (wallet: EthereumWallet) => {
 	const narrowed: Present<EthereumWallet["provider"]> = wallet.provider;
 	return narrowed;
 };
+
+declare const polkadotWallet: PolkadotInjectedWallet;
+export const rawSignature = polkadotWallet.extension?.signer.signRaw({
+	address: "",
+	data: "",
+	type: "payload",
+});
+export type ReadonlyIsOptionalBoolean = Expect<
+	Equal<PolkadotAccount["readonly"], boolean | undefined>
+>;
+export type SignRawReturnsHex = Expect<
+	Equal<ReturnType<Present<PolkadotAccount["signRaw"]>>, Promise<`0x${string}`>>
+>;
