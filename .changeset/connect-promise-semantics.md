@@ -16,3 +16,4 @@
 - Persistence is best-effort: a storage write that throws keeps the in-memory state while the store is observed and never rejects `connect()` or `disconnect()`.
 - Wallet objects keep their identity across emissions that only change accounts.
 - `kheopskit$` no longer throttles by 16 ms. A synchronous burst is coalesced into one emission, so no emission shows a connected wallet with a previous connection's accounts, or a disconnected wallet still listing accounts. On platforms that list accounts asynchronously (Ethereum `eth_accounts`) the accounts may arrive in an emission after `connect()` resolved.
+- Fixed: with two connected wallets, disconnecting one no longer leaves its accounts in the state while the other wallet's accounts are being re-read. The live account list is filtered by the live wallets' `isConnected` before the state is built.
