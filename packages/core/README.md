@@ -233,9 +233,9 @@ that field as `remembered` and drops it on the next write.
 `isHydrating` turns `false` once `hydrationGracePeriod` has elapsed, discovery
 has ended (`isDiscovering` is `false`), and every wallet that hydrated as
 `connecting` has settled. A wallet has settled when it is absent from the
-discovered wallets, connected with at least one live account or with no cached
-accounts, disconnected with `error` set, or disconnected and not remembered
-when hydration began. At `hydrationTimeout` hydration ends whatever is pending,
+discovered wallets, connected once its account list has been read (an empty
+list counts) or connected with no cached accounts, disconnected with `error`
+set, or disconnected and not remembered when hydration began. At `hydrationTimeout` hydration ends whatever is pending,
 and a wallet whose reconnect is still pending stays `connecting`.
 
 The defaults are 500 ms for `hydrationGracePeriod` and 3000 ms for
@@ -245,10 +245,14 @@ raised `hydrationGracePeriod` sets `hydrationTimeout` as well.
 
 - Discovery ends only after the page fires `load`, so a page with a cache
   hydrates until `load` even when no wallet reconnects.
-- A wallet that reconnects without sharing any account with the site holds
-  hydration, and shows its cached accounts, until `hydrationTimeout`.
-- A failed reconnect ends that wallet's wait. A later automatic retry shows on
-  the live wallet's `status`, not as a placeholder.
+- A wallet that reconnects without sharing any account with the site settles
+  as soon as it answers; its cached accounts leave the list when hydration
+  ends.
+- A failed reconnect ends that wallet's wait, even when the reconnect policy
+  still permits a retry. A retry runs only when discovery changes (a wallet
+  appears in or leaves a later poll), which usually never happens, so waiting
+  for it would hold most failed reconnects until `hydrationTimeout`. A retry
+  that does run shows on the live wallet's `status`, not as a placeholder.
 - A remembered wallet the user disconnects during or right after its reconnect
   holds hydration, and shows its cached accounts, until `hydrationTimeout`.
 - A prompt the extension opens for a revoked site holds hydration until the
