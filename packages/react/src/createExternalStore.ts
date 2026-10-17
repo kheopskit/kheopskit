@@ -12,6 +12,8 @@ export const createExternalStore = <T>(
 	let source: ExternalStoreSource<T> | undefined;
 	let latestValue: T | undefined;
 	let subscription: Subscription | undefined;
+	let generation = 0;
+	let snapshotGeneration = 0;
 	const listeners = new Set<(value: T) => void>();
 
 	const getSource = () => {
@@ -30,11 +32,14 @@ export const createExternalStore = <T>(
 	};
 
 	const subscribe = (listener: (value: T) => void) => {
-		if (!subscription || subscription.closed)
+		if (!subscription || subscription.closed) {
+			const run = ++generation;
 			subscription = getSource().observable$.subscribe((value) => {
 				latestValue = value;
+				snapshotGeneration = run;
 				for (const notify of listeners) notify(value);
 			});
+		}
 		listeners.add(listener);
 		listener(getSnapshot());
 
@@ -46,5 +51,7 @@ export const createExternalStore = <T>(
 		};
 	};
 
-	return { getSnapshot, getServerSnapshot, subscribe };
+	const getSnapshotGeneration = () => snapshotGeneration;
+
+	return { getSnapshot, getServerSnapshot, getSnapshotGeneration, subscribe };
 };

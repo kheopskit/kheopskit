@@ -5,6 +5,7 @@ export type KheopskitExternalStore = {
 	subscribe: (onChange: () => void) => () => void;
 	getSnapshot: () => KheopskitState;
 	getServerSnapshot: () => KheopskitState;
+	getSnapshotGeneration: () => number;
 };
 
 export const KheopskitContext = createContext<KheopskitExternalStore | null>(
