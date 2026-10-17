@@ -1,6 +1,5 @@
 import {
 	combineLatest,
-	distinctUntilChanged,
 	filter,
 	map,
 	mergeMap,
@@ -70,10 +69,7 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 			}
 		};
 
-		const subAutoReconnect = combineLatest([
-			wallets$.pipe(distinctUntilChanged(sameDiscovery)),
-			rememberedWalletIds$,
-		])
+		const subAutoReconnect = combineLatest([wallets$, rememberedWalletIds$])
 			.pipe(
 				filter(
 					([, walletIds]) =>
@@ -100,20 +96,3 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 		};
 	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
 };
-
-/**
- * A reconnect is re-attempted when discovery changes (a wallet appears, is
- * renamed, connects or disconnects), not when an attempt's own `connecting`
- * or `error` transition re-emits the list.
- */
-const sameDiscovery = (
-	a: (BaseWallet | WalletConnectWallet)[],
-	b: (BaseWallet | WalletConnectWallet)[],
-): boolean =>
-	a.length === b.length &&
-	a.every(
-		(w, i) =>
-			w.id === b[i]?.id &&
-			w.isConnected === b[i]?.isConnected &&
-			w.name === b[i]?.name,
-	);
