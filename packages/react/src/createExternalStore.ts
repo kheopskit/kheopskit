@@ -6,7 +6,8 @@ export type ExternalStoreSource<T> = {
 };
 
 // React runs every layout setup of a commit synchronously, so once this
-// microtask runs a mounted provider has taken its hold on the source.
+// microtask runs a mounted provider has taken its hold on the source, and a
+// release queued by a hide in this task has landed.
 const afterThisCommitsLayoutEffects = () => Promise.resolve();
 
 export const createExternalStore = <T>(
@@ -63,12 +64,12 @@ export const createExternalStore = <T>(
 	};
 
 	/**
-	 * The value the running source produced, or `undefined` when no subscriber
+	 * The value the running source produced, or `undefined` when no listener
 	 * holds the source once this commit's layout effects ran, when the source is
 	 * released before its first emission, or when `signal` fires first.
 	 */
 	const whenLive = async (signal?: AbortSignal): Promise<T | undefined> => {
-		if (!subscription) await afterThisCommitsLayoutEffects();
+		await afterThisCommitsLayoutEffects();
 		if (!subscription || signal?.aborted) return undefined;
 		if (emittedRun === run) return latestValue;
 		return new Promise((resolve) => {
