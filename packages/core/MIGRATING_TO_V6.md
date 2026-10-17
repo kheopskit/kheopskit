@@ -246,10 +246,11 @@ try {
 | `store.addEnabledWalletId(walletId)` | `store.rememberWallet(walletId)` |
 | `store.removeEnabledWalletId(walletId)` | `store.forgetWallet(walletId)` |
 
-The list holds the wallets the user connected. Kheopskit adds a wallet on every
-successful connect, whatever `config.autoReconnect` says, and removes it on
-disconnect. The `autoReconnect` config option keeps its name and meaning. It
-decides whether the remembered wallets reconnect on load.
+The list holds the wallets the user connected. Kheopskit adds a wallet on
+every successful connect, whatever `config.autoReconnect` says, and removes it
+when a connected wallet is disconnected. The `autoReconnect` config option
+keeps its name and meaning. It decides whether the remembered wallets
+reconnect on load.
 
 The compact cookie format is unchanged. The list stays under the key `r`.
 
@@ -437,12 +438,12 @@ Test code that builds wallet objects by hand needs `status`.
 autoReconnect: boolean | ((wallet: BaseWallet) => boolean)
 ```
 
-The option governs injected wallets. The function is called per remembered
-injected wallet, with its cached placeholder on the first frame and with its
-live object before each attempt. It must be
-synchronous and pure. The server and the client evaluate it for the same input
-and both must agree, or the markup diverges. It receives the `BaseWallet`
-fields only, so key on `wallet.id`.
+The option governs injected wallets. The function is called for each cached
+connected injected wallet on the first frame, then for each remembered wallet
+with its live object before each attempt. It must be synchronous and pure. The
+server and the client evaluate it for the same input and both must agree, or
+the markup diverges. It receives the `BaseWallet` fields only, so key on
+`wallet.id`.
 
 Every successful `connect()` is still recorded in the remembered list, whatever
 `autoReconnect` says.
@@ -453,14 +454,14 @@ A reconnect never prompts while the site stays authorised in the extension.
 When the authorisation was revoked the extension prompts once; a refusal
 forgets the wallet (it leaves the remembered list), so the next load stays
 silent. Any other failure sets `wallet.error`, keeps the wallet remembered and
-is retried when discovery changes, 3 attempts in total. A manual `connect()`
-or `disconnect()` on a remembered wallet ends its automatic reconnect for the
-session. A `disconnect()` while the automatic reconnect still waits for the
-extension aborts it without forgetting the wallet, so the next load reconnects
-it. Automatic reconnect
-also ends when the wallet disappears mid-attempt; the wallet stays remembered
-for the next load. Nothing is written to `console.error` any more;
-`debug: true` logs the failure with `console.debug`.
+is retried on the next change to the wallet list, 3 attempts in total. A
+manual `connect()` or `disconnect()` on a remembered wallet ends its automatic
+reconnect for the session. A `disconnect()` while the automatic reconnect
+still waits for the extension aborts it without forgetting the wallet, so the
+next load reconnects it. Automatic reconnect also ends when the wallet
+disappears mid-attempt; the wallet stays remembered for the next load. Nothing
+is written to `console.error` any more; `debug: true` logs the failure with
+`console.debug`.
 
 ### First frame after a reload
 
@@ -672,9 +673,8 @@ A state literal or test mock typed as `KheopskitState` must add the field:
   };
 ```
 
-Hydration now also waits for discovery: with a cache, `isHydrating` stays
+Hydration now also waits for discovery. With a cache, `isHydrating` stays
 `true` at least until `load`.
-
 
 ### New option: `hydrationTimeout`
 
@@ -703,8 +703,8 @@ reconnect is still pending stays `connecting`.
 "Its account list has been read" relies on a signal the built-in plugins send.
 A custom `KheopskitPlatform` plugin, or a wrapper that pipes a built-in
 plugin's `getAccounts$`, does not send it. Such a wallet settles on its first
-listed account, as in 5.x, and a reconnect that lists none holds hydration
-until `hydrationTimeout`.
+listed account, as in 5.x, and a reconnected wallet with cached accounts that
+now lists none holds hydration until `hydrationTimeout`.
 
 - Discovery ends only after the page fires `load`, so a page with a cache
   hydrates until `load` even when no wallet reconnects.
@@ -712,8 +712,9 @@ until `hydrationTimeout`.
   as soon as it answers; its cached accounts leave the list when hydration
   ends.
 - A failed reconnect ends that wallet's wait, even when the reconnect policy
-  still permits a retry. A retry runs only when discovery changes (a wallet
-  appears in or leaves a later poll), which usually never happens, so waiting
+  still permits a retry. A retry runs only on the next change to the wallet
+  list (a wallet discovered or removed, or any wallet's status changing), which
+  may never happen, so waiting
   for it would hold most failed reconnects until `hydrationTimeout`. A retry
   that does run shows on the live wallet's `status`, not as a placeholder.
 - A remembered wallet the user disconnects during or right after its reconnect

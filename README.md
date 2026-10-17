@@ -315,8 +315,8 @@ On every page load kheopskit runs the same steps. The [core README](./packages/c
 1. **Discovery.** Polkadot extensions are read from `window.injectedWeb3` at subscribe, 100, 300, 600 and 1100 ms later, and at `load` and 100 ms after. `isDiscovering` turns `false` after the `load` read. Nothing looks again later.
 2. **Hydration.** The first frame shows the previous visit's wallets and accounts from the cache as placeholders (`isPlaceholder: true`). `isHydrating` ends after the 500 ms grace period, the `load` read and every reconnect has settled, and at 3000 ms (`hydrationTimeout`) at the latest.
 3. **Reconnect.** Wallets the user connected last time reconnect, without a prompt while the site stays authorised, and show `status: "connecting"` meanwhile. A refusal forgets the wallet; other failures set `error`.
-4. **Connect.** `connect()` is shared between concurrent calls, resolves at once on a connected wallet, takes an `AbortSignal`, has no timeout, rejects with a typed `KheopskitError`, and resolves once the state shows the wallet connected.
-5. **Persistence.** `remembered` is written on every connect and disconnect. The wallet and account cache is written 1 second after hydration ends and the state stops changing, to `localStorage` or to a cookie with `ssrCookies`.
+4. **Connect.** An injected wallet's `connect()` is shared between concurrent calls, resolves at once on a connected wallet, takes an `AbortSignal`, has no timeout, rejects with a typed `KheopskitError`, and resolves once the state shows the wallet connected.
+5. **Persistence.** `remembered` gains a wallet on every connect and loses it when a connected wallet is disconnected. The wallet and account cache is written 1 second after hydration ends and the state stops changing, to `localStorage` or to a cookie with `ssrCookies`.
 
 ## Testing
 
