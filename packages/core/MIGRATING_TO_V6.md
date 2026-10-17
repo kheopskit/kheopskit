@@ -73,6 +73,10 @@ This guide grows with each v6 change. Each section covers one area.
   user.`, for SubWallet `Rejected` or `Cancelled`.
 - `CONNECT_FAILED`: any other platform failure. `cause` holds the platform
   error.
+- `INVALID_CONFIG`: `getKheopskit$` throws it synchronously when
+  `config.walletConnect` is not a plugin created by `walletConnect()` from
+  `@kheopskit/core/walletconnect` (see section 5). It is not a rejection and
+  carries no `walletId`.
 
 Every rejection is a `KheopskitError` carrying `walletId`.
 
@@ -432,3 +436,53 @@ so the snapshot applies the same reconnect rule as the live stream.
   forget-on-refusal branch. Set `autoReconnect: true`.
 - A "reconnect only this wallet" rule implemented by reading storage before
   calling `connect()`. Pass it as the `autoReconnect` function.
+
+## 5. WalletConnect is a plugin
+
+WalletConnect moved to its own entry point, `@kheopskit/core/walletconnect`.
+`config.walletConnect` takes the plugin that entry's `walletConnect()` returns.
+A dapp that does not import the entry bundles none of kheopskit's AppKit code
+and none of the AppKit chunks.
+
+```ts
+// v5
+import { getKheopskit$ } from "@kheopskit/core";
+
+getKheopskit$({
+  platforms: [polkadot()],
+  walletConnect: { projectId, metadata, networks },
+});
+
+// v6
+import { getKheopskit$ } from "@kheopskit/core";
+import { walletConnect } from "@kheopskit/core/walletconnect";
+
+getKheopskit$({
+  platforms: [polkadot()],
+  walletConnect: walletConnect({ projectId, metadata, networks }),
+});
+```
+
+| v5 | v6 |
+|----|----|
+| `walletConnect: { projectId, metadata, networks, ... }` | `walletConnect: walletConnect({ projectId, metadata, networks, ... })`. A raw object is a type error, and `getKheopskit$` throws a `KheopskitError` with the new code `INVALID_CONFIG` |
+| `import { resetAppKitCache } from "@kheopskit/core"` | `import { resetAppKitCache } from "@kheopskit/core/walletconnect"` |
+| `WalletConnectConfig` from `@kheopskit/core` | `WalletConnectOptions` from `@kheopskit/core/walletconnect` |
+| `relayUrl` option | removed. It was never passed to AppKit |
+
+`WalletConnectWallet`, `isWalletConnectWallet`, `WalletConnectMetadata` and
+`AppKitInstance` stay in `@kheopskit/core`. The Polkadot `appName` fallback
+still reads the plugin's `metadata.name`.
+
+Dapps that never set `walletConnect` change nothing in their code. Their bundle
+shrinks. A Polkadot-only Vite app built against 5.3.0 and against 6.0.0, with
+`@reown/appkit` installed (as it is when another dependency pulls it in):
+
+| | 5.3.0 | 6.0.0 |
+|---|---|---|
+| JS chunks | 67 | 1 |
+| JS total, gzip -9 | 465,575 B | 46,804 B |
+| Entry chunk, gzip -9 | 47,739 B | 46,822 B |
+
+Without `@reown/appkit` installed, 5.3.0 builds a stub chunk that throws
+`Could not resolve "@reown/appkit/core"`; 6.0.0 builds none.
