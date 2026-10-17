@@ -105,8 +105,9 @@ export type PolkadotWallet = PolkadotInjectedWallet;
 
 /**
  * A Polkadot account. Inherits the fields of polkadot-api's
- * `InjectedPolkadotAccount` and narrows `type` to {@link PolkadotAccountType}:
- * `address` (SS58, as the extension lists it), `name` (the account name in the
+ * `InjectedPolkadotAccount` and narrows `type` to {@link PolkadotAccountType}.
+ * The inherited fields are `address` (SS58, or 0x-hex for an `ethereum`
+ * account, as the extension lists it), `name` (the account name in the
  * extension, when it has one) and `genesisHash` (the chain the account is
  * restricted to, `null` or absent when it is not).
  *

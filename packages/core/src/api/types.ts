@@ -196,7 +196,7 @@ export type BaseWalletAccount = {
 type LiveWalletConnectWallet = {
 	/** `false` on the live connector. See {@link BaseWallet.isPlaceholder}. */
 	isPlaceholder?: false;
-	/** Always `"walletconnect"`: there is one connector, shared by every platform. */
+	/** Always `"walletconnect"`. There is one connector, shared by every platform. */
 	id: WalletId;
 	/** Always `"walletconnect"`. Narrow with {@link isWalletConnectWallet}. */
 	type: "walletconnect";
@@ -260,7 +260,7 @@ export type WalletConnectWallet =
  * before reading a field of `K`.
  */
 export type Placeholder<T, K extends keyof T> = Omit<T, K | "isPlaceholder"> & {
-	/** `true`: restored from the cache, not yet replaced by the live item. */
+	/** Restored from the cache and not yet replaced by the live item. */
 	isPlaceholder: true;
 } & { [P in K]?: undefined };
 
@@ -474,9 +474,9 @@ export type KheopskitConfig<
 	 *   settles as soon as it answers; its cached accounts leave the list when
 	 *   hydration ends.
 	 * - A failed reconnect ends that wallet's wait, even when the reconnect
-	 *   policy still permits a retry. A retry runs only when discovery changes
-	 *   (a wallet appears in or leaves a later poll), which usually never
-	 *   happens, so waiting for it would hold most failed reconnects until
+	 *   policy still permits a retry. A retry runs only on the next change to
+	 *   the wallet list (a wallet discovered or removed, or any wallet's status
+	 *   changing), which may never happen, so waiting for it would hold most failed reconnects until
 	 *   `hydrationTimeout`. A retry that does run shows on the live wallet's
 	 *   `status`, not as a placeholder.
 	 * - A remembered wallet the user disconnects during or right after its
@@ -522,18 +522,21 @@ export type KheopskitState<
 > = {
 	/**
 	 * Every discovered wallet, connected or not, then the WalletConnect
-	 * connector when `config.walletConnect` is set. Sorted by platform
+	 * connector once AppKit has loaded, when `config.walletConnect` is set.
+	 * While `isHydrating` is `true`, also the cached placeholders. Sorted by platform
 	 * (Polkadot, Ethereum, Solana, WalletConnect), then Talisman first, then by
 	 * name.
 	 */
 	wallets: (WalletOf<P[number]> | WalletConnectWallet)[];
 	/**
-	 * The accounts of every connected wallet. Grouped by platform, then by
+	 * The accounts of every connected wallet. While `isHydrating` is `true`,
+	 * also the cached placeholders of wallets still reconnecting or whose
+	 * reconnect failed. Grouped by platform, then by
 	 * wallet (Talisman first, then by wallet name); inside a wallet, in the
 	 * order the wallet lists them.
 	 */
 	accounts: AccountOf<P[number]>[];
-	/** The resolved config: what was passed, with every default filled in. */
+	/** The resolved config, with every default filled in. */
 	config: KheopskitConfig<P>;
 	/**
 	 * Whether the state is still being hydrated from cache.
