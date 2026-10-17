@@ -5,12 +5,8 @@ export type ExternalStoreSource<T> = {
 	initialValue: T;
 };
 
-/**
- * React calls only `getServerSnapshot` on the server, so `resolveSource` runs
- * on the client alone, on the first `getSnapshot` or `subscribe`.
- */
 export const createExternalStore = <T>(
-	resolveSource: () => ExternalStoreSource<T>,
+	resolveClientSource: () => ExternalStoreSource<T>,
 	serverValue: T,
 ) => {
 	let source: ExternalStoreSource<T> | undefined;
@@ -19,7 +15,7 @@ export const createExternalStore = <T>(
 	const listeners = new Set<(value: T) => void>();
 
 	const getSource = () => {
-		source ??= resolveSource();
+		source ??= resolveClientSource();
 		return source;
 	};
 

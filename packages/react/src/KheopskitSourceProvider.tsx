@@ -20,8 +20,10 @@ export type KheopskitSource = {
 type KheopskitSourceProviderProps = PropsWithChildren<{
 	config: Partial<KheopskitConfig> | undefined;
 	ssrCookies: string | undefined;
-	resolveSource: (config: KheopskitConfig) => KheopskitSource;
+	resolveClientSource: (config: KheopskitConfig) => KheopskitSource;
 }>;
+
+const keepPipelineRunning = () => {};
 
 const hydrating = (
 	config: KheopskitConfig,
@@ -33,8 +35,6 @@ const hydrating = (
 	isDiscovering: true,
 });
 
-// Icons stay off: this snapshot must match the server-rendered markup, and the
-// server never sees the localStorage icon cache.
 const serverSnapshot = (
 	config: KheopskitConfig,
 	ssrCookies: string | undefined,
@@ -46,6 +46,7 @@ const serverSnapshot = (
 			: getHydratedSnapshot(
 					createKheopskitStore({ ssrCookies, storageKey: config.storageKey }),
 					config,
+					{ icons: false },
 				),
 	);
 
@@ -53,7 +54,7 @@ export const KheopskitSourceProvider: FC<KheopskitSourceProviderProps> = ({
 	children,
 	config,
 	ssrCookies,
-	resolveSource,
+	resolveClientSource,
 }) => {
 	const resolvedConfig = useMemo(() => resolveConfig(config), [config]);
 
@@ -61,7 +62,7 @@ export const KheopskitSourceProvider: FC<KheopskitSourceProviderProps> = ({
 		() =>
 			createExternalStore(
 				() => {
-					const { store, kheopskit$ } = resolveSource(resolvedConfig);
+					const { store, kheopskit$ } = resolveClientSource(resolvedConfig);
 					return {
 						observable$: kheopskit$,
 						initialValue: hydrating(
@@ -72,12 +73,13 @@ export const KheopskitSourceProvider: FC<KheopskitSourceProviderProps> = ({
 				},
 				serverSnapshot(resolvedConfig, ssrCookies),
 			),
-		[resolvedConfig, ssrCookies, resolveSource],
+		[resolvedConfig, ssrCookies, resolveClientSource],
 	);
 
-	// Discovery and auto-reconnect run while the provider is mounted, even when
-	// no component reads the state.
-	useEffect(() => externalStore.subscribe(() => {}), [externalStore]);
+	useEffect(
+		() => externalStore.subscribe(keepPipelineRunning),
+		[externalStore],
+	);
 
 	return (
 		<KheopskitContext.Provider value={externalStore}>

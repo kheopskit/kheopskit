@@ -22,32 +22,34 @@ const flushMicrotasks = () => Promise.resolve();
 describe("createExternalStore (React)", () => {
 	describe("source resolution", () => {
 		it("resolves the source only when a client path reads it", () => {
-			const resolveSource = vi.fn(() => ({
+			const resolveClientSource = vi.fn(() => ({
 				observable$: new Subject<{ side: string }>(),
 				initialValue: { side: "client" },
 			}));
-			const store = createExternalStore(resolveSource, { side: "server" });
+			const store = createExternalStore(resolveClientSource, {
+				side: "server",
+			});
 
 			expect(store.getServerSnapshot()).toEqual({ side: "server" });
-			expect(resolveSource).toHaveBeenCalledTimes(0);
+			expect(resolveClientSource).toHaveBeenCalledTimes(0);
 
 			expect(store.getSnapshot()).toEqual({ side: "client" });
-			expect(resolveSource).toHaveBeenCalledTimes(1);
+			expect(resolveClientSource).toHaveBeenCalledTimes(1);
 		});
 
 		it("resolves the source once across snapshots and subscriptions", () => {
-			const resolveSource = vi.fn(() => ({
+			const resolveClientSource = vi.fn(() => ({
 				observable$: new BehaviorSubject({ count: 1 }).asObservable(),
 				initialValue: { count: 0 },
 			}));
-			const store = createExternalStore(resolveSource, { count: 0 });
+			const store = createExternalStore(resolveClientSource, { count: 0 });
 
 			store.getSnapshot();
 			store.subscribe(() => {});
 			store.subscribe(() => {});
 
 			expect(store.getSnapshot()).toEqual({ count: 1 });
-			expect(resolveSource).toHaveBeenCalledTimes(1);
+			expect(resolveClientSource).toHaveBeenCalledTimes(1);
 		});
 	});
 

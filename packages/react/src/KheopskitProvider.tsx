@@ -87,7 +87,7 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 		lastConfigRef.current = config;
 	}, [config]);
 
-	const resolveSource = useCallback(
+	const resolveClientSource = useCallback(
 		(resolvedConfig: KheopskitConfig) => {
 			const sourceStore =
 				store ??
@@ -110,7 +110,7 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 		<KheopskitSourceProvider
 			config={config}
 			ssrCookies={ssrCookies}
-			resolveSource={resolveSource}
+			resolveClientSource={resolveClientSource}
 		>
 			{children}
 		</KheopskitSourceProvider>

@@ -2,9 +2,7 @@ import type { KheopskitState } from "@kheopskit/core";
 import { useMemo, useSyncExternalStore } from "react";
 import { useKheopskitExternalStore } from "./context";
 
-// Core recreates an item's connect, disconnect and sign closures on each
-// emission; within one pipeline they all call the same per-item logic.
-const isSameItem = (a: object, b: object) => {
+const isSameItemIgnoringClosures = (a: object, b: object) => {
 	const previous = a as Record<string, unknown>;
 	const next = b as Record<string, unknown>;
 	const keys = Object.keys(previous);
@@ -31,7 +29,8 @@ export const useStateItem = <K, T extends object>(
 		return {
 			getSnapshot: () => {
 				const next = select(store.getSnapshot(), key);
-				if (!last || !next || !isSameItem(last, next)) last = next;
+				if (!last || !next || !isSameItemIgnoringClosures(last, next))
+					last = next;
 				return last;
 			},
 			getServerSnapshot: () => select(store.getServerSnapshot(), key),

@@ -87,7 +87,7 @@ export const createKheopskit = <
 		children,
 		ssrCookies,
 	}) => {
-		const resolveSource = useCallback(
+		const resolveClientSource = useCallback(
 			() => ({
 				store: claimStore(ssrCookies),
 				kheopskit$: kheopskit$ as unknown as Observable<KheopskitState>,
@@ -98,7 +98,7 @@ export const createKheopskit = <
 			<KheopskitSourceProvider
 				config={config}
 				ssrCookies={ssrCookies}
-				resolveSource={resolveSource}
+				resolveClientSource={resolveClientSource}
 			>
 				{children}
 			</KheopskitSourceProvider>
