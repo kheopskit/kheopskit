@@ -327,8 +327,8 @@ const getWalletConnectWallet$ = (
 
 /**
  * The WalletConnect plugin for `config.walletConnect`. Importing this entry is
- * what brings Reown AppKit into a dapp's bundle; a dapp that does not set
- * `walletConnect` ships none of it.
+ * what brings Reown AppKit into a dapp's bundle; a dapp that never imports it
+ * ships none of it.
  *
  * @example
  * ```ts
