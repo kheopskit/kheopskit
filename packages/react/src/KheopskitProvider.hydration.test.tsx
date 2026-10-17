@@ -1,7 +1,13 @@
 /// <reference types="@testing-library/jest-dom/vitest" />
+import {
+	type CachedAccount,
+	type CachedWallet,
+	createKheopskitStore,
+} from "@kheopskit/core";
 import { ethereum } from "@kheopskit/core/ethereum";
 import { polkadot } from "@kheopskit/core/polkadot";
 import { solana } from "@kheopskit/core/solana";
+import { cachedAccountOf, cachedWalletOf } from "@kheopskit/core/testing";
 import { render, screen } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,7 +30,14 @@ vi.mock("@kheopskit/core", async (importOriginal) => {
 import { KheopskitProvider } from "./KheopskitProvider";
 import { useWallets } from "./useWallets";
 
-const STORAGE_KEY = "kheopskit";
+const ALICE = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+const HARDHAT_0 = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+
+const seedCache = (wallets: CachedWallet[], accounts: CachedAccount[]) => {
+	const store = createKheopskitStore();
+	store.setCachedState(wallets, accounts);
+	store.destroy();
+};
 
 const WalletsConsumer = () => {
 	const { wallets, accounts } = useWallets();
@@ -57,29 +70,18 @@ describe("KheopskitProvider hydration (no flash on SPA reload)", () => {
 	});
 
 	it("paints cached wallets on the first client render, before the live observable emits (no ssrCookies)", () => {
-		// Simulate a prior session persisted to localStorage (SPA uses localStorage,
-		// not cookies — there is no ssrCookies in a client-only app).
-		localStorage.setItem(
-			STORAGE_KEY,
-			JSON.stringify({
-				cachedWallets: [
-					{
-						id: "polkadot:talisman",
-						platform: "polkadot",
-						type: "injected",
-						name: "Talisman",
-						isConnected: false,
-					},
-					{
-						id: "polkadot:subwallet-js",
-						platform: "polkadot",
-						type: "injected",
-						name: "SubWallet",
-						isConnected: false,
-					},
-				],
-				cachedAccounts: [],
-			}),
+		seedCache(
+			[
+				{
+					...cachedWalletOf("polkadot:talisman", "Talisman"),
+					isConnected: false,
+				},
+				{
+					...cachedWalletOf("polkadot:subwallet-js", "SubWallet"),
+					isConnected: false,
+				},
+			],
+			[],
 		);
 
 		render(
@@ -98,29 +100,10 @@ describe("KheopskitProvider hydration (no flash on SPA reload)", () => {
 	});
 
 	it("paints cached connected accounts on the first client render (no ssrCookies)", () => {
-		localStorage.setItem(
-			STORAGE_KEY,
-			JSON.stringify({
-				cachedWallets: [
-					{
-						id: "polkadot:talisman",
-						platform: "polkadot",
-						type: "injected",
-						name: "Talisman",
-						isConnected: true,
-					},
-				],
-				cachedAccounts: [
-					{
-						id: "polkadot:talisman:5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-						platform: "polkadot",
-						address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-						polkadotAccountType: "sr25519",
-						walletId: "polkadot:talisman",
-						walletName: "Talisman",
-					},
-				],
-			}),
+		const talisman = cachedWalletOf("polkadot:talisman", "Talisman");
+		seedCache(
+			[talisman],
+			[{ ...cachedAccountOf(talisman, ALICE), polkadotAccountType: "sr25519" }],
 		);
 
 		render(
@@ -148,36 +131,28 @@ describe("KheopskitProvider hydration (no flash on SPA reload)", () => {
 		// Stored out of order (solana, ethereum, polkadot). The first paint must
 		// already be in the canonical sortAccounts order so the list does not
 		// reorder once the live observable emits (which is also sorted).
-		localStorage.setItem(
-			STORAGE_KEY,
-			JSON.stringify({
-				cachedWallets: [],
-				cachedAccounts: [
-					{
-						id: "solana:mock:So11111111111111111111111111111111111111112",
-						platform: "solana",
-						address: "So11111111111111111111111111111111111111112",
-						walletId: "solana:mock",
-						walletName: "Zeta",
-					},
-					{
-						id: "ethereum:mock:0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-						platform: "ethereum",
-						address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-						chainId: 1,
-						walletId: "ethereum:mock",
-						walletName: "Beta",
-					},
-					{
-						id: "polkadot:talisman:5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-						platform: "polkadot",
-						address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-						polkadotAccountType: "sr25519",
-						walletId: "polkadot:talisman",
-						walletName: "Talisman",
-					},
-				],
-			}),
+		seedCache(
+			[],
+			[
+				cachedAccountOf(
+					cachedWalletOf("solana:mock", "Zeta"),
+					"So11111111111111111111111111111111111111112",
+				),
+				{
+					...cachedAccountOf(
+						cachedWalletOf("ethereum:mock", "Beta"),
+						HARDHAT_0,
+					),
+					chainId: 1,
+				},
+				{
+					...cachedAccountOf(
+						cachedWalletOf("polkadot:talisman", "Talisman"),
+						ALICE,
+					),
+					polkadotAccountType: "sr25519",
+				},
+			],
 		);
 
 		render(
@@ -195,29 +170,10 @@ describe("KheopskitProvider hydration (no flash on SPA reload)", () => {
 	});
 
 	it("remembers the ethereum chainId on the first render after reload", () => {
-		localStorage.setItem(
-			STORAGE_KEY,
-			JSON.stringify({
-				cachedWallets: [
-					{
-						id: "ethereum:metamask",
-						platform: "ethereum",
-						type: "injected",
-						name: "MetaMask",
-						isConnected: true,
-					},
-				],
-				cachedAccounts: [
-					{
-						id: "ethereum:metamask::0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-						platform: "ethereum",
-						address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-						chainId: 137,
-						walletId: "ethereum:metamask",
-						walletName: "MetaMask",
-					},
-				],
-			}),
+		const metamask = cachedWalletOf("ethereum:metamask", "MetaMask");
+		seedCache(
+			[metamask],
+			[{ ...cachedAccountOf(metamask, HARDHAT_0), chainId: 137 }],
 		);
 
 		render(
@@ -236,7 +192,7 @@ describe("KheopskitProvider hydration (no flash on SPA reload)", () => {
 		// and accounts missing required fields. The provider must degrade to an
 		// empty list, not throw during render and blank the dapp.
 		localStorage.setItem(
-			STORAGE_KEY,
+			"kheopskit",
 			JSON.stringify({
 				cachedWallets: [
 					{ id: "garbage", name: "X" },
