@@ -6,10 +6,14 @@ import {
 	type KheopskitState,
 	type KheopskitStore,
 	resolveConfig,
+	type WalletAccountId,
+	type WalletId,
 } from "@kheopskit/core";
 import { type FC, type PropsWithChildren, useCallback } from "react";
 import { defer, type Observable, shareReplay } from "rxjs";
 import { KheopskitSourceProvider } from "./KheopskitSourceProvider";
+import { useAccount } from "./useAccount";
+import { useWallet } from "./useWallet";
 import { useWallets } from "./useWallets";
 
 export type CreateKheopskitConfig<P extends readonly KheopskitPlatform[]> =
@@ -51,7 +55,7 @@ const deferredStore = (claim: () => KheopskitStore): KheopskitStore => ({
  * @example
  * ```tsx
  * // kheopskit.ts
- * export const { KheopskitProvider, useWallets, kheopskit$ } =
+ * export const { KheopskitProvider, useWallets, useWallet, kheopskit$ } =
  *   createKheopskit({ platforms: [polkadot(), ethereum(), solana()] });
  *
  * // anywhere
@@ -112,5 +116,9 @@ export const createKheopskit = <
 		useWallets: () => useWallets<P>(),
 		/** Current accounts, typed to the bound platform tuple. */
 		useAccounts: () => useWallets<P>().accounts,
+		/** The wallet with this id, typed to the bound platform tuple. */
+		useWallet: (walletId: WalletId) => useWallet<P>(walletId),
+		/** The account with this id, typed to the bound platform tuple. */
+		useAccount: (accountId: WalletAccountId) => useAccount<P>(accountId),
 	};
 };
