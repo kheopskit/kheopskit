@@ -1,4 +1,5 @@
 import {
+	asapScheduler,
 	combineLatest,
 	debounceTime,
 	distinctUntilChanged,
@@ -6,7 +7,7 @@ import {
 	map,
 	Observable,
 	shareReplay,
-	throttleTime,
+	tap,
 } from "rxjs";
 import {
 	createAccountHydrationBuffer,
@@ -17,8 +18,10 @@ import { getCachedIcon, setCachedIcons } from "../utils/iconCache";
 import { logObservable } from "../utils/logObservable";
 import { sortAccounts } from "../utils/sortAccounts";
 import { sortWallets } from "../utils/sortWallets";
+import type { WalletId } from "../utils/WalletId";
 import { getAccounts$ } from "./accounts";
 import { resolveConfig } from "./config";
+import { abortedError } from "./errors";
 import { getHydratedSnapshot } from "./hydration";
 import { createKheopskitStore } from "./store";
 import type {
@@ -29,7 +32,7 @@ import type {
 	KheopskitState,
 	WalletConnectWallet,
 } from "./types";
-import { isWalletConnectWallet } from "./types";
+import { isInjectedWallet, isWalletConnectWallet } from "./types";
 import { getWallets$ } from "./wallets";
 
 export type { KheopskitConfig, KheopskitState } from "./types";
@@ -83,6 +86,41 @@ export const getKheopskit$ = <
 	}
 
 	return new Observable<KheopskitState>((subscriber) => {
+		let latest: KheopskitState | undefined;
+		const waiters = new Set<StateWaiter>();
+
+		const whenState = (
+			walletId: WalletId,
+			matches: (state: KheopskitState) => boolean,
+		): Promise<void> =>
+			latest && matches(latest)
+				? Promise.resolve()
+				: new Promise((resolve, reject) => {
+						waiters.add({ walletId, matches, resolve, reject });
+					});
+
+		const isConnectedIn = (state: KheopskitState, walletId: WalletId) =>
+			state.wallets.some((w) => w.id === walletId && w.isConnected);
+
+		// The WalletConnect connector's connect() resolves when its modal opens,
+		// so waiting for isConnected there would hang when the user closes it.
+		const settleWithState = (
+			wallet: BaseWallet | WalletConnectWallet,
+		): BaseWallet | WalletConnectWallet =>
+			isInjectedWallet(wallet)
+				? {
+						...wallet,
+						connect: async (options) => {
+							await wallet.connect(options);
+							await whenState(wallet.id, (s) => isConnectedIn(s, wallet.id));
+						},
+						disconnect: async () => {
+							await wallet.disconnect();
+							await whenState(wallet.id, (s) => !isConnectedIn(s, wallet.id));
+						},
+					}
+				: wallet;
+
 		// Get live wallets and accounts
 		const liveWallets$ = getWallets$(kc, store);
 		const liveAccounts$ = getAccounts$(kc, liveWallets$);
@@ -166,10 +204,22 @@ export const getKheopskit$ = <
 					// without this the list visibly reorders as wallets come back.
 					return {
 						config: kc,
-						wallets: [...wallets.items].sort(sortWallets),
+						wallets: [...wallets.items].sort(sortWallets).map(settleWithState),
 						accounts: [...accounts.items].sort(sortAccounts),
 						isHydrating: wallets.isHydrating || accounts.isHydrating,
 					};
+				}),
+				// Coalesce before deduping so a synchronous burst that ends where it
+				// started is not re-emitted.
+				debounceTime(0, asapScheduler),
+				distinctUntilChanged(statesEqual),
+				tap((state) => {
+					latest = state;
+					for (const waiter of waiters) {
+						if (!waiter.matches(state)) continue;
+						waiters.delete(waiter);
+						waiter.resolve();
+					}
 				}),
 			)
 			.subscribe(subscriber);
@@ -237,15 +287,23 @@ export const getKheopskit$ = <
 		return () => {
 			subscription.unsubscribe();
 			persistSub.unsubscribe();
+			for (const waiter of waiters)
+				waiter.reject(abortedError(waiter.walletId));
+			waiters.clear();
 		};
 	}).pipe(
-		distinctUntilChanged(statesEqual),
-		throttleTime(16, undefined, { leading: true, trailing: true }), // ~1 frame at 60fps
 		logObservable("kheopskit$", { enabled: kc.debug, printValue: true }),
 		shareReplay({ bufferSize: 1, refCount: true }),
 		// The runtime objects are the concrete per-plugin wallet/account types;
 		// recover the precise KheopskitState<P> the caller's plugins imply.
 	) as unknown as Observable<KheopskitState<P>>;
+};
+
+type StateWaiter = {
+	walletId: WalletId;
+	matches: (state: KheopskitState) => boolean;
+	resolve: () => void;
+	reject: (error: unknown) => void;
 };
 
 const arraysEqual = (a: string[], b: string[]) =>

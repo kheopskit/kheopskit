@@ -166,8 +166,9 @@ describe("createInjectedWallets$", () => {
 		sub.unsubscribe();
 	});
 
-	it("an already aborted signal rejects without calling the platform", async () => {
-		const connect = vi.fn().mockResolvedValue("handle");
+	it("an already aborted signal rejects without calling the platform or disturbing a pending connect", async () => {
+		const deferred = createDeferred<string>();
+		const connect = vi.fn(() => deferred.promise);
 		const { sub, wallet } = setup({ connect });
 
 		const controller = new AbortController();
@@ -176,6 +177,15 @@ describe("createInjectedWallets$", () => {
 			wallet().connect({ signal: controller.signal }),
 		).rejects.toMatchObject({ code: "ABORTED" });
 		expect(connect).not.toHaveBeenCalled();
+
+		const pending = wallet().connect();
+		await expect(
+			wallet().connect({ signal: controller.signal }),
+		).rejects.toMatchObject({ code: "ABORTED" });
+		expect(connect).toHaveBeenCalledTimes(1);
+		deferred.resolve("handle");
+		await expect(pending).resolves.toBeUndefined();
+		expect(wallet().isConnected).toBe(true);
 
 		sub.unsubscribe();
 	});
