@@ -1,10 +1,4 @@
-import {
-	BehaviorSubject,
-	firstValueFrom,
-	Subject,
-	type Subscription,
-	take,
-} from "rxjs";
+import { firstValueFrom, Subject, type Subscription, take } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	cachedAccountOf,
@@ -19,21 +13,9 @@ import { createKheopskitStore } from "./store";
 import type {
 	KheopskitConfig,
 	KheopskitState,
+	WalletConnectPlugin,
 	WalletConnectWallet,
 } from "./types";
-
-const { walletConnect } = vi.hoisted(() => ({
-	walletConnect: {
-		connector$: undefined as Subject<WalletConnectWallet | null> | undefined,
-	},
-}));
-
-vi.mock("./appKit", async () => {
-	const { of } = await import("rxjs");
-	return {
-		getWalletConnectWallet$: () => walletConnect.connector$ ?? of(null),
-	};
-});
 
 const ALICE = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 
@@ -50,7 +32,6 @@ const memoryStore = () =>
 
 afterEach(() => {
 	for (const fake of fakes.splice(0)) fake.uninstall();
-	walletConnect.connector$ = undefined;
 });
 
 const setReadyState = (value: DocumentReadyState) =>
@@ -185,10 +166,16 @@ describe("getKheopskit$ discovery", () => {
 
 describe("getKheopskit$ discovery while the WalletConnect connector loads", () => {
 	let subscription: Subscription | undefined;
+	let connector$: Subject<WalletConnectWallet | null>;
+	const walletConnectPlugin: WalletConnectPlugin = {
+		type: "walletconnect",
+		metadata: { name: "Test Dapp", description: "", url: "", icons: [] },
+		getWallet$: () => connector$,
+	};
 
 	beforeEach(() => {
 		vi.useFakeTimers();
-		walletConnect.connector$ = new Subject();
+		connector$ = new Subject();
 		captureLoadListeners();
 	});
 
@@ -209,7 +196,7 @@ describe("getKheopskit$ discovery while the WalletConnect connector loads", () =
 		);
 		const states: KheopskitState[] = [];
 		subscription = getKheopskit$(
-			{ platforms: [polkadot()] },
+			{ platforms: [polkadot()], walletConnect: walletConnectPlugin },
 			{ store },
 		).subscribe((state) => states.push(state));
 
@@ -217,7 +204,7 @@ describe("getKheopskit$ discovery while the WalletConnect connector loads", () =
 		install({ name: "talisman" });
 		await fireLoad();
 		await vi.advanceTimersByTimeAsync(20);
-		walletConnect.connector$?.next(null);
+		connector$.next(null);
 		await vi.advanceTimersByTimeAsync(20);
 
 		const settled = states.find((s) => s.isDiscovering === false);
@@ -279,9 +266,6 @@ describe("getKheopskit$ reload with a cached connected wallet", () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
 		setReadyState("complete");
-		walletConnect.connector$ = new BehaviorSubject<WalletConnectWallet | null>(
-			null,
-		);
 		talisman = install({ name: "talisman", enable: "hold" });
 	});
 

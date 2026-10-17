@@ -5,6 +5,7 @@
 
 import type {
 	createKheopskitStore,
+	KheopskitConfig,
 	KheopskitPlatform,
 	SyncableStorage,
 	WalletId,
@@ -36,6 +37,7 @@ import type {
 	createFakePolkadotExtension,
 	createMemoryStorage,
 } from "@kheopskit/core/testing";
+import type { walletConnect } from "@kheopskit/core/walletconnect";
 import type {
 	createKheopskit,
 	useAccounts,
@@ -105,6 +107,13 @@ export type ReadonlyIsOptionalBoolean = Expect<
 export type SignRawReturnsHex = Expect<
 	Equal<ReturnType<PolkadotAccount["signRaw"]>, Promise<`0x${string}`>>
 >;
+export type WalletConnectIsTyped = Expect<
+	NoneAny<[typeof walletConnect, ReturnType<typeof walletConnect>]>
+>;
+export const rawWalletConnectOptions: KheopskitConfig["walletConnect"] = {
+	// @ts-expect-error raw WalletConnect options are no longer a valid config value
+	projectId: "x",
+};
 
 export type TestingIsTyped = Expect<
 	NoneAny<

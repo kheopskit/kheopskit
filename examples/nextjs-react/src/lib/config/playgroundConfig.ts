@@ -1,6 +1,7 @@
 import { type EthereumAccount, ethereum } from "@kheopskit/core/ethereum";
 import { type PolkadotAccount, polkadot } from "@kheopskit/core/polkadot";
 import { type SolanaAccount, solana } from "@kheopskit/core/solana";
+import { walletConnect } from "@kheopskit/core/walletconnect";
 import { type CreateKheopskitConfig, createKheopskit } from "@kheopskit/react";
 import type { AppKitNetwork } from "@reown/appkit/networks";
 import {
@@ -54,7 +55,7 @@ export const kheopskitConfig = {
 	hydrationGracePeriod: 500,
 	walletConnect:
 		process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID && networks
-			? {
+			? walletConnect({
 					projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID,
 					metadata: {
 						name: "Kheopskit Demo",
@@ -63,7 +64,7 @@ export const kheopskitConfig = {
 						icons: [],
 					},
 					networks,
-				}
+				})
 			: undefined,
 } satisfies CreateKheopskitConfig<Platforms>;
 

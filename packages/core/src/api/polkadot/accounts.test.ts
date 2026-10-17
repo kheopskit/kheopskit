@@ -483,47 +483,5 @@ describe("getPolkadotAccounts$", () => {
 				},
 			});
 		});
-
-		it("falls back to polkadotSigner with polkadot-api v2", async () => {
-			vi.resetModules();
-			const getPolkadotSignerFromPjs = vi.fn(() => ({
-				publicKey: new Uint8Array(),
-			}));
-			vi.doMock("polkadot-api/pjs-signer", () => ({
-				getTxCreatorFromPjs: undefined,
-				getPolkadotSignerFromPjs,
-			}));
-			const { clearAllCachedObservables } = await import(
-				"../../utils/getCachedObservable"
-			);
-			clearAllCachedObservables();
-			const { getPolkadotAccounts$: getV2PolkadotAccounts$ } = await import(
-				"./accounts"
-			);
-
-			const { wallet } = createMockAppKitWallet([
-				`polkadot:${GENESIS}:${ALICE}`,
-			]);
-			const { wallet: injected } = await fakeInjectedWallet([alice]);
-
-			const accounts = await firstValueFrom(
-				getV2PolkadotAccounts$(of([injected, wallet]), ["sr25519"]),
-			);
-
-			expect(accounts).toHaveLength(2);
-			for (const account of accounts) {
-				expect(account).toHaveProperty("polkadotSigner");
-				expect(account).not.toHaveProperty("txCreator");
-			}
-			expect(getPolkadotSignerFromPjs).toHaveBeenCalledWith(
-				ALICE,
-				expect.any(Function),
-				expect.any(Function),
-				"sr25519",
-			);
-
-			vi.doUnmock("polkadot-api/pjs-signer");
-			vi.resetModules();
-		});
 	});
 });

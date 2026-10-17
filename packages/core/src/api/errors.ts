@@ -28,7 +28,9 @@ export type KheopskitErrorCode =
 	/** The installed polkadot-api version exposes neither `getTxCreatorFromPjs` (v3) nor `getPolkadotSignerFromPjs` (v2). */
 	| "UNSUPPORTED_VERSION"
 	/** The requested chain cannot be used for this operation (e.g. a Solana cluster with no CAIP-2 id over WalletConnect). */
-	| "UNSUPPORTED_CHAIN";
+	| "UNSUPPORTED_CHAIN"
+	/** `getKheopskit$` received a config value it cannot use. The message names the fix. */
+	| "INVALID_CONFIG";
 
 /**
  * Error thrown by kheopskit wallet/account operations. Carries a stable
