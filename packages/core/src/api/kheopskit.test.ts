@@ -31,10 +31,6 @@ const settlementOf = async (promise: Promise<unknown>): Promise<Settlement> => {
 	return state;
 };
 
-/**
- * Installs a `window.injectedWeb3` extension whose `enable()` stays pending
- * until the test releases it, so a connect can be observed in flight.
- */
 const installFakeExtension = () => {
 	const accounts = [
 		{ address: ALICE, name: "Alice", type: "sr25519" },
