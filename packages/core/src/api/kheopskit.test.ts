@@ -16,6 +16,7 @@ import { polkadot } from "./polkadot/plugin";
 import type { PolkadotAccount, PolkadotWallet } from "./polkadot/types";
 import { createKheopskitStore } from "./store";
 import type {
+	CachedAccount,
 	KheopskitConfig,
 	KheopskitState,
 	WalletConnectWallet,
@@ -299,6 +300,7 @@ describe("getKheopskit$ account changes", () => {
 		debug: false,
 		storageKey: "kheopskit",
 		hydrationGracePeriod: 500,
+		hydrationTimeout: 3000,
 	};
 
 	beforeEach(() => {
@@ -437,5 +439,416 @@ describe("getKheopskit$ reload with a cached connected wallet", () => {
 		for (const state of states)
 			for (const wallet of state.wallets)
 				expect(wallet.isConnected).toBe(wallet.status === "connected");
+	});
+});
+
+describe("getKheopskit$ hydration end", () => {
+	let subscription: Subscription | undefined;
+	const talisman = "polkadot:talisman" as WalletId;
+	const subwallet = "polkadot:subwallet-js" as WalletId;
+	const ALICE = {
+		address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+		name: "Alice",
+		type: "sr25519" as const,
+	};
+	const BOB = {
+		address: "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+		name: "Bob",
+		type: "sr25519" as const,
+	};
+	const CAROL = {
+		address: "5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y",
+		name: "Carol",
+		type: "sr25519" as const,
+	};
+	const cachedAccount = (
+		walletId: WalletId,
+		address: string,
+		name: string,
+	): CachedAccount => ({
+		id: `${walletId}::${address}`,
+		platform: "polkadot",
+		address,
+		name,
+		polkadotAccountType: "sr25519",
+		walletId,
+		walletName: "Talisman",
+	});
+	const cachedTalismanAccounts = [
+		cachedAccount(talisman, "5CachedOne", "Cached one"),
+		cachedAccount(talisman, "5CachedTwo", "Cached two"),
+	];
+
+	type FakeAccount = typeof ALICE;
+	const enableAnswers = new Map<string, () => Promise<unknown>>();
+	const handle = (accounts: FakeAccount[]) => ({
+		getAccounts: () => accounts,
+		subscribe: () => () => {},
+		disconnect: vi.fn(),
+	});
+	const enableResolvesAfter = (
+		name: string,
+		ms: number,
+		accounts: FakeAccount[],
+	) =>
+		enableAnswers.set(
+			name,
+			() =>
+				new Promise((resolve) =>
+					setTimeout(() => resolve(handle(accounts)), ms),
+				),
+		);
+	const enableRejectsAfter = (name: string, ms: number, error: Error) =>
+		enableAnswers.set(
+			name,
+			() => new Promise((_, reject) => setTimeout(() => reject(error), ms)),
+		);
+	const enableNeverAnswers = (name: string) =>
+		enableAnswers.set(name, () => new Promise(() => {}));
+
+	const cacheConnected = (
+		store: ReturnType<typeof createKheopskitStore>,
+		walletId: WalletId,
+		accounts: CachedAccount[] = [],
+	) => {
+		store.rememberWallet(walletId);
+		store.setCachedState(
+			[
+				{
+					id: walletId,
+					platform: "polkadot",
+					type: "injected",
+					name: "Talisman",
+					isConnected: true,
+				},
+			],
+			accounts,
+		);
+	};
+
+	const subscribe = (
+		config: Partial<KheopskitConfig>,
+		store: ReturnType<typeof createKheopskitStore>,
+	) => {
+		const states: KheopskitState[] = [];
+		subscription = getKheopskit$(
+			{ platforms: [polkadot()], ...config },
+			{ store },
+		).subscribe((state) => states.push(state));
+		return states;
+	};
+
+	const hydratingAt = async (states: KheopskitState[], ms: number) => {
+		await vi.advanceTimersByTimeAsync(ms);
+		return states.at(-1)?.isHydrating;
+	};
+
+	const walletIn = (states: KheopskitState[], id: WalletId) =>
+		states.at(-1)?.wallets.find((w) => w.id === id);
+
+	beforeEach(async () => {
+		localStorage.clear();
+		vi.useFakeTimers();
+		setReadyState("complete");
+		injected.names = ["talisman"];
+		enableAnswers.clear();
+		walletConnect.connector$ = new BehaviorSubject<WalletConnectWallet | null>(
+			null,
+		);
+		const wallets =
+			await vi.importActual<typeof import("./wallets")>("./wallets");
+		vi.mocked(getWallets$).mockImplementation(wallets.getWallets$);
+		const accounts =
+			await vi.importActual<typeof import("./accounts")>("./accounts");
+		vi.mocked(getAccounts$).mockImplementation(accounts.getAccounts$);
+		vi.mocked(connectInjectedExtension).mockImplementation((name) => {
+			const answer = enableAnswers.get(name);
+			if (!answer) throw new Error(`no enable answer for ${name}`);
+			return answer() as never;
+		});
+		captureLoadListeners();
+	});
+
+	afterEach(() => {
+		subscription?.unsubscribe();
+		loadListeners.length = 0;
+		vi.restoreAllMocks();
+		Reflect.deleteProperty(document, "readyState");
+		vi.useRealTimers();
+		vi.mocked(getWallets$).mockImplementation(() => of([]));
+		vi.mocked(getAccounts$).mockImplementation(() => of([]));
+		vi.mocked(connectInjectedExtension).mockReset();
+	});
+
+	it("hydration ends at the grace period when autoReconnect is false and a cached connected wallet exists", async () => {
+		const store = createKheopskitStore();
+		cacheConnected(store, talisman, cachedTalismanAccounts);
+		const states = subscribe(
+			{ autoReconnect: false, hydrationGracePeriod: 500 },
+			store,
+		);
+
+		expect(await hydratingAt(states, 499)).toBe(true);
+		expect(await hydratingAt(states, 1)).toBe(false);
+		expect(walletIn(states, talisman)?.status).toBe("disconnected");
+		expect(connectInjectedExtension).not.toHaveBeenCalled();
+	});
+
+	it("hydration ends at the grace period when the cached connected wallet is no longer remembered", async () => {
+		const store = createKheopskitStore();
+		cacheConnected(store, talisman, cachedTalismanAccounts);
+		store.forgetWallet(talisman);
+		const states = subscribe({ hydrationGracePeriod: 500 }, store);
+
+		expect(await hydratingAt(states, 499)).toBe(true);
+		expect(await hydratingAt(states, 1)).toBe(false);
+		expect(walletIn(states, talisman)?.status).toBe("disconnected");
+		expect(states.at(-1)?.accounts).toEqual([]);
+		expect(connectInjectedExtension).not.toHaveBeenCalled();
+	});
+
+	it("hydration ends when discovery settles and the remembered wallet is absent", async () => {
+		setReadyState("interactive");
+		injected.names = [];
+		const store = createKheopskitStore();
+		cacheConnected(store, talisman, cachedTalismanAccounts);
+		const states = subscribe({ hydrationGracePeriod: 500 }, store);
+
+		await vi.advanceTimersByTimeAsync(300);
+		await fireLoad();
+		expect(await hydratingAt(states, 199)).toBe(true);
+		expect(await hydratingAt(states, 1)).toBe(false);
+		expect(states.at(-1)?.wallets).toEqual([]);
+		expect(states.at(-1)?.accounts).toEqual([]);
+	});
+
+	it("hydration ends at load when discovery settles after the grace period and the remembered wallet is absent", async () => {
+		setReadyState("interactive");
+		injected.names = [];
+		const store = createKheopskitStore();
+		cacheConnected(store, talisman, cachedTalismanAccounts);
+		const states = subscribe({ hydrationGracePeriod: 200 }, store);
+
+		expect(await hydratingAt(states, 300)).toBe(true);
+		await fireLoad();
+		expect(await hydratingAt(states, 1)).toBe(false);
+	});
+
+	it("hydration goes on past load while the wallet discovered at load reconnects", async () => {
+		setReadyState("interactive");
+		injected.names = [];
+		enableResolvesAfter("talisman", 700, [ALICE, BOB]);
+		const store = createKheopskitStore();
+		cacheConnected(store, talisman, cachedTalismanAccounts);
+		const states = subscribe({ hydrationGracePeriod: 200 }, store);
+
+		await vi.advanceTimersByTimeAsync(300);
+		injected.names = ["talisman"];
+		await fireLoad();
+		expect(await hydratingAt(states, 699)).toBe(true);
+		expect(walletIn(states, talisman)?.status).toBe("connecting");
+		expect(await hydratingAt(states, 1)).toBe(false);
+		expect(walletIn(states, talisman)?.status).toBe("connected");
+		expect(states.at(-1)?.accounts.map((a) => a.address)).toEqual([
+			ALICE.address,
+			BOB.address,
+		]);
+	});
+
+	it("hydration waits for the accounts of a reconnected wallet that lists them later", async () => {
+		enableAnswers.set(
+			"talisman",
+			() =>
+				new Promise((resolve) =>
+					setTimeout(
+						() =>
+							resolve({
+								getAccounts: () => [],
+								subscribe: (listener: (accounts: FakeAccount[]) => void) => {
+									const timer = setTimeout(() => listener([ALICE]), 200);
+									return () => clearTimeout(timer);
+								},
+								disconnect: vi.fn(),
+							}),
+						1000,
+					),
+				),
+		);
+		const store = createKheopskitStore();
+		cacheConnected(store, talisman, cachedTalismanAccounts);
+		const states = subscribe({ hydrationGracePeriod: 500 }, store);
+
+		expect(await hydratingAt(states, 1100)).toBe(true);
+		expect(walletIn(states, talisman)?.status).toBe("connected");
+		expect(states.at(-1)?.accounts.map((a) => a.address)).toEqual([
+			"5CachedOne",
+			"5CachedTwo",
+		]);
+		expect(await hydratingAt(states, 100)).toBe(false);
+		expect(states.at(-1)?.accounts.map((a) => a.address)).toEqual([
+			ALICE.address,
+		]);
+	});
+
+	it("hydration waits for a reconnect in flight and ends when it settles", async () => {
+		enableResolvesAfter("talisman", 1500, [ALICE, BOB]);
+		const store = createKheopskitStore();
+		cacheConnected(store, talisman, cachedTalismanAccounts);
+		const states = subscribe({ hydrationGracePeriod: 500 }, store);
+
+		expect(await hydratingAt(states, 1499)).toBe(true);
+		expect(walletIn(states, talisman)?.status).toBe("connecting");
+		expect(states.at(-1)?.accounts.map((a) => a.address)).toEqual([
+			"5CachedOne",
+			"5CachedTwo",
+		]);
+		expect(await hydratingAt(states, 1)).toBe(false);
+		expect(walletIn(states, talisman)?.status).toBe("connected");
+		expect(states.at(-1)?.accounts.map((a) => a.address)).toEqual([
+			ALICE.address,
+			BOB.address,
+		]);
+	});
+
+	it("hydration ends when the reconnect fails", async () => {
+		enableRejectsAfter("talisman", 1500, new Error("boom"));
+		const store = createKheopskitStore();
+		cacheConnected(store, talisman, cachedTalismanAccounts);
+		const states = subscribe({ hydrationGracePeriod: 500 }, store);
+
+		expect(await hydratingAt(states, 1499)).toBe(true);
+		expect(await hydratingAt(states, 1)).toBe(false);
+		const wallet = walletIn(states, talisman);
+		expect([wallet?.status, wallet?.error?.code]).toEqual([
+			"disconnected",
+			"CONNECT_FAILED",
+		]);
+		expect(states.at(-1)?.accounts).toEqual([]);
+	});
+
+	it("hydration ends at hydrationTimeout when a reconnect never settles", async () => {
+		enableNeverAnswers("talisman");
+		const store = createKheopskitStore();
+		cacheConnected(store, talisman, cachedTalismanAccounts);
+		const states = subscribe(
+			{ hydrationGracePeriod: 500, hydrationTimeout: 2000 },
+			store,
+		);
+
+		expect(await hydratingAt(states, 1999)).toBe(true);
+		expect(await hydratingAt(states, 1)).toBe(false);
+		expect(await hydratingAt(states, 3000)).toBe(false);
+		expect(walletIn(states, talisman)?.status).toBe("connecting");
+		expect(states.at(-1)?.accounts).toEqual([]);
+	});
+
+	describe("persistence", () => {
+		const writes = (store: ReturnType<typeof createKheopskitStore>) => {
+			const calls: {
+				wallets: { id: string; isConnected: boolean }[];
+				accounts: { walletId: string; address: string; name?: string }[];
+			}[] = [];
+			vi.spyOn(store, "setCachedState").mockImplementation(
+				(wallets, accounts) => {
+					calls.push({
+						wallets: wallets.map(({ id, isConnected }) => ({
+							id,
+							isConnected,
+						})),
+						accounts: accounts.map(({ walletId, address, name }) => ({
+							walletId,
+							address,
+							name,
+						})),
+					});
+				},
+			);
+			return calls;
+		};
+		const live = (walletId: WalletId, account: FakeAccount) => ({
+			walletId,
+			address: account.address,
+			name: account.name,
+		});
+		const cached = (account: CachedAccount) => ({
+			walletId: account.walletId,
+			address: account.address,
+			name: account.name,
+		});
+
+		it("a slow reconnect never writes an empty cache", async () => {
+			enableResolvesAfter("talisman", 2500, [ALICE, BOB]);
+			const store = createKheopskitStore();
+			cacheConnected(store, talisman, cachedTalismanAccounts);
+			const calls = writes(store);
+			subscribe({ hydrationGracePeriod: 0 }, store);
+
+			await vi.advanceTimersByTimeAsync(2499);
+			expect(calls.length).toBeGreaterThanOrEqual(1);
+			for (const call of calls)
+				expect(call).toEqual({
+					wallets: [{ id: talisman, isConnected: true }],
+					accounts: cachedTalismanAccounts.map(cached),
+				});
+
+			await vi.advanceTimersByTimeAsync(1 + 1000);
+			expect(calls.at(-1)).toEqual({
+				wallets: [{ id: talisman, isConnected: true }],
+				accounts: [live(talisman, ALICE), live(talisman, BOB)],
+			});
+		});
+
+		it("a reconnect that fails after a kept write is written live", async () => {
+			enableRejectsAfter("talisman", 2500, new Error("boom"));
+			const store = createKheopskitStore();
+			cacheConnected(store, talisman, cachedTalismanAccounts);
+			const calls = writes(store);
+			const states = subscribe({ hydrationGracePeriod: 0 }, store);
+
+			await vi.advanceTimersByTimeAsync(2499);
+			expect(calls.at(-1)).toEqual({
+				wallets: [{ id: talisman, isConnected: true }],
+				accounts: cachedTalismanAccounts.map(cached),
+			});
+
+			await vi.advanceTimersByTimeAsync(1 + 1000);
+			expect(walletIn(states, talisman)?.error?.code).toBe("CONNECT_FAILED");
+			expect(calls.at(-1)).toEqual({
+				wallets: [{ id: talisman, isConnected: false }],
+				accounts: [],
+			});
+		});
+
+		it("a wallet the user connects while another reconnect is still pending is persisted", async () => {
+			injected.names = ["talisman", "subwallet-js"];
+			enableNeverAnswers("talisman");
+			enableResolvesAfter("subwallet-js", 0, [CAROL]);
+			const store = createKheopskitStore();
+			cacheConnected(store, talisman, cachedTalismanAccounts);
+			const calls = writes(store);
+			const states = subscribe(
+				{ hydrationGracePeriod: 500, hydrationTimeout: 2000 },
+				store,
+			);
+
+			await vi.advanceTimersByTimeAsync(1200);
+			const connecting = walletIn(states, subwallet)?.connect();
+			await vi.advanceTimersByTimeAsync(100);
+			await connecting;
+			expect(calls).toEqual([]);
+
+			await vi.advanceTimersByTimeAsync(2000);
+			expect(walletIn(states, talisman)?.status).toBe("connecting");
+			expect(calls.at(-1)).toEqual({
+				wallets: [
+					{ id: talisman, isConnected: true },
+					{ id: subwallet, isConnected: true },
+				],
+				accounts: [
+					live(subwallet, CAROL),
+					...cachedTalismanAccounts.map(cached),
+				],
+			});
+		});
 	});
 });

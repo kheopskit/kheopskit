@@ -169,6 +169,38 @@ account.
 Data written before v6 stored `remembered` as `autoReconnect`. The store reads
 that field as `remembered` and drops it on the next write.
 
+### Hydration end
+
+`isHydrating` turns `false` once `hydrationGracePeriod` has elapsed, discovery
+has ended (`isDiscovering` is `false`), and every wallet that hydrated as
+`connecting` has settled. A wallet has settled when it is absent from the
+discovered wallets, connected with at least one live account or with no cached
+accounts, disconnected with `error` set, or disconnected and not remembered
+when hydration began. At `hydrationTimeout` hydration ends whatever is pending,
+and a wallet whose reconnect is still pending stays `connecting`.
+
+The defaults are 500 ms for `hydrationGracePeriod` and 3000 ms for
+`hydrationTimeout`. `hydrationTimeout` replaces the old cap of six times
+`hydrationGracePeriod` and wins over a longer grace period, so an app that
+raised `hydrationGracePeriod` sets `hydrationTimeout` as well.
+
+- Discovery ends only after the page fires `load`, so a page with a cache
+  hydrates until `load` even when no wallet reconnects.
+- A wallet that reconnects without sharing any account with the site holds
+  hydration, and shows its cached accounts, until `hydrationTimeout`.
+- A failed reconnect ends that wallet's wait. A later automatic retry shows on
+  the live wallet's `status`, not as a placeholder.
+- A remembered wallet the user disconnects during or right after its reconnect
+  holds hydration, and shows its cached accounts, until `hydrationTimeout`.
+- A prompt the extension opens for a revoked site holds hydration until the
+  user answers or `hydrationTimeout` elapses. After a refusal the wallet is
+  forgotten, so the next load opens no prompt.
+
+The cache is written after hydration ends, one second after the state
+stabilises. A wallet still `connecting` at that time keeps its previous cached
+entry and accounts, so a slow reconnect never writes an empty cache, while
+every other wallet is written as it is.
+
 ### Custom storage
 
 `createKheopskitStore` accepts a `storage` option, which takes precedence over

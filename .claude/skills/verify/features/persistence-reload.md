@@ -32,6 +32,7 @@ Preconditions:
 ## Gotchas
 
 - Writes are debounced, and the playground sets `hydrationGracePeriod: 500`. Poll the storage. Do not read it right after the click.
+- The cache is written only after `isHydrating` ends. Hydration ends at the grace period when the remembered wallet is absent or `autoReconnect` is off, when its reconnect settles otherwise, and at `hydrationTimeout` (default 3000 ms) at the latest. A wallet still `Connecting…` at write time keeps its previous cached entry and accounts, so a slow `__dotEnableDelayMs` never empties the cache.
 - The cookie value is URI-encoded JSON. `readPersistedState` decodes it.
 - A fresh Playwright context starts empty, so persistence holds only within one test. Do the reload inside the same test.
 - On SSR apps, a hydration mismatch shows up as a `console.error`, and the fixture fails the test. That failure is the signal. Do not suppress it.

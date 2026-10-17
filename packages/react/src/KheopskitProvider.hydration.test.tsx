@@ -8,6 +8,8 @@ import { hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const liveObservable = vi.hoisted(() => ({ enabled: false }));
+
 // Replace the live kheopskit observable with one that NEVER emits synchronously.
 // This reproduces a real SPA reload where the first emission is deferred (e.g.
 // WalletConnect's AppKit is loaded via dynamic import, so the underlying
@@ -19,7 +21,8 @@ vi.mock("@kheopskit/core", async (importOriginal) => {
 	const { NEVER } = await import("rxjs");
 	return {
 		...actual,
-		getKheopskit$: () => NEVER,
+		getKheopskit$: (...args: Parameters<typeof actual.getKheopskit$>) =>
+			liveObservable.enabled ? actual.getKheopskit$(...args) : NEVER,
 	};
 });
 
@@ -29,7 +32,7 @@ import { useWallets } from "./useWallets";
 const STORAGE_KEY = "kheopskit";
 
 const WalletsConsumer = () => {
-	const { wallets, accounts } = useWallets();
+	const { wallets, accounts, isHydrating } = useWallets();
 	return (
 		<div>
 			<span data-testid="wallets-count">{wallets.length}</span>
@@ -43,6 +46,7 @@ const WalletsConsumer = () => {
 			<span data-testid="account-order">
 				{accounts.map((a) => `${a.platform}:${a.walletName}`).join(",")}
 			</span>
+			<span data-testid="is-hydrating">{String(isHydrating)}</span>
 			<span data-testid="account-chainids">
 				{accounts
 					.map((a) => (a as { chainId?: number }).chainId ?? "-")
@@ -430,5 +434,67 @@ describe("KheopskitProvider snapshots under an autoReconnect predicate", () => {
 		expect(screen.getByTestId("account-order")).toHaveTextContent(
 			expectedAccounts,
 		);
+	});
+});
+
+describe("KheopskitProvider hydration end", () => {
+	beforeEach(() => {
+		localStorage.clear();
+		liveObservable.enabled = true;
+		vi.useFakeTimers();
+	});
+
+	afterEach(() => {
+		liveObservable.enabled = false;
+		vi.useRealTimers();
+	});
+
+	it("isHydrating ends without a reconnect when autoReconnect is false", async () => {
+		localStorage.setItem(
+			STORAGE_KEY,
+			JSON.stringify({
+				remembered: ["polkadot:talisman"],
+				cachedWallets: [
+					{
+						id: "polkadot:talisman",
+						platform: "polkadot",
+						type: "injected",
+						name: "Talisman",
+						isConnected: true,
+					},
+				],
+				cachedAccounts: [
+					{
+						id: "polkadot:talisman::5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+						platform: "polkadot",
+						address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+						polkadotAccountType: "sr25519",
+						walletId: "polkadot:talisman",
+						walletName: "Talisman",
+					},
+				],
+			}),
+		);
+		const config = {
+			platforms: [polkadot()],
+			autoReconnect: false,
+			hydrationGracePeriod: 500,
+		};
+		render(
+			<KheopskitProvider config={config}>
+				<WalletsConsumer />
+			</KheopskitProvider>,
+		);
+
+		await act(() => vi.advanceTimersByTimeAsync(499));
+		expect(screen.getByTestId("is-hydrating")).toHaveTextContent("true");
+		expect(screen.getByTestId("wallet-status")).toHaveTextContent(
+			"polkadot:talisman:disconnected:false",
+		);
+
+		await act(() => vi.advanceTimersByTimeAsync(1));
+		expect(screen.getByTestId("is-hydrating")).toHaveTextContent("false");
+		expect(screen.getByTestId("wallet-status")).toBeEmptyDOMElement();
+		expect(screen.getByTestId("accounts-count")).toHaveTextContent("0");
 	});
 });
