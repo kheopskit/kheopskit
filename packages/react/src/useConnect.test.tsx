@@ -17,9 +17,12 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import {
 	type FC,
 	Fragment,
+	lazy,
 	type PropsWithChildren,
 	type ReactNode,
 	StrictMode,
+	Suspense,
+	useEffect,
 	useLayoutEffect,
 	useRef,
 } from "react";
@@ -30,12 +33,15 @@ import { useConnect } from "./useConnect";
 
 describe("useConnect", () => {
 	let fake: FakePolkadotExtension;
+	let otherFake: FakePolkadotExtension | undefined;
 	let store: KheopskitStore;
 	let subscription: Subscription;
 
 	afterEach(() => {
 		subscription.unsubscribe();
 		fake.uninstall();
+		otherFake?.uninstall();
+		otherFake = undefined;
 		store.destroy();
 		vi.useRealTimers();
 	});
@@ -88,11 +94,48 @@ describe("useConnect", () => {
 		const renderInside = (children?: ReactNode) => view.rerender(app(children));
 		const settle = () => act(() => vi.advanceTimersByTimeAsync(5000));
 		await settle();
-		const walletStatus = () =>
-			latest?.wallets.find((wallet) => wallet.id === fake.walletId)?.status;
+		const walletStatus = (walletId: WalletId = fake.walletId) =>
+			latest?.wallets.find((wallet) => wallet.id === walletId)?.status;
 		const remembered = async () =>
 			(await firstValueFrom(store.observable)).remembered ?? [];
 		return { view, outcomes, settle, walletStatus, remembered, renderInside };
+	};
+
+	const record = (outcomes: string[]) => (connect: Promise<void>) =>
+		connect.then(
+			() => outcomes.push("resolved"),
+			(error: KheopskitError) => outcomes.push(`rejected:${error.code}`),
+		);
+
+	const connectOnMount =
+		(useMountEffect: typeof useEffect) =>
+		({ outcomes }: { outcomes: string[] }) => {
+			const { connect } = useConnect(fake.walletId);
+			useMountEffect(() => {
+				record(outcomes)(connect());
+			}, [connect, outcomes]);
+			return null;
+		};
+	const ConnectInLayoutEffect = connectOnMount(useLayoutEffect);
+	const ConnectInEffect = connectOnMount(useEffect);
+
+	const ChildConnectsInLayoutEffect = ({
+		connect,
+		outcomes,
+	}: {
+		connect: () => Promise<void>;
+		outcomes: string[];
+	}) => {
+		useLayoutEffect(() => {
+			record(outcomes)(connect());
+		}, [connect, outcomes]);
+		return null;
+	};
+	const ParentWithChild = ({ outcomes }: { outcomes: string[] }) => {
+		const { connect } = useConnect(fake.walletId);
+		return (
+			<ChildConnectsInLayoutEffect connect={connect} outcomes={outcomes} />
+		);
 	};
 
 	it("resolves a completed connect once the component renders it connected", async () => {
@@ -138,6 +181,81 @@ describe("useConnect", () => {
 		});
 	});
 
+	it.each([
+		["", Fragment, ["resolved"]],
+		[" under StrictMode", StrictMode, ["resolved", "resolved"]],
+	])(
+		"connects from the component's own layout effect%s",
+		async (_, Wrapper, expectedOutcomes) => {
+			const { settle, walletStatus, remembered, renderInside } = await setup(
+				"resolve",
+				Wrapper,
+			);
+			const outcomes: string[] = [];
+
+			renderInside(<ConnectInLayoutEffect outcomes={outcomes} />);
+			await settle();
+
+			expect({
+				outcomes,
+				status: walletStatus(),
+				remembered: await remembered(),
+			}).toEqual({
+				outcomes: expectedOutcomes,
+				status: "connected",
+				remembered: ["polkadot:talisman"],
+			});
+		},
+	);
+
+	it.each([
+		["", Fragment, ["resolved"]],
+		[" under StrictMode", StrictMode, ["resolved", "resolved"]],
+	])(
+		"connects from a child's layout effect mounted in the same commit as the hook%s",
+		async (_, Wrapper, expectedOutcomes) => {
+			const { settle, walletStatus, remembered, renderInside } = await setup(
+				"resolve",
+				Wrapper,
+			);
+			const outcomes: string[] = [];
+
+			renderInside(<ParentWithChild outcomes={outcomes} />);
+			await settle();
+
+			expect({
+				outcomes,
+				status: walletStatus(),
+				remembered: await remembered(),
+			}).toEqual({
+				outcomes: expectedOutcomes,
+				status: "connected",
+				remembered: ["polkadot:talisman"],
+			});
+		},
+	);
+
+	it("connects from the component's passive effect under StrictMode", async () => {
+		const { settle, walletStatus, remembered, renderInside } = await setup(
+			"resolve",
+			StrictMode,
+		);
+		const outcomes: string[] = [];
+
+		renderInside(<ConnectInEffect outcomes={outcomes} />);
+		await settle();
+
+		expect({
+			outcomes,
+			status: walletStatus(),
+			remembered: await remembered(),
+		}).toEqual({
+			outcomes: ["resolved", "resolved"],
+			status: "connected",
+			remembered: ["polkadot:talisman"],
+		});
+	});
+
 	it("aborts a held connect when the component unmounts", async () => {
 		const { view, outcomes, settle, walletStatus, remembered } =
 			await setup("hold");
@@ -163,17 +281,6 @@ describe("useConnect", () => {
 		});
 	});
 
-	const ConnectOnMount = ({ outcomes }: { outcomes: string[] }) => {
-		const { connect } = useConnect(fake.walletId);
-		useLayoutEffect(() => {
-			connect().then(
-				() => outcomes.push("resolved"),
-				(error: KheopskitError) => outcomes.push(`rejected:${error.code}`),
-			);
-		}, [connect, outcomes]);
-		return null;
-	};
-
 	it.each([
 		["", Fragment, ["resolved"]],
 		[" under StrictMode", StrictMode, ["resolved", "resolved"]],
@@ -186,7 +293,7 @@ describe("useConnect", () => {
 			);
 			const outcomes: string[] = [];
 
-			renderInside(<ConnectOnMount outcomes={outcomes} />);
+			renderInside(<ConnectInLayoutEffect outcomes={outcomes} />);
 			await settle();
 			const statusBeforeUnmount = walletStatus();
 			renderInside();
@@ -208,27 +315,6 @@ describe("useConnect", () => {
 		},
 	);
 
-	it("connects from a layout effect under StrictMode", async () => {
-		const { settle, walletStatus, remembered, renderInside } = await setup(
-			"resolve",
-			StrictMode,
-		);
-		const outcomes: string[] = [];
-
-		renderInside(<ConnectOnMount outcomes={outcomes} />);
-		await settle();
-
-		expect({
-			outcomes,
-			status: walletStatus(),
-			remembered: await remembered(),
-		}).toEqual({
-			outcomes: ["resolved", "resolved"],
-			status: "connected",
-			remembered: ["polkadot:talisman"],
-		});
-	});
-
 	it.each([
 		["", Fragment],
 		[" under StrictMode", StrictMode],
@@ -249,13 +335,7 @@ describe("useConnect", () => {
 				return (
 					<button
 						type="button"
-						onClick={() =>
-							resumed.then(connect).then(
-								() => outcomes.push("resolved"),
-								(error: KheopskitError) =>
-									outcomes.push(`rejected:${error.code}`),
-							)
-						}
+						onClick={() => record(outcomes)(resumed.then(connect))}
 					>
 						Connect later
 					</button>
@@ -283,6 +363,108 @@ describe("useConnect", () => {
 			});
 		},
 	);
+
+	it("keeps a held connect while a lazy child shown on connecting suspends the boundary", async () => {
+		const { settle, walletStatus, remembered, renderInside } =
+			await setup("hold");
+		const outcomes: string[] = [];
+		let loadSpinner = () => {};
+		const Spinner = lazy(
+			() =>
+				new Promise<{ default: FC }>((resolve) => {
+					loadSpinner = () => resolve({ default: () => <span>spinner</span> });
+				}),
+		);
+		const ConnectWithSpinner = () => {
+			const { connect, status } = useConnect(fake.walletId);
+			return (
+				<>
+					<button type="button" onClick={() => record(outcomes)(connect())}>
+						Connect with spinner
+					</button>
+					{status === "connecting" ? <Spinner /> : null}
+				</>
+			);
+		};
+
+		renderInside(
+			<Suspense fallback={<span>loading</span>}>
+				<ConnectWithSpinner />
+			</Suspense>,
+		);
+		await settle();
+		fireEvent.click(screen.getByText("Connect with spinner"));
+		await settle();
+		const fallbackShown = screen.queryByText("loading") !== null;
+		await act(async () => loadSpinner());
+		await settle();
+		fake.resolveEnable();
+		await settle();
+
+		expect({
+			fallbackShown,
+			outcomes,
+			status: walletStatus(),
+			remembered: await remembered(),
+		}).toEqual({
+			fallbackShown: true,
+			outcomes: ["resolved"],
+			status: "connected",
+			remembered: ["polkadot:talisman"],
+		});
+	});
+
+	it("aborts the pending connect when walletId changes and rejects ABORTED a connect captured before the change", async () => {
+		otherFake = createFakePolkadotExtension({ name: "subwallet-js" });
+		const { settle, walletStatus, remembered, renderInside } =
+			await setup("hold");
+		const outcomes: string[] = [];
+		const staleErrors: string[] = [];
+		const captured: { connect?: () => Promise<void> } = {};
+		const Picker = ({ walletId }: { walletId: WalletId }) => {
+			const { connect } = useConnect(walletId);
+			captured.connect ??= connect;
+			return (
+				<button type="button" onClick={() => record(outcomes)(connect())}>
+					Connect picked
+				</button>
+			);
+		};
+
+		renderInside(<Picker walletId={fake.walletId} />);
+		await settle();
+		fireEvent.click(screen.getByText("Connect picked"));
+		await settle();
+		const statusBeforeChange = walletStatus();
+		renderInside(<Picker walletId={otherFake.walletId} />);
+		await settle();
+		fake.resolveEnable();
+		await settle();
+		await captured.connect?.().catch((error: KheopskitError) => {
+			staleErrors.push(`${error.code}: ${error.message}`);
+		});
+		await settle();
+
+		expect({
+			statusBeforeChange,
+			outcomes,
+			staleErrors,
+			enableCalls: fake.enableCalls().length,
+			status: walletStatus(),
+			otherStatus: walletStatus(otherFake.walletId),
+			remembered: await remembered(),
+		}).toEqual({
+			statusBeforeChange: "connecting",
+			outcomes: ["resolved"],
+			staleErrors: [
+				"ABORTED: [kheopskit] connect of wallet polkadot:talisman started after useConnect unmounted or switched wallet",
+			],
+			enableCalls: 1,
+			status: "disconnected",
+			otherStatus: "disconnected",
+			remembered: [],
+		});
+	});
 
 	it("rejects with an error naming an unknown wallet id", async () => {
 		await setup("resolve");
