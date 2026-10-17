@@ -83,7 +83,7 @@ export const getSafeLocalStorage = (): SyncableStorage => {
 
 /**
  * @deprecated Use getSafeLocalStorage() instead. This is kept for backward compatibility.
- * Returns a proxy that lazily initializes on first method call.
+ * Returns a proxy that lazily initializes on first use.
  */
 export const safeLocalStorage: SyncableStorage = {
 	getItem: (key: string) => getSafeLocalStorage().getItem(key),
