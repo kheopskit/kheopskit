@@ -30,7 +30,6 @@ const { injected, walletConnect } = vi.hoisted(() => ({
 
 vi.mock("polkadot-api/pjs-signer", () => ({
 	getInjectedExtensions: () => injected.names,
-	connectInjectedExtension: vi.fn(),
 }));
 
 vi.mock("./wallets", () => ({

@@ -61,8 +61,11 @@ const AccountRow: FC<{ account: WalletAccount }> = ({ account }) => {
 			<TableCell>
 				{account.platform === "ethereum" ? (account.chainId ?? "-") : "-"}
 			</TableCell>
-			<TableCell className="font-mono">
+			<TableCell className="space-x-2 font-mono">
 				<SignButton account={account} />
+				{account.platform === "polkadot" ? (
+					<SignInButton account={account} />
+				) : null}
 			</TableCell>
 		</TableRow>
 	);
@@ -123,6 +126,38 @@ const SignButton: FC<{ account: WalletAccount }> = ({ account }) => {
 	return (
 		<Button onClick={handleClick} disabled={isHydrating}>
 			Sign
+		</Button>
+	);
+};
+
+const SignInButton: FC<{
+	account: Extract<WalletAccount, { platform: "polkadot" }>;
+}> = ({ account }) => {
+	const { isHydrating } = useWallets();
+
+	const handleClick = useCallback(async () => {
+		const message = [
+			`${window.location.host} wants you to sign in with your Substrate account:`,
+			account.address,
+			"",
+			"Kheopskit sign-in",
+			"",
+			`URI: ${window.location.origin}`,
+			"Version: 1.0.0",
+			`Nonce: ${crypto.randomUUID()}`,
+			`Issued At: ${new Date().toISOString()}`,
+		].join("\n");
+		try {
+			const signature = await account.signRaw(message);
+			toast.success(`Signature: ${signature}`);
+		} catch (err) {
+			toast.error(`Error: ${(err as Error).message}`);
+		}
+	}, [account]);
+
+	return (
+		<Button onClick={handleClick} disabled={isHydrating}>
+			Sign in
 		</Button>
 	);
 };
