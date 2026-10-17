@@ -352,6 +352,48 @@ describe("createInjectedWallets$", () => {
 		);
 	});
 
+	it("a connect queued behind a pending disconnect rejects ABORTED after teardown and never asks the platform again", async () => {
+		const platformDisconnect = createDeferred<void>();
+		const connect = vi.fn().mockResolvedValue("handle");
+		const { sub, wallet } = setup({
+			connect,
+			disconnect: () => platformDisconnect.promise,
+		});
+
+		await wallet().connect();
+		const disconnecting = wallet().disconnect();
+		const queued = wallet().connect();
+		sub.unsubscribe();
+		platformDisconnect.resolve();
+
+		expect(await settlementOf(disconnecting)).toBe("resolved");
+		expect(await settlementOf(queued)).toBe("rejected");
+		await expect(queued).rejects.toMatchObject({ code: "ABORTED", walletId });
+		expect(connect).toHaveBeenCalledTimes(1);
+		expect(rememberedWalletIds()).toEqual([]);
+	});
+
+	it("a platform disconnect that resolves after teardown forgets the wallet without touching the stream's state", async () => {
+		const platformDisconnect = createDeferred<void>();
+		const onDisconnected = vi.fn();
+		const { sub, wallet, emissions } = setup({
+			disconnect: () => platformDisconnect.promise,
+			onDisconnected,
+		});
+
+		await wallet().connect();
+		expect(rememberedWalletIds()).toEqual([walletId]);
+		const disconnecting = wallet().disconnect();
+		sub.unsubscribe();
+		const emitted = emissions.length;
+		platformDisconnect.resolve();
+
+		expect(await settlementOf(disconnecting)).toBe("resolved");
+		expect(rememberedWalletIds()).toEqual([]);
+		expect(emissions.length).toBe(emitted);
+		expect(onDisconnected).not.toHaveBeenCalled();
+	});
+
 	it("runs platform disconnect before clearing state and onDisconnected after", async () => {
 		const calls: string[] = [];
 		const { sub, wallet } = setup({

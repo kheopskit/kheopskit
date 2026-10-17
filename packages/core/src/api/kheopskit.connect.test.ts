@@ -313,6 +313,34 @@ describe("getKheopskit$ connect semantics", () => {
 		sub.unsubscribe();
 	});
 
+	it("an abort fired by the subscriber that sees the wallet connected leaves the connect resolved", async () => {
+		const controller = new AbortController();
+		const emissions: KheopskitState[] = [];
+		const sub = getKheopskit$(config(0), {
+			store: createKheopskitStore(),
+		}).subscribe((state) => {
+			emissions.push(state);
+			if (state.wallets.some((w) => w.id === fakeWalletId && w.isConnected))
+				controller.abort();
+		});
+		await settleMicrotasks();
+		const wallet = emissions.at(-1)?.wallets.find((w) => w.id === fakeWalletId);
+		if (!wallet) throw new Error("fake wallet not in the latest emission");
+
+		const connecting = wallet.connect({ signal: controller.signal });
+		await settleMicrotasks();
+		fake.releaseEnable();
+
+		expect(await settlementOf(connecting)).toBe("resolved");
+		expect(controller.signal.aborted).toBe(true);
+		expect(
+			emissions.at(-1)?.wallets.find((w) => w.id === fakeWalletId)?.isConnected,
+		).toBe(true);
+		expect(rememberedWalletIds()).toEqual([fakeWalletId]);
+
+		sub.unsubscribe();
+	});
+
 	it("connect on a wallet from a torn-down subscription rejects ABORTED without prompting", async () => {
 		const state = await firstValueFrom(
 			getKheopskit$(config(0), { store: createKheopskitStore() }),

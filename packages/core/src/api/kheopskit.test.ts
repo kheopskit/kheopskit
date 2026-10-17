@@ -37,9 +37,24 @@ const setReadyState = (value: DocumentReadyState) =>
 		configurable: true,
 	});
 
-const fireLoad = () => {
+const loadListeners: EventListener[] = [];
+
+const captureLoadListeners = () => {
+	const addEventListener = window.addEventListener.bind(window);
+	vi.spyOn(window, "addEventListener").mockImplementation(
+		(type, listener, options) => {
+			if (type === "load") loadListeners.push(listener as EventListener);
+			else addEventListener(type, listener, options);
+		},
+	);
+};
+
+const fireLoad = async () => {
 	setReadyState("complete");
-	window.dispatchEvent(new Event("load"));
+	for (const listener of [...loadListeners]) {
+		listener(new Event("load"));
+		await vi.advanceTimersByTimeAsync(0);
+	}
 };
 
 describe("getKheopskit$ cached account filtering", () => {
@@ -157,10 +172,13 @@ describe("getKheopskit$ discovery", () => {
 		vi.mocked(getWallets$).mockImplementation((config, store) =>
 			polkadot().getWallets$({ config, store }),
 		);
+		captureLoadListeners();
 	});
 
 	afterEach(() => {
 		subscription?.unsubscribe();
+		loadListeners.length = 0;
+		vi.restoreAllMocks();
 		Reflect.deleteProperty(document, "readyState");
 		vi.useRealTimers();
 		vi.mocked(getWallets$).mockImplementation(() => of([]));
@@ -174,7 +192,7 @@ describe("getKheopskit$ discovery", () => {
 		expect(states.length).toBeGreaterThan(0);
 		expect(states.map((s) => s.isDiscovering)).not.toContain(false);
 
-		fireLoad();
+		await fireLoad();
 		await vi.advanceTimersByTimeAsync(20);
 		expect(states.at(-1)?.isDiscovering).toBe(false);
 	});
@@ -185,7 +203,7 @@ describe("getKheopskit$ discovery", () => {
 
 		await vi.advanceTimersByTimeAsync(1200);
 		injected.names = ["talisman"];
-		fireLoad();
+		await fireLoad();
 		await vi.advanceTimersByTimeAsync(20);
 
 		const settled = states.find((s) => s.isDiscovering === false);
@@ -212,10 +230,13 @@ describe("getKheopskit$ discovery while the WalletConnect connector loads", () =
 		const actual =
 			await vi.importActual<typeof import("./wallets")>("./wallets");
 		vi.mocked(getWallets$).mockImplementation(actual.getWallets$);
+		captureLoadListeners();
 	});
 
 	afterEach(() => {
 		subscription?.unsubscribe();
+		loadListeners.length = 0;
+		vi.restoreAllMocks();
 		Reflect.deleteProperty(document, "readyState");
 		vi.useRealTimers();
 		vi.mocked(getWallets$).mockImplementation(() => of([]));
@@ -244,7 +265,7 @@ describe("getKheopskit$ discovery while the WalletConnect connector loads", () =
 
 		await vi.advanceTimersByTimeAsync(1200);
 		injected.names = ["talisman"];
-		fireLoad();
+		await fireLoad();
 		await vi.advanceTimersByTimeAsync(20);
 		walletConnect.connector$.next(null);
 		await vi.advanceTimersByTimeAsync(20);
