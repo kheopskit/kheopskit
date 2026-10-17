@@ -5,7 +5,6 @@ import {
 	map,
 	Observable,
 	Subscription,
-	shareReplay,
 	startWith,
 	take,
 	timer,
@@ -16,104 +15,46 @@ type HydrationBufferResult<T> = {
 	isHydrating: boolean;
 };
 
-/**
- * Core hydration buffer logic shared between wallets and accounts.
- *
- * During the grace period:
- * - Emits cached items immediately (before any live emissions)
- * - As live items arrive, merges them using the provided merge function
- *
- * After the grace period (and convergence, if provided):
- * - Only live items are returned
- * - isHydrating becomes false
- *
- * If an `isConverged` function is provided, hydration ends only when BOTH
- * the grace period has elapsed AND the live items have converged with cached
- * items (e.g., all previously-connected wallets have reconnected).
- * A max timeout (6x grace period) prevents infinite hydration.
- *
- * @param cachedItems - Initial cached items from storage
- * @param liveItems$ - Observable of live items as they become available
- * @param gracePeriodMs - Time in ms to wait before syncing to live state
- * @param mergeFn - Function to merge live and cached items during hydration
- * @param isConverged - Optional function to check if live items have caught up to cached items
- */
 const createBufferCore = <L, C>(
 	cachedItems: C[],
 	liveItems$: Observable<L[]>,
 	gracePeriodMs: number,
+	timeoutMs: number,
 	mergeFn: (liveItems: L[], cachedItems: C[]) => (L | C)[],
-	isConverged?: (liveItems: L[], cachedItems: C[]) => boolean,
+	settled$?: Observable<boolean>,
 ): Observable<HydrationBufferResult<L | C>> => {
-	// If no grace period or no cached items, just pass through live items
 	if (gracePeriodMs <= 0 || cachedItems.length === 0) {
 		return liveItems$.pipe(map((items) => ({ items, isHydrating: false })));
 	}
 
-	// Wrap in an Observable to properly manage all subscriptions
 	return new Observable<HydrationBufferResult<L | C>>((subscriber) => {
 		const subscriptions = new Subscription();
-
-		// Track whether we're still in the hydration grace period
-		// Using BehaviorSubject to keep a stateful value that doesn't complete
 		const isHydrating$ = new BehaviorSubject(true);
+		const endHydration = () => {
+			if (isHydrating$.value) isHydrating$.next(false);
+		};
 
-		// Use startWith to emit cached items immediately before any live emissions
-		const liveWithInitial$ = liveItems$.pipe(startWith([] as L[]));
-
-		if (isConverged) {
-			// With convergence check: hydration ends when timer fires AND live state has caught up
-			const timerFired$ = timer(gracePeriodMs).pipe(
-				map(() => true),
-				startWith(false),
-				shareReplay({ bufferSize: 1, refCount: true }),
-			);
-
-			// End hydration when timer has fired AND convergence is met
-			subscriptions.add(
-				combineLatest([liveWithInitial$, timerFired$])
-					.pipe(
-						filter(([, timerFired]) => timerFired),
-						filter(([liveItems]) => isConverged(liveItems, cachedItems)),
-						take(1),
-					)
-					.subscribe(() => {
-						isHydrating$.next(false);
-					}),
-			);
-
-			// Max timeout (6x grace period) to prevent infinite hydration
-			// e.g., if auto-reconnect fails, we still end hydration
-			subscriptions.add(
-				timer(gracePeriodMs * 6).subscribe(() => {
-					if (isHydrating$.value) {
-						isHydrating$.next(false);
-					}
-				}),
-			);
-		} else {
-			// Without convergence check: end hydration on timer only
-			subscriptions.add(
-				timer(gracePeriodMs).subscribe(() => {
-					isHydrating$.next(false);
-				}),
-			);
-		}
+		const graceElapsed$ = timer(gracePeriodMs).pipe(
+			map(() => true),
+			startWith(false),
+		);
+		const ended$: Observable<unknown> = settled$
+			? combineLatest([graceElapsed$, settled$]).pipe(
+					filter(([graceElapsed, settled]) => graceElapsed && settled),
+					take(1),
+				)
+			: timer(gracePeriodMs);
+		subscriptions.add(ended$.subscribe(endHydration));
+		subscriptions.add(timer(timeoutMs).subscribe(endHydration));
 
 		subscriptions.add(
-			combineLatest([liveWithInitial$, isHydrating$])
+			combineLatest([liveItems$.pipe(startWith([] as L[])), isHydrating$])
 				.pipe(
-					map(([liveItems, isHydrating]) => {
-						if (!isHydrating) {
-							// Hydration complete - return only live items
-							return { items: liveItems, isHydrating: false };
-						}
-
-						return {
-							items: mergeFn(liveItems, cachedItems),
-							isHydrating: true,
-						};
-					}),
+					map(([liveItems, isHydrating]) =>
+						isHydrating
+							? { items: mergeFn(liveItems, cachedItems), isHydrating }
+							: { items: liveItems, isHydrating },
+					),
 				)
 				.subscribe(subscriber),
 		);
@@ -134,9 +75,10 @@ const createBufferCore = <L, C>(
  *
  * @param cachedItems - Initial cached items from storage
  * @param liveItems$ - Observable of live items as they become available
- * @param gracePeriodMs - Time in ms to wait before syncing to live state
+ * @param gracePeriodMs - Minimum time in ms the cached items are shown
+ * @param timeoutMs - Upper bound in ms on hydration
  * @param getKey - Function to extract a unique key from an item
- * @param isConverged - Optional function to check if live items have caught up to cached items
+ * @param settled$ - Whether the live state has caught up with the cache
  * @param mergeItem - Optional function to merge a live item with its cached counterpart
  * @param transformCachedOnly - Optional function to transform cached items not yet in the live stream
  */
@@ -144,8 +86,9 @@ export const createHydrationBuffer = <L, C>(
 	cachedItems: C[],
 	liveItems$: Observable<L[]>,
 	gracePeriodMs: number,
+	timeoutMs: number,
 	getKey: (item: L | C) => string,
-	isConverged?: (liveItems: L[], cachedItems: C[]) => boolean,
+	settled$?: Observable<boolean>,
 	mergeItem?: (liveItem: L, cachedItem: C) => L | C,
 	transformCachedOnly?: (cachedItem: C) => C,
 ): Observable<HydrationBufferResult<L | C>> => {
@@ -153,6 +96,7 @@ export const createHydrationBuffer = <L, C>(
 		cachedItems,
 		liveItems$,
 		gracePeriodMs,
+		timeoutMs,
 		(liveItems, cached) => {
 			const cachedByKey = new Map(cached.map((item) => [getKey(item), item]));
 			const liveKeys = new Set(liveItems.map(getKey));
@@ -179,7 +123,7 @@ export const createHydrationBuffer = <L, C>(
 
 			return mergedItems;
 		},
-		isConverged,
+		settled$,
 	);
 };
 
@@ -192,21 +136,24 @@ export const createHydrationBuffer = <L, C>(
  *
  * @param cachedAccounts - Initial cached accounts from storage
  * @param liveAccounts$ - Observable of live accounts as they become available
- * @param gracePeriodMs - Time in ms to wait before syncing to live state
+ * @param gracePeriodMs - Minimum time in ms the cached accounts are shown
+ * @param timeoutMs - Upper bound in ms on hydration
  * @param getWalletId - Function to extract the wallet ID from an account
- * @param isConverged - Optional function to check if live accounts have caught up to cached accounts
+ * @param settled$ - Whether the live state has caught up with the cache
  */
 export const createAccountHydrationBuffer = <T>(
 	cachedAccounts: T[],
 	liveAccounts$: Observable<T[]>,
 	gracePeriodMs: number,
+	timeoutMs: number,
 	getWalletId: (account: T) => string,
-	isConverged?: (liveAccounts: T[], cachedAccounts: T[]) => boolean,
+	settled$?: Observable<boolean>,
 ): Observable<HydrationBufferResult<T>> => {
 	return createBufferCore(
 		cachedAccounts,
 		liveAccounts$,
 		gracePeriodMs,
+		timeoutMs,
 		(liveAccounts, cached) => {
 			const walletsWithLiveAccounts = new Set(liveAccounts.map(getWalletId));
 			const mergedAccounts: T[] = [...liveAccounts];
@@ -219,6 +166,6 @@ export const createAccountHydrationBuffer = <T>(
 
 			return mergedAccounts;
 		},
-		isConverged,
+		settled$,
 	);
 };
