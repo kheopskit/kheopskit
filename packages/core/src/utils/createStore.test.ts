@@ -145,17 +145,13 @@ describe("createStore", () => {
 
 	describe("with cookieStorage and initialCookies (SSR scenario)", () => {
 		it("reads initial value from ssrCookies", () => {
-			const ssrData = { autoReconnect: ["polkadot:polkadot-js"] };
+			const ssrData = { items: ["polkadot:polkadot-js"] };
 			const ssrCookies = `${TEST_KEY}=${encodeURIComponent(JSON.stringify(ssrData))}`;
 			const storage = cookieStorage(ssrCookies);
 
 			// On client (jsdom), cookieStorage reads from document.cookie
 			// But we can test the flow by verifying createStore works with the storage
-			const store = createStore(
-				TEST_KEY,
-				{ autoReconnect: [] as string[] },
-				storage,
-			);
+			const store = createStore(TEST_KEY, { items: [] as string[] }, storage);
 			// In jsdom, it will read from document.cookie (which is empty), not ssrCookies
 			// This is expected because document is available
 			expect(store.get()).toBeDefined();

@@ -110,7 +110,7 @@ export const createInjectedWallets$ = <
 			next.set(walletId, handle);
 			handles$.next(next);
 
-			store.addEnabledWalletId(walletId);
+			store.rememberWallet(walletId);
 		};
 
 		const disconnect = async (source: TSource, walletId: WalletId) => {
@@ -127,7 +127,7 @@ export const createInjectedWallets$ = <
 			next.delete(walletId);
 			handles$.next(next);
 
-			store.removeEnabledWalletId(walletId);
+			store.forgetWallet(walletId);
 
 			adapter.onDisconnected?.(walletId);
 		};

@@ -5,17 +5,17 @@ export const createStore = <T>(
 	key: string,
 	defaultValue: T,
 	storage: SyncableStorage = safeLocalStorage,
+	normalize: (value: T) => T = (value) => value,
 ) => {
-	const subject = new BehaviorSubject<T>(
-		getStoredData(key, defaultValue, storage),
-	);
+	const read = (str: string | null) => normalize(parseData(str, defaultValue));
+	const subject = new BehaviorSubject<T>(read(storage.getItem(key)));
 
 	// Cross-tab sync via storage.subscribe (uses storage event for localStorage, BroadcastChannel for cookies)
 	// Only subscribe if window is available (client-side) and storage supports it
 	let unsubscribeStorage: (() => void) | undefined;
 	if (typeof window !== "undefined" && storage.subscribe) {
 		unsubscribeStorage = storage.subscribe(key, (newValue) => {
-			subject.next(parseData(newValue, defaultValue));
+			subject.next(read(newValue));
 		});
 	}
 
@@ -47,15 +47,6 @@ const parseData = <T>(str: string | null, defaultValue: T): T => {
 		// invalid data
 	}
 	return defaultValue;
-};
-
-const getStoredData = <T>(
-	key: string,
-	defaultValue: T,
-	storage: SyncableStorage,
-): T => {
-	const str = storage.getItem(key);
-	return parseData(str, defaultValue);
 };
 
 const setStoredData = <T>(key: string, val: T, storage: SyncableStorage) => {

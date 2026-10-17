@@ -52,8 +52,8 @@ const createMockStandardWallet = (name: string, solana = true) => ({
 });
 
 const mockStore = {
-	addEnabledWalletId: vi.fn(),
-	removeEnabledWalletId: vi.fn(),
+	rememberWallet: vi.fn(),
+	forgetWallet: vi.fn(),
 } as unknown as KheopskitStore;
 
 const importWallets = async () => import("./wallets");
@@ -132,7 +132,7 @@ describe("getSolanaWallets$", () => {
 			standardWallet.features["standard:connect"].connect,
 		).toHaveBeenCalled();
 		expect(latest[0]?.isConnected).toBe(true);
-		expect(mockStore.addEnabledWalletId).toHaveBeenCalledWith("solana:Phantom");
+		expect(mockStore.rememberWallet).toHaveBeenCalledWith("solana:Phantom");
 
 		sub.unsubscribe();
 	});

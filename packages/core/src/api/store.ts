@@ -8,7 +8,10 @@ import {
 	WALLET_CONNECT_WALLET_ID,
 	type WalletId,
 } from "../utils/WalletId";
-import { createCompactCookieStorage } from "./compactStore";
+import {
+	createCompactCookieStorage,
+	migratePreV6StoreData,
+} from "./compactStore";
 import { DEFAULT_STORAGE_KEY } from "./config";
 import type {
 	CachedAccount,
@@ -83,22 +86,25 @@ export const createKheopskitStore = (
 		ssrCookies !== undefined
 			? createCompactCookieStorage(ssrCookies)
 			: safeLocalStorage;
-	const store = createStore(storageKey, DEFAULT_SETTINGS, storage);
+	const store = createStore(
+		storageKey,
+		DEFAULT_SETTINGS,
+		storage,
+		migratePreV6StoreData,
+	);
 
-	const addEnabledWalletId = (walletId: WalletId) => {
+	const rememberWallet = (walletId: WalletId) => {
 		parseWalletId(walletId); // validate walletId
 		store.mutate((prev) => ({
 			...prev,
-			autoReconnect: uniq((prev.autoReconnect ?? []).concat(walletId)),
+			remembered: uniq((prev.remembered ?? []).concat(walletId)),
 		}));
 	};
 
-	const removeEnabledWalletId = (walletId: WalletId) => {
+	const forgetWallet = (walletId: WalletId) => {
 		store.mutate((prev) => ({
 			...prev,
-			autoReconnect: uniq(
-				(prev.autoReconnect ?? []).filter((id) => id !== walletId),
-			),
+			remembered: uniq((prev.remembered ?? []).filter((id) => id !== walletId)),
 		}));
 	};
 
@@ -134,8 +140,8 @@ export const createKheopskitStore = (
 
 	return {
 		observable: store.observable,
-		addEnabledWalletId,
-		removeEnabledWalletId,
+		rememberWallet,
+		forgetWallet,
 		getCachedState,
 		setCachedState,
 	};
