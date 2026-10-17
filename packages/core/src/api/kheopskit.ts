@@ -104,8 +104,7 @@ export const getKheopskit$ = <
 
 		const settleIn = (waiter: StateWaiter, state: KheopskitState) => {
 			const wallet = state.wallets.find((w) => w.id === waiter.walletId);
-			if (!wallet) abandon(waiter);
-			else if (wallet.isConnected === waiter.isConnected) {
+			if (!wallet || wallet.isConnected === waiter.isConnected) {
 				waiters.delete(waiter);
 				waiter.resolve();
 			}
