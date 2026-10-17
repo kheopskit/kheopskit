@@ -87,6 +87,28 @@ const collect = (
 	return { ...sources, emissions, sub };
 };
 
+const collectFrames = (
+	wallets$: Observable<(BaseWallet | WalletConnectWallet)[]>,
+) => {
+	const sources = createSources();
+	const frames: { accounts: string[]; answered: WalletId[] }[] = [];
+	const accounts$ = createPlatformAccounts$<BaseWallet, BaseWalletAccount>({
+		wallets$,
+		getInjectedAccounts$: sources.accountsOf,
+		getWalletConnectAccounts$: sources.accountsOf,
+	});
+	const emissions: string[][] = [];
+	const sub = accounts$.subscribe((accounts) =>
+		emissions.push(accounts.map((a) => a.address)),
+	);
+	sub.add(
+		accounts$.frames$.subscribe(({ accounts, answered }) =>
+			frames.push({ accounts: accounts.map((a) => a.address), answered }),
+		),
+	);
+	return { ...sources, emissions, frames, sub };
+};
+
 describe("createPlatformAccounts$", () => {
 	it("emits an empty list at once when no wallet is connected", () => {
 		const { emissions, sub } = collect(of([injected(A, false)]));
@@ -178,6 +200,45 @@ describe("createPlatformAccounts$", () => {
 		emit(WALLET_CONNECT_WALLET_ID, [account(WALLET_CONNECT_WALLET_ID, "wc1")]);
 		emit(B, [account(B, "b1"), account(B, "b2")]);
 		expect(emissions.at(-1)).toEqual(["b1", "b2", "wc1", "a1"]);
+		sub.unsubscribe();
+	});
+
+	it("frames$ lists a connected wallet as answered once its stream has emitted, an empty list included, while the account list stays deduped", () => {
+		const wallets$ = new BehaviorSubject([injected(A, false)]);
+		const { emit, emissions, frames, sub } = collectFrames(wallets$);
+
+		wallets$.next([injected(A)]);
+		expect(frames).toEqual([{ accounts: [], answered: [] }]);
+
+		emit(A, []);
+		expect(frames).toEqual([
+			{ accounts: [], answered: [] },
+			{ accounts: [], answered: [A] },
+		]);
+		expect(emissions).toEqual([[]]);
+
+		emit(A, [account(A, "a1")]);
+		expect(frames.at(-1)).toEqual({ accounts: ["a1"], answered: [A] });
+		expect(emissions).toEqual([[], ["a1"]]);
+		sub.unsubscribe();
+	});
+
+	it("frames$ drops a wallet from answered on disconnect and on reconnect until its new stream answers", () => {
+		const wallets$ = new BehaviorSubject([injected(A), injected(B)]);
+		const { emit, frames, subscribedTimes, sub } = collectFrames(wallets$);
+		emit(A, [account(A, "a1")]);
+		emit(B, []);
+		expect(frames.at(-1)).toEqual({ accounts: ["a1"], answered: [A, B] });
+
+		wallets$.next([injected(A), injected(B, false)]);
+		expect(frames.at(-1)).toEqual({ accounts: ["a1"], answered: [A] });
+
+		wallets$.next([injected(A), injected(B)]);
+		expect(subscribedTimes(B)).toBe(2);
+		expect(frames.at(-1)).toEqual({ accounts: ["a1"], answered: [A] });
+
+		emit(B, [account(B, "b1")]);
+		expect(frames.at(-1)).toEqual({ accounts: ["a1", "b1"], answered: [A, B] });
 		sub.unsubscribe();
 	});
 

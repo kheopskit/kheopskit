@@ -24,7 +24,7 @@ import { pageLoaded$ } from "../utils/pageLoad";
 import { sortAccounts } from "../utils/sortAccounts";
 import { sortWallets } from "../utils/sortWallets";
 import type { WalletId } from "../utils/WalletId";
-import { getAccounts$ } from "./accounts";
+import { type AccountsFrame, getAccounts$ } from "./accounts";
 import { resolveConfig } from "./config";
 import { abortedError, walletPendingError } from "./errors";
 import { getHydratedSnapshot } from "./hydration";
@@ -198,8 +198,9 @@ export const getKheopskit$ = <
 
 		// Get live wallets and accounts
 		const liveWallets$ = getWallets$(kc, store);
-		const liveAccounts$ = getAccounts$(kc, liveWallets$).pipe(
-			map((accounts) => accounts.map(asLive)),
+		const accountFrames$ = getAccounts$(kc, liveWallets$);
+		const liveAccounts$ = accountFrames$.pipe(
+			map(({ accounts }) => accounts.map(asLive)),
 		);
 
 		const isDiscovering$ = pageLoaded$.pipe(
@@ -217,7 +218,7 @@ export const getKheopskit$ = <
 		const reconnecting = cachedWallets.filter((w) => w.status === "connecting");
 		const hydrationSettled$ = combineLatest([
 			liveWallets$,
-			liveAccounts$.pipe(startWith([] as BaseWalletAccount[])),
+			accountFrames$.pipe(startWith(noAnswerYet)),
 			isDiscovering$,
 			store.observable.pipe(
 				map((s) => s.remembered ?? []),
@@ -225,12 +226,13 @@ export const getKheopskit$ = <
 			),
 		]).pipe(
 			map(
-				([wallets, accounts, isDiscovering, remembered]) =>
+				([wallets, { accounts, answered }, isDiscovering, remembered]) =>
 					!isDiscovering &&
 					reconnecting.every((cached) =>
 						reconnectSettled(cached, {
 							wallets,
 							accounts,
+							answered,
 							cachedAccounts,
 							remembered,
 						}),
@@ -422,6 +424,8 @@ const asLive = <T extends object>(item: T): T & { isPlaceholder: false } => {
 	return live;
 };
 
+const noAnswerYet: AccountsFrame = { accounts: [], answered: [] };
+
 /**
  * A remembered wallet that reads disconnected without an error is still
  * waiting for its reconnect: getWallets$ emits the wallet list before its
@@ -429,9 +433,8 @@ const asLive = <T extends object>(item: T): T & { isPlaceholder: false } => {
  */
 const reconnectSettled = (
 	cached: BaseWallet | WalletConnectWallet,
-	live: {
+	live: AccountsFrame & {
 		wallets: (BaseWallet | WalletConnectWallet)[];
-		accounts: BaseWalletAccount[];
 		cachedAccounts: BaseWalletAccount[];
 		remembered: WalletId[];
 	},
@@ -445,6 +448,7 @@ const reconnectSettled = (
 	if (status === "disconnected")
 		return wallet.error !== undefined || !live.remembered.includes(cached.id);
 	return (
+		live.answered.includes(cached.id) ||
 		!live.cachedAccounts.some((a) => a.walletId === cached.id) ||
 		live.accounts.some((a) => a.walletId === cached.id)
 	);
