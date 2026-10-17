@@ -36,8 +36,20 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 			plugin.getWallets$(ctx),
 		);
 
+		const reconnectPolicy = createReconnectPolicy();
+
+		const settleOnDisconnect = <W extends BaseWallet>(wallet: W): W => ({
+			...wallet,
+			disconnect: () => {
+				reconnectPolicy.settle(wallet.id);
+				return wallet.disconnect();
+			},
+		});
+
 		const platformWallets$ = observables.length
-			? combineLatest(observables).pipe(map((wallets) => wallets.flat()))
+			? combineLatest(observables).pipe(
+					map((wallets) => wallets.flat().map(settleOnDisconnect)),
+				)
 			: of<BaseWallet[]>([]);
 
 		// The single, platform-less WalletConnect connector is appended here (not
@@ -55,8 +67,6 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 			// Note: No startWith([]) here - the hydration buffer handles initial state
 		);
 
-		const reconnectPolicy = createReconnectPolicy();
-
 		const reconnect = async (wallet: BaseWallet) => {
 			try {
 				await reconnectPolicy.attempt(wallet.id, () => wallet.connect());
@@ -73,6 +83,7 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 		};
 
 		const subWallets = wallets$.subscribe(subscriber);
+		if (subscriber.closed) return subWallets;
 
 		const subAutoReconnect = combineLatest([wallets$, rememberedWalletIds$])
 			.pipe(
