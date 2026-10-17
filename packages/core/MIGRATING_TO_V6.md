@@ -82,7 +82,8 @@ try {
 
 - **One platform attempt per wallet.** Concurrent `connect()` calls share it
   and the platform is asked once. Each call still gets its own promise: an
-  abort through a caller's `signal` rejects that caller only. The attempt is
+  abort through a caller's `signal` before the platform answers rejects that
+  caller only, and an abort after the grant changes nothing. The attempt is
   abandoned once every caller that passed a signal has aborted and no caller
   without one joined, on `disconnect()`, or when the last `kheopskit$`
   subscriber unsubscribes; those reject every remaining caller `ABORTED`.

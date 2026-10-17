@@ -9,7 +9,7 @@
 - Removed error codes `WALLET_ALREADY_CONNECTED` and `WALLET_NOT_CONNECTED`: `connect()` on a connected wallet and `disconnect()` on a disconnected wallet resolve at once.
 - New error codes `ABORTED`, `USER_REJECTED` and `CONNECT_FAILED`. Platform rejections are wrapped in a `KheopskitError` carrying `cause` and `walletId`.
 - Concurrent `connect()` calls on one wallet share a single platform attempt; the platform is asked once. Each call gets its own promise.
-- `connect(options?: { signal?: AbortSignal })`: an abort rejects that caller with `ABORTED` and leaves the other callers waiting. Once no caller waits, a late handle is released and the wallet is neither connected nor remembered. No default timeout.
+- `connect(options?: { signal?: AbortSignal })`: an abort before the platform answers rejects that caller with `ABORTED` and leaves the other callers waiting. Once no caller waits, a late handle is released and the wallet is neither connected nor remembered. No default timeout.
 - `disconnect()` during a pending `connect()` aborts it and never waits for the extension prompt. A `connect()` already granted but still waiting for the state is rejected `ABORTED` by a `disconnect()`; a waiting `disconnect()` is resolved by a `connect()`.
 - `connect()` and `disconnect()` resolve only after `kheopskit$` has emitted the wallet's new `isConnected` value. After the last subscriber has unsubscribed, `connect()` on a wallet from that subscription rejects `ABORTED` without asking the platform.
 - Wallet objects keep their identity across emissions that only change accounts.
