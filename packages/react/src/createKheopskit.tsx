@@ -87,6 +87,7 @@ export const createKheopskit = <
 		children,
 		ssrCookies,
 	}) => {
+		if (typeof window !== "undefined") claimStore(ssrCookies);
 		const resolveClientSource = useCallback(
 			() => ({
 				store: claimStore(ssrCookies),
