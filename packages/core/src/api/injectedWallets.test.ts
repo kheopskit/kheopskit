@@ -71,8 +71,8 @@ const setup = (
 	overrides: Partial<
 		InjectedWalletsAdapter<FakeSource, BaseWallet, string>
 	> = {},
+	store = createKheopskitStore(),
 ) => {
-	const store = createKheopskitStore();
 	const sources$ = new BehaviorSubject<FakeSource[]>([{ name: "fake" }]);
 	const adapter = makeAdapter(sources$, overrides);
 	const wallets$ = createInjectedWallets$(store, adapter);
@@ -373,6 +373,49 @@ describe("createInjectedWallets$", () => {
 		expect(rememberedWalletIds()).toEqual([]);
 	});
 
+	it("a connect queued behind a pending disconnect rejects ABORTED when its signal aborts, even if the platform never answers", async () => {
+		const platformDisconnect = createDeferred<void>();
+		const connect = vi.fn().mockResolvedValue("handle");
+		const { sub, wallet } = setup({
+			connect,
+			disconnect: () => platformDisconnect.promise,
+		});
+
+		await wallet().connect();
+		const disconnecting = wallet().disconnect();
+		const controller = new AbortController();
+		const queued = wallet().connect({ signal: controller.signal });
+		expect(await settlementOf(queued)).toBe("pending");
+
+		controller.abort();
+		expect(await settlementOf(queued)).toBe("rejected");
+		await expect(queued).rejects.toMatchObject({ code: "ABORTED", walletId });
+		expect(await settlementOf(disconnecting)).toBe("pending");
+		expect(connect).toHaveBeenCalledTimes(1);
+
+		sub.unsubscribe();
+	}, 1000);
+
+	it("a connect queued behind a pending disconnect rejects ABORTED on teardown, even if the platform never answers", async () => {
+		const platformDisconnect = createDeferred<void>();
+		const connect = vi.fn().mockResolvedValue("handle");
+		const { sub, wallet } = setup({
+			connect,
+			disconnect: () => platformDisconnect.promise,
+		});
+
+		await wallet().connect();
+		const disconnecting = wallet().disconnect();
+		const queued = wallet().connect();
+		expect(await settlementOf(queued)).toBe("pending");
+
+		sub.unsubscribe();
+		expect(await settlementOf(queued)).toBe("rejected");
+		await expect(queued).rejects.toMatchObject({ code: "ABORTED", walletId });
+		expect(await settlementOf(disconnecting)).toBe("pending");
+		expect(connect).toHaveBeenCalledTimes(1);
+	}, 1000);
+
 	it("a platform disconnect that resolves after teardown forgets the wallet without touching the stream's state", async () => {
 		const platformDisconnect = createDeferred<void>();
 		const onDisconnected = vi.fn();
@@ -385,6 +428,7 @@ describe("createInjectedWallets$", () => {
 		expect(rememberedWalletIds()).toEqual([walletId]);
 		const disconnecting = wallet().disconnect();
 		sub.unsubscribe();
+		expect(rememberedWalletIds()).toEqual([]);
 		const emitted = emissions.length;
 		platformDisconnect.resolve();
 
@@ -393,6 +437,86 @@ describe("createInjectedWallets$", () => {
 		expect(emissions.length).toBe(emitted);
 		expect(onDisconnected).not.toHaveBeenCalled();
 	});
+
+	it("a platform disconnect released after a new subscription reconnected the wallet leaves it remembered", async () => {
+		const platformDisconnect = createDeferred<void>();
+		const { store, sub, wallet } = setup({
+			disconnect: () => platformDisconnect.promise,
+		});
+
+		await wallet().connect();
+		const disconnecting = wallet().disconnect();
+		sub.unsubscribe();
+
+		const next = setup({}, store);
+		await next.wallet().connect();
+		expect(rememberedWalletIds()).toEqual([walletId]);
+
+		platformDisconnect.resolve();
+		expect(await settlementOf(disconnecting)).toBe("resolved");
+		expect(rememberedWalletIds()).toEqual([walletId]);
+		expect(next.wallet().isConnected).toBe(true);
+
+		next.sub.unsubscribe();
+	});
+
+	it("a storage write that fails on the forget leaves the disconnect complete and the next connect asks the platform again", async () => {
+		let writesFail = false;
+		const store = createKheopskitStore({
+			storage: {
+				getItem: () => null,
+				setItem: () => {
+					if (writesFail) throw new DOMException("full", "QuotaExceededError");
+				},
+				removeItem: () => {},
+			},
+		});
+		const connect = vi.fn().mockResolvedValue("handle");
+		const { sub, wallet } = setup(
+			{ connect, disconnect: async () => {} },
+			store,
+		);
+
+		await wallet().connect();
+		writesFail = true;
+		const disconnecting = wallet().disconnect();
+		const then = disconnecting.then.bind(disconnecting);
+		const waits = vi
+			.spyOn(disconnecting, "then")
+			.mockImplementation((...args) => {
+				if (waits.mock.calls.length > 50)
+					throw new Error("connect re-entered the settled disconnect 50 times");
+				return then(...args);
+			});
+		expect(await settlementOf(disconnecting)).toBe("resolved");
+		expect(wallet().isConnected).toBe(false);
+
+		const reconnect = wallet().connect();
+		expect(await settlementOf(reconnect)).toBe("resolved");
+		expect(wallet().isConnected).toBe(true);
+		expect(connect).toHaveBeenCalledTimes(2);
+
+		sub.unsubscribe();
+	}, 1000);
+
+	it("connect resolves and the wallet is connected when every storage write throws", async () => {
+		const store = createKheopskitStore({
+			storage: {
+				getItem: () => null,
+				setItem: () => {
+					throw new DOMException("full", "QuotaExceededError");
+				},
+				removeItem: () => {},
+			},
+		});
+		const { sub, wallet } = setup({}, store);
+
+		const connecting = wallet().connect();
+		expect(await settlementOf(connecting)).toBe("resolved");
+		expect(wallet().isConnected).toBe(true);
+
+		sub.unsubscribe();
+	}, 1000);
 
 	it("runs platform disconnect before clearing state and onDisconnected after", async () => {
 		const calls: string[] = [];
@@ -421,6 +545,26 @@ describe("createInjectedWallets$", () => {
 		await expect(wallet().disconnect()).rejects.toBe(failure);
 		expect(wallet().isConnected).toBe(true);
 		expect(rememberedWalletIds()).toContain(walletId);
+
+		sub.unsubscribe();
+	});
+
+	it("disconnect forgets the wallet before asking the platform and remembers it again when the platform refuses", async () => {
+		const platformDisconnect = createDeferred<void>();
+		const { sub, wallet } = setup({
+			disconnect: () => platformDisconnect.promise,
+		});
+
+		await wallet().connect();
+		const disconnecting = wallet().disconnect();
+		expect(rememberedWalletIds()).toEqual([]);
+
+		const failure = new Error("extension busy");
+		platformDisconnect.reject(failure);
+		await expect(disconnecting).rejects.toBe(failure);
+		expect(rememberedWalletIds()).toEqual([walletId]);
+		expect(wallet().isConnected).toBe(true);
+		await expect(wallet().connect()).resolves.toBeUndefined();
 
 		sub.unsubscribe();
 	});

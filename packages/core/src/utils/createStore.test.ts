@@ -153,6 +153,27 @@ describe("createStore", () => {
 		});
 	});
 
+	describe("with a storage whose setItem throws", () => {
+		it("keeps the in-memory value and lets the caller continue", () => {
+			const storage: SyncableStorage = {
+				getItem: () => null,
+				setItem: () => {
+					throw new DOMException("full", "QuotaExceededError");
+				},
+				removeItem: () => {},
+			};
+			const store = createStore(TEST_KEY, { count: 0 }, storage);
+			const values: { count: number }[] = [];
+			const sub = store.observable.subscribe((v) => values.push(v));
+
+			store.mutate((prev) => ({ count: prev.count + 1 }));
+
+			expect(store.get()).toEqual({ count: 1 });
+			expect(values).toEqual([{ count: 0 }, { count: 1 }]);
+			sub.unsubscribe();
+		});
+	});
+
 	describe("with cookieStorage", () => {
 		it("initializes with defaultValue when no cookie exists", () => {
 			const store = createStore(TEST_KEY, { data: "default" }, cookieStorage());
