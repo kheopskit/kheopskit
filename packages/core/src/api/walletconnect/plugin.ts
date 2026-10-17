@@ -251,8 +251,7 @@ const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
  * be instantiated twice). The **first** call with a `walletConnect` config wins;
  * later calls with a *different* `walletConnect` config reuse that first
  * instance. Call {@link resetAppKitCache} before re-initialising if the
- * WalletConnect config must change. AppKit's provider subscription lives only
- * while the connector is observed.
+ * WalletConnect config must change.
  *
  * One WalletConnect session is shared across every namespace, and a namespace
  * can only be established during the initial pairing — it can't be added to a
@@ -287,7 +286,7 @@ const getWalletConnectWallet$ = (
 	if (!cachedAppKit) {
 		// Dynamic import avoids loading @reown/appkit at module-eval time (SSR /
 		// edge runtimes like Cloudflare Workers).
-		const connector$ = from(loadAppKit()).pipe(
+		const connectorOnce$ = from(loadAppKit()).pipe(
 			map((createAppKit) =>
 				// @reown/appkit missing (optional peer dep) — degrade gracefully.
 				createAppKit
@@ -318,11 +317,9 @@ const getWalletConnectWallet$ = (
 						)
 					: null,
 			),
-			// refCount:false runs createAppKit at most once per process: a second
-			// instance throws on the duplicate Lit web components and modal.
 			shareReplay({ refCount: false, bufferSize: 1 }),
 		);
-		cachedAppKit = connector$.pipe(
+		cachedAppKit = connectorOnce$.pipe(
 			switchMap((wallet$) => wallet$ ?? of(null)),
 			shareReplay({ refCount: true, bufferSize: 1 }),
 		);
