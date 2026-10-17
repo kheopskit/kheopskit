@@ -175,7 +175,13 @@ const solanaConfig = {
 
 const registeredStandardWallets: Array<() => void> = [];
 
-const registerFakeStandardWallet = (name = "Fake Standard") => {
+const registerFakeStandardWallet = ({
+	name = "Fake Standard",
+	disconnect,
+}: {
+	name?: string;
+	disconnect?: () => Promise<void>;
+} = {}) => {
 	const pendingConnects: Array<() => void> = [];
 	const wallet = {
 		version: "1.0.0",
@@ -191,6 +197,9 @@ const registerFakeStandardWallet = (name = "Fake Standard") => {
 						pendingConnects.push(() => resolve({ accounts: [] }));
 					}),
 			},
+			...(disconnect && {
+				"standard:disconnect": { version: "1.0.0", disconnect },
+			}),
 		},
 	};
 	const unregister = getWallets().register(
@@ -892,6 +901,61 @@ describe("getKheopskit$ connect semantics", () => {
 		sources$.next([{ name: "engine" }]);
 		await settleMicrotasks();
 		expect(walletIn(emissions.at(-1), engineWalletId).isConnected).toBe(true);
+
+		sub.unsubscribe();
+	});
+
+	it("a disconnect whose platform call fails while a granted connect waits for the state leaves that connect to resolve, with the wallet remembered and connected", async () => {
+		const standard = registerFakeStandardWallet({
+			disconnect: () => Promise.reject(new Error("refused")),
+		});
+		const store = createKheopskitStore();
+		store.setCachedState(
+			[
+				{
+					id: standard.walletId,
+					platform: "solana",
+					type: "injected",
+					name: "Fake Standard",
+					isConnected: false,
+				},
+			],
+			[],
+		);
+		const emissions: KheopskitState[] = [];
+		const sub = getKheopskit$(
+			{ ...solanaConfig, hydrationGracePeriod: 500 },
+			{ store },
+		).subscribe((state) => emissions.push(state));
+		await settleMicrotasks();
+		expect(emissions.at(-1)?.isHydrating).toBe(true);
+
+		const connecting = walletIn(emissions.at(-1), standard.walletId).connect();
+		await settleMicrotasks();
+		standard.grantConnect();
+		expect(await settlementOf(connecting)).toBe("resolved");
+		expect(walletIn(emissions.at(-1), standard.walletId).isConnected).toBe(
+			true,
+		);
+		expect(emissions.at(-1)?.isHydrating).toBe(true);
+
+		const disconnecting = walletIn(
+			emissions.at(-1),
+			standard.walletId,
+		).disconnect();
+		expect(await settlementOf(disconnecting)).toBe("rejected");
+		await expect(disconnecting).rejects.toThrow("refused");
+
+		await vi.advanceTimersByTimeAsync(500);
+		expect({
+			connect: await settlementOf(connecting),
+			remembered: rememberedWalletIds(),
+			isConnected: walletIn(emissions.at(-1), standard.walletId).isConnected,
+		}).toEqual({
+			connect: "resolved",
+			remembered: [standard.walletId],
+			isConnected: true,
+		});
 
 		sub.unsubscribe();
 	});

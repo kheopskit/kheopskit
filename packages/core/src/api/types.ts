@@ -118,8 +118,11 @@ export type BaseWallet = {
 	 *   Ethereum wallet that reconnects while another connected Ethereum
 	 *   wallet's `eth_accounts` request is pending may show the accounts of its
 	 *   previous connection for as long as that request goes unanswered, and
-	 *   `connect()` may resolve on that emission. A `disconnect()` call made
-	 *   while it waits for that state rejects it with `ABORTED`. A `connect()`
+	 *   `connect()` may resolve on that emission. A `disconnect()` that
+	 *   completes while it waits for that state rejects it with `ABORTED`. If
+	 *   the platform's disconnect is still pending or refuses, it resolves once
+	 *   the state shows the wallet connected (today only Solana has a platform
+	 *   disconnect). A `connect()`
 	 *   whose wallet disappears before the platform grants it (an extension
 	 *   removed, a Wallet Standard wallet unregistered) rejects `ABORTED`;
 	 *   granted first, it resolves and the wallet stays remembered. Once the last `kheopskit$`
@@ -134,16 +137,18 @@ export type BaseWallet = {
 	/**
 	 * Disconnects the wallet.
 	 *
-	 * On a disconnected wallet it resolves at once. While a `connect()` is
-	 * pending it aborts that connect (its promise rejects with `ABORTED`) and
-	 * never waits for the extension prompt. It resolves once `kheopskit$` has
+	 * On a disconnected wallet it resolves at once. While a `connect()` waits
+	 * for the platform to grant it, it aborts that connect (its promise rejects
+	 * with `ABORTED`) and never waits for the extension prompt. Otherwise it
+	 * first waits for the platform's disconnect and rejects if that fails, so
+	 * callers can surface or retry. It then resolves once `kheopskit$` has
 	 * emitted a state in which this wallet has `isConnected: false`, or once a
-	 * later `connect()` or the end of the subscription makes that emission
-	 * impossible, and rejects if the platform disconnect fails so callers can
-	 * surface or retry. Once the last `kheopskit$` subscriber has unsubscribed,
-	 * a call on a wallet object from that subscription rejects with `ABORTED`
-	 * without asking the platform and without changing the remembered list. A
-	 * `disconnect()` started before that point still settles: the wallet was
+	 * later `connect()`, the wallet leaving the list or the end of the
+	 * subscription makes that emission impossible. Once the last `kheopskit$`
+	 * subscriber has unsubscribed, a call on a wallet object from that
+	 * subscription rejects with `ABORTED` without asking the platform and
+	 * without changing the remembered list. A `disconnect()` started before
+	 * that point settles once the platform has answered: the wallet was
 	 * forgotten when it was called, and nothing else is written once the
 	 * subscription has ended.
 	 */
