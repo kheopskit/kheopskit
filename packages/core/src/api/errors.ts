@@ -8,7 +8,8 @@ export type KheopskitErrorCode =
 	/**
 	 * This `connect()` or `disconnect()` call was abandoned. For `connect()`:
 	 * its `signal` fired before the platform answered, `disconnect()` was
-	 * called while it pended, or the last `kheopskit$` subscriber unsubscribed.
+	 * called while it pended, its wallet disappeared, or the last `kheopskit$`
+	 * subscriber unsubscribed.
 	 * For either call: the wallet object came from a subscription that had
 	 * already ended, in which case the call rejects without asking the platform
 	 * and without changing the remembered list.
