@@ -326,20 +326,26 @@ export type KheopskitConfig<
 	P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],
 > = {
 	/**
-	 * Which remembered wallets kheopskit reconnects after a reload.
+	 * Which remembered injected wallets kheopskit reconnects after a reload.
 	 *
 	 * A wallet is remembered on every successful `connect()` and forgotten on
 	 * `disconnect()`, whatever this option says; the list is the store's
-	 * `remembered`. `true` reconnects every remembered wallet, `false` none,
-	 * and a function is asked for each cached connected wallet on the first
-	 * frame, then for each remembered wallet with its live object before the
-	 * attempt. The function must be synchronous and pure. It runs on the server
-	 * and on the client for the same input and both must agree, or the markup
-	 * diverges. It receives the {@link BaseWallet} fields only, so key on `id`.
+	 * `remembered`. `true` reconnects every remembered injected wallet, `false`
+	 * none, and a function is asked for each cached connected injected wallet
+	 * on the first frame, then for each remembered one with its live object
+	 * before the attempt. The function must be synchronous and pure. It runs on
+	 * the server and on the client for the same input and both must agree, or
+	 * the markup diverges. It receives the {@link BaseWallet} fields only, so
+	 * key on `id`.
+	 *
+	 * The WalletConnect row is not governed by this option: AppKit restores its
+	 * own session on load, and the row hydrates `connecting` while it does.
 	 *
 	 * A reconnect never prompts while the site stays authorised in the
 	 * extension. When the authorisation was revoked the extension prompts once;
-	 * a refusal forgets the wallet, so the next load stays silent.
+	 * a refusal forgets the wallet, so the next load stays silent. A manual
+	 * `connect()` or `disconnect()` on a remembered wallet ends its automatic
+	 * reconnect for the session, so a disconnect the user makes is never undone.
 	 *
 	 * A wallet this accepts shows `status: "connecting"` from the first frame
 	 * until its attempt settles. A wallet this rejects shows `disconnected`

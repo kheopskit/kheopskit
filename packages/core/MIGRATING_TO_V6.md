@@ -245,8 +245,9 @@ Test code that builds wallet objects by hand needs `status`.
 autoReconnect: boolean | ((wallet: BaseWallet) => boolean)
 ```
 
-The function is called per remembered wallet, with its cached placeholder on
-the first frame and with its live object before each attempt. It must be
+The option governs injected wallets. The function is called per remembered
+injected wallet, with its cached placeholder on the first frame and with its
+live object before each attempt. It must be
 synchronous and pure: the server and the client evaluate it for the same input
 and both must agree, or the markup diverges. It receives the `BaseWallet`
 fields only, so key on `wallet.id`.
@@ -260,7 +261,9 @@ A reconnect never prompts while the site stays authorised in the extension.
 When the authorisation was revoked the extension prompts once; a refusal
 forgets the wallet (it leaves the remembered list), so the next load stays
 silent. Any other failure sets `wallet.error`, keeps the wallet remembered and
-is retried up to three times when discovery changes. Nothing is written to
+is retried up to three times when discovery changes. A manual `connect()` or
+`disconnect()` on a remembered wallet ends its automatic reconnect for the
+session, so a disconnect the user makes is never undone. Nothing is written to
 `console.error` any more; `debug: true` logs the failure with `console.debug`.
 
 ### First frame after a reload
@@ -268,8 +271,10 @@ is retried up to three times when discovery changes. Nothing is written to
 A cached connected wallet hydrates as `status: "connecting"`, `isConnected:
 false`, with its cached accounts as placeholders, and stays so until its
 reconnect settles. A wallet the predicate rejects hydrates as `disconnected`
-without its cached accounts. With `autoReconnect: false` every cached wallet
-hydrates as `disconnected`. Nothing flashes from connected to disconnected.
+without its cached accounts. With `autoReconnect: false` every cached injected
+wallet hydrates as `disconnected`. The WalletConnect row follows AppKit's own
+session restore, whatever `autoReconnect` says, and hydrates `connecting` while
+AppKit restores. Nothing flashes from connected to disconnected.
 
 ### `getHydratedSnapshot` signature
 
