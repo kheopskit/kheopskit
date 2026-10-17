@@ -71,6 +71,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "saturday"
+    cooldown:
+      default-days: 4
     commit-message:
       prefix: "⬆️ "
     groups:

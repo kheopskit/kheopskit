@@ -1,0 +1,6 @@
+rules:
+  dependabot-cooldown:
+    config:
+      # The npm cooldown is pinned to pnpm's `minimumReleaseAge` (see
+      # dependabot.yml), not to zizmor's 7-day default.
+      days: 4
