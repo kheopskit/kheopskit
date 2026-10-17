@@ -11,6 +11,9 @@ Full docs and the interactive playground: https://github.com/kheopskit/kheopskit
 > (and WalletConnect) optional peer dependencies. See
 > [MIGRATING_TO_V4.md](./MIGRATING_TO_V4.md).
 
+> **Upgrading from v5?** v6 changes the `connect()`/`disconnect()` contract and
+> the error codes. See [MIGRATING_TO_V6.md](./MIGRATING_TO_V6.md).
+
 ## Install
 
 `rxjs` is always required; every platform SDK (and WalletConnect) is an optional
@@ -62,6 +65,16 @@ carries the SDK-free `KheopskitConfig`, `KheopskitState`, `BaseWallet` and
 > While `state.isHydrating` is `true`, wallets/accounts are cached placeholders
 > carrying only the base fields — SDK fields (`signer`, `client`,
 > provider/extension handles) are absent until hydration completes.
+
+`wallet.connect()` and `wallet.disconnect()` are safe to call straight from UI
+code. Concurrent `connect()` calls share one pending promise, a repeat call on
+a wallet that is already connected (or disconnected) resolves at once, and
+`connect({ signal })` rejects with a `KheopskitError` of code `ABORTED` when
+the signal fires. A refused prompt rejects with `USER_REJECTED` and any other
+failure with `CONNECT_FAILED`; both carry the platform error as `cause`. Each
+promise resolves only after `kheopskit$` has emitted the wallet's new
+`isConnected` value, and there is no default timeout: pass
+`AbortSignal.timeout(ms)` to cap the wait.
 
 ## License
 
