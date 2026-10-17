@@ -123,9 +123,11 @@ It resolves the hex signature. A string is sent as text and a `Uint8Array` as
 WalletConnect accounts through `polkadot_signMessage`.
 
 `options.type` is sent as given and defaults to `"bytes"`, the value
-`txCreator.signBytes` sends. Pass it explicitly. Talisman, polkadot.js,
-SubWallet and Nova ignore it and decode `data` by shape. Enkrypt reads it as the
-encoding of `data`: `"payload"` means UTF-8 text, `"bytes"` means hex.
+`txCreator.signBytes` sends. The default may change in a later release; pass
+`type` explicitly to be unaffected. From their sources: Talisman, polkadot.js,
+SubWallet and Nova ignore it and decode `data` by shape; Enkrypt reads it as
+the encoding of `data`, `"payload"` for UTF-8 text and `"bytes"` for hex. Only
+Talisman was driven live.
 
 Talisman 3.11.0 opens its Sign In screen when the text parses as a SIWS
 message and its generic Sign Request screen otherwise, hex included. The
@@ -134,7 +136,7 @@ both values show the same screen. The SIWS `Version` line must read `1.0.0`;
 Talisman's parser rejects `1` and falls back to the generic screen.
 
 ```ts
-const signature = await account.signRaw(siwsMessage, { type: "payload" });
+const signature = await account.signRaw(siwsMessage, { type });
 ```
 
 `txCreator.signBytes` is unchanged.
@@ -171,7 +173,7 @@ and the fourth factory argument (the signature type) is ignored by
 ### What to delete in your app
 
 - A second `enable()` call made to reach `signer.signRaw` for a Sign-In With
-  Substrate message. Call `account.signRaw(message)`.
+  Substrate message. Call `account.signRaw(message, { type })`.
 - A hand-built `ecdsaTxCreator` for ethereum-format accounts, and a
   `signatureTypeOf` helper that maps `ethereum` to `ecdsa`.
 - A memoised second `enable()` and a `pjsSignerOf` helper that rebuilds a pjs

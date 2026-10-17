@@ -75,7 +75,8 @@ with the wallet's raw signing call and resolves the hex signature. A string is
 sent as text and a `Uint8Array` as `0x` hex, so pass a string for a Sign-In With
 Substrate message and a `Uint8Array` for bytes. `options.type` is sent to the
 extension as given. It defaults to `"bytes"`, the value `txCreator.signBytes`
-sends. Talisman opens its Sign In screen for a string that parses as a SIWS
+sends; the default may change in a later release, so pass `type` explicitly to
+be unaffected. Talisman opens its Sign In screen for a string that parses as a SIWS
 message (`Version: 1.0.0`) whatever the `type`, and a generic Sign Request
 screen for hex. On a connected Polkadot wallet, `wallet.extension` is the raw object
 `enable()` returned, typed as `PolkadotInjected`. Use it for extension calls

@@ -110,19 +110,21 @@ export type PolkadotAccount = Omit<InjectedPolkadotAccount, "type"> & {
 	 * the signature as hex.
 	 *
 	 * A string is sent as text and a `Uint8Array` as `0x` hex. Talisman,
-	 * polkadot.js, SubWallet and Nova decode a `0x`-shaped string as bytes, so
-	 * pass a `Uint8Array` when you mean bytes. Pass a string for a Sign-In With
+	 * polkadot.js, SubWallet and Nova decode a `0x`-shaped string as bytes
+	 * (Talisman observed live, the others read from their sources), so pass a
+	 * `Uint8Array` when you mean bytes. Pass a string for a Sign-In With
 	 * Substrate message. Talisman 3.11.0 opens its Sign In screen when the text
 	 * parses as SIWS (the `Version` line must read `1.0.0`) and its generic Sign
 	 * Request screen for anything else, hex included; `type` plays no part in
 	 * that choice (observed live with both values).
 	 *
 	 * `options.type` is sent as given and defaults to `"bytes"`, the value
-	 * `txCreator.signBytes` sends. Pass it explicitly. Talisman, polkadot.js,
-	 * SubWallet and Nova ignore it. Enkrypt reads it as the encoding of `data`:
-	 * `"payload"` means UTF-8 text and `"bytes"` means hex, so a text message
-	 * with the default `type` does not verify there. WalletConnect has no such
-	 * field, so it is ignored there.
+	 * `txCreator.signBytes` sends. The default may change in a later release;
+	 * pass `type` explicitly to be unaffected. From their sources: Talisman,
+	 * polkadot.js, SubWallet and Nova ignore it; Enkrypt reads it as the
+	 * encoding of `data`, `"payload"` for UTF-8 text and `"bytes"` for hex, so a
+	 * text message with the default `type` does not verify there. WalletConnect
+	 * has no such field, so it is ignored there.
 	 */
 	signRaw: (
 		data: string | Uint8Array,
