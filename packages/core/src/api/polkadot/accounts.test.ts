@@ -1,39 +1,66 @@
-import { firstValueFrom, of, take, toArray } from "rxjs";
+import * as pjs from "polkadot-api/pjs-signer";
+import { BehaviorSubject, firstValueFrom, of, take, toArray } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../../utils/WalletId";
-import type { PolkadotAccountType, WalletConnectWallet } from "../types";
+import type { WalletConnectWallet } from "../types";
 import { getPolkadotAccounts$ } from "./accounts";
-import type { PolkadotInjectedWallet } from "./types";
+import type {
+	PolkadotInjected,
+	PolkadotInjectedAccount,
+	PolkadotInjectedWallet,
+} from "./types";
 
-type ExtensionAccount = {
-	address: string;
-	name?: string;
-	type: PolkadotAccountType;
-	genesisHash: string | null;
-	txCreator: unknown;
+vi.mock("polkadot-api/pjs-signer", async (importOriginal) => {
+	const real = await importOriginal<typeof import("polkadot-api/pjs-signer")>();
+	return {
+		...real,
+		getTxCreatorFromPjs: vi.fn(real.getTxCreatorFromPjs),
+		getPolkadotSignerFromPjs: undefined,
+	};
+});
+
+const ALICE = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+const BOB = "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty";
+const ETH = "0x8ba1f109551bd432803012645ac136ddd64dba72";
+
+const alice: PolkadotInjectedAccount = {
+	address: ALICE,
+	name: "Alice",
+	type: "sr25519",
+	genesisHash: null,
 };
 
-const createMockExtension = (accounts: ExtensionAccount[]) => {
-	const subscribe = vi.fn((cb: (value: ExtensionAccount[]) => void) => {
-		cb(accounts);
-		return () => {};
-	});
-
-	return {
-		subscribe,
-		getAccounts: vi.fn(() => accounts),
-	} as unknown as PolkadotInjectedWallet["extension"];
+const createMockExtension = (
+	accounts: PolkadotInjectedAccount[],
+	overrides: Partial<PolkadotInjected["accounts"]> = {},
+) => {
+	const unsubscribe = vi.fn();
+	const extension: PolkadotInjected = {
+		accounts: {
+			get: vi.fn(async () => accounts),
+			subscribe: vi.fn((cb: (accounts: PolkadotInjectedAccount[]) => void) => {
+				cb(accounts);
+				return unsubscribe;
+			}),
+			...overrides,
+		},
+		signer: {
+			signRaw: vi.fn(async () => ({ id: 1, signature: "0xabcd" as const })),
+			signPayload: vi.fn(async () => ({ signature: "0x" })),
+		},
+	};
+	return { extension, unsubscribe };
 };
 
 const createMockInjectedWallet = (
-	accounts: ExtensionAccount[],
+	accounts: PolkadotInjectedAccount[],
 	overrides: Partial<PolkadotInjectedWallet> = {},
 ): PolkadotInjectedWallet => ({
 	id: "polkadot:test-wallet" as WalletId,
 	platform: "polkadot",
 	type: "injected",
 	sourceId: "test-wallet",
-	extension: createMockExtension(accounts),
+	extension: createMockExtension(accounts).extension,
 	name: "Test Wallet",
 	icon: "data:image/svg+xml,...",
 	isConnected: true,
@@ -42,23 +69,13 @@ const createMockInjectedWallet = (
 	...overrides,
 });
 
+const nextMacrotask = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 describe("getPolkadotAccounts$", () => {
 	it("keeps only configured account types", async () => {
 		const wallet = createMockInjectedWallet([
-			{
-				address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-				name: "Alice",
-				type: "sr25519",
-				genesisHash: null,
-				txCreator: {} as never,
-			},
-			{
-				address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-				name: "Eth Key",
-				type: "ethereum",
-				genesisHash: null,
-				txCreator: {} as never,
-			},
+			alice,
+			{ address: ETH, name: "Eth Key", type: "ethereum", genesisHash: null },
 		]);
 
 		const accounts = await firstValueFrom(
@@ -73,11 +90,10 @@ describe("getPolkadotAccounts$", () => {
 	it("includes ethereum polkadot accounts when explicitly configured", async () => {
 		const wallet = createMockInjectedWallet([
 			{
-				address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+				address: ETH,
 				name: "Ethereum Key",
 				type: "ethereum",
 				genesisHash: null,
-				txCreator: {} as never,
 			},
 		]);
 
@@ -91,15 +107,7 @@ describe("getPolkadotAccounts$", () => {
 
 	it("returns no accounts and warns when allowlist is empty", async () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-		const wallet = createMockInjectedWallet([
-			{
-				address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-				name: "Alice",
-				type: "sr25519",
-				genesisHash: null,
-				txCreator: {} as never,
-			},
-		]);
+		const wallet = createMockInjectedWallet([alice]);
 
 		const accounts = await firstValueFrom(
 			getPolkadotAccounts$(of([wallet]), []),
@@ -112,9 +120,144 @@ describe("getPolkadotAccounts$", () => {
 		warnSpy.mockRestore();
 	});
 
+	it("builds the signer with the detected factory and passes ecdsa for ethereum accounts", async () => {
+		const factory = vi.mocked(pjs.getTxCreatorFromPjs);
+		factory.mockClear();
+		const wallet = createMockInjectedWallet([
+			alice,
+			{ address: ETH, name: "Eth Key", type: "ethereum", genesisHash: null },
+		]);
+
+		const accounts = await firstValueFrom(
+			getPolkadotAccounts$(of([wallet]), ["sr25519", "ethereum"]),
+		);
+
+		expect(factory).toHaveBeenCalledTimes(2);
+		expect(factory).toHaveBeenCalledWith(
+			ALICE,
+			expect.any(Function),
+			expect.any(Function),
+			"sr25519",
+		);
+		expect(factory).toHaveBeenCalledWith(
+			ETH,
+			expect.any(Function),
+			expect.any(Function),
+			"ecdsa",
+		);
+		expect(accounts.map((account) => account.txCreator)).toEqual([
+			expect.any(Function),
+			expect.any(Function),
+		]);
+	});
+
+	it("passes readonly and partOfPortfolio through", async () => {
+		const wallet = createMockInjectedWallet([
+			{ ...alice, readonly: true, partOfPortfolio: false },
+		]);
+
+		const [account] = await firstValueFrom(
+			getPolkadotAccounts$(of([wallet]), ["sr25519"]),
+		);
+
+		expect(account?.readonly).toBe(true);
+		expect(account?.partOfPortfolio).toBe(false);
+	});
+
+	it("unsubscribes the extension's account subscription on teardown and on disconnect", async () => {
+		const tornDown = createMockExtension([alice]);
+		const wallet = createMockInjectedWallet([alice], {
+			extension: tornDown.extension,
+		});
+		const subscription = getPolkadotAccounts$(of([wallet]), [
+			"sr25519",
+		]).subscribe();
+		expect(tornDown.unsubscribe).not.toHaveBeenCalled();
+		subscription.unsubscribe();
+		expect(tornDown.unsubscribe).toHaveBeenCalledTimes(1);
+
+		const disconnected = createMockExtension([alice]);
+		const wallets$ = new BehaviorSubject<PolkadotInjectedWallet[]>([]);
+		const connected = createMockInjectedWallet([alice], {
+			extension: disconnected.extension,
+			disconnect: vi.fn(async () => {
+				wallets$.next([
+					{ ...connected, isConnected: false, extension: undefined },
+				]);
+			}),
+		});
+		wallets$.next([connected]);
+		const held = getPolkadotAccounts$(wallets$, ["sr25519"]).subscribe();
+		expect(disconnected.unsubscribe).not.toHaveBeenCalled();
+		await connected.disconnect();
+		expect(disconnected.unsubscribe).toHaveBeenCalledTimes(1);
+		held.unsubscribe();
+		expect(disconnected.unsubscribe).toHaveBeenCalledTimes(1);
+	});
+
+	it("emits the list from get() when subscribe has not called back", async () => {
+		const { extension } = createMockExtension([alice], {
+			subscribe: vi.fn(() => vi.fn()),
+		});
+		const wallet = createMockInjectedWallet([alice], { extension });
+		const emissions: string[][] = [];
+
+		const subscription = getPolkadotAccounts$(of([wallet]), [
+			"sr25519",
+		]).subscribe((accounts) =>
+			emissions.push(accounts.map((account) => account.address)),
+		);
+		await nextMacrotask();
+
+		expect(emissions).toEqual([[ALICE]]);
+		subscription.unsubscribe();
+	});
+
+	it("skips the get() result once subscribe has called back", async () => {
+		const { extension } = createMockExtension([alice], {
+			get: vi.fn(async () => [{ ...alice, address: BOB }]),
+		});
+		const wallet = createMockInjectedWallet([alice], { extension });
+		const emissions: string[][] = [];
+
+		const subscription = getPolkadotAccounts$(of([wallet]), [
+			"sr25519",
+		]).subscribe((accounts) =>
+			emissions.push(accounts.map((account) => account.address)),
+		);
+		await nextMacrotask();
+
+		expect(emissions).toEqual([[ALICE]]);
+		subscription.unsubscribe();
+	});
+
+	it("signRaw sends text as text and bytes as hex with the given type and returns the signature", async () => {
+		const { extension } = createMockExtension([alice]);
+		const wallet = createMockInjectedWallet([alice], { extension });
+
+		const [account] = await firstValueFrom(
+			getPolkadotAccounts$(of([wallet]), ["sr25519"]),
+		);
+		if (!account) throw new Error("no account");
+
+		await expect(account.signRaw("hello")).resolves.toBe("0xabcd");
+		expect(extension.signer.signRaw).toHaveBeenLastCalledWith({
+			address: ALICE,
+			data: "hello",
+			type: "bytes",
+		});
+
+		await expect(
+			account.signRaw(new Uint8Array([1, 255]), { type: "payload" }),
+		).resolves.toBe("0xabcd");
+		expect(extension.signer.signRaw).toHaveBeenLastCalledWith({
+			address: ALICE,
+			data: "0x01ff",
+			type: "payload",
+		});
+	});
+
 	describe("appKit (WalletConnect) wallets", () => {
-		const ALICE = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
-		const BOB = "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty";
 		const GENESIS = "91b171bb158e2d3848fa23a9f1c25182";
 
 		const createMockAppKitWallet = (accounts: string[]) => {
@@ -267,13 +410,41 @@ describe("getPolkadotAccounts$", () => {
 			expect(accounts[0]).not.toHaveProperty("polkadotSigner");
 		});
 
+		it("signRaw sends the text through polkadot_signMessage", async () => {
+			const { clearAllCachedObservables } = await import(
+				"../../utils/getCachedObservable"
+			);
+			clearAllCachedObservables();
+
+			const { wallet, provider } = createMockAppKitWallet([
+				`polkadot:${GENESIS}:${ALICE}`,
+			]);
+			provider.client.request.mockResolvedValue({ signature: "0xabcd" });
+
+			const [account] = await firstValueFrom(
+				getPolkadotAccounts$(of([wallet]), ["sr25519"]),
+			);
+			if (!account) throw new Error("no account");
+
+			await expect(account.signRaw("hello")).resolves.toBe("0xabcd");
+			expect(provider.client.request).toHaveBeenCalledWith({
+				topic: "t",
+				chainId: `polkadot:${GENESIS}`,
+				request: {
+					method: "polkadot_signMessage",
+					params: { address: ALICE, message: "hello" },
+				},
+			});
+		});
+
 		it("falls back to polkadotSigner with polkadot-api v2", async () => {
 			vi.resetModules();
+			const getPolkadotSignerFromPjs = vi.fn(() => ({
+				publicKey: new Uint8Array(),
+			}));
 			vi.doMock("polkadot-api/pjs-signer", () => ({
 				getTxCreatorFromPjs: undefined,
-				getPolkadotSignerFromPjs: vi.fn(() => ({
-					publicKey: new Uint8Array(),
-				})),
+				getPolkadotSignerFromPjs,
 			}));
 			const { clearAllCachedObservables } = await import(
 				"../../utils/getCachedObservable"
@@ -286,13 +457,23 @@ describe("getPolkadotAccounts$", () => {
 			const { wallet } = createMockAppKitWallet([
 				`polkadot:${GENESIS}:${ALICE}`,
 			]);
+			const injected = createMockInjectedWallet([alice]);
 
 			const accounts = await firstValueFrom(
-				getV2PolkadotAccounts$(of([wallet]), ["sr25519"]),
+				getV2PolkadotAccounts$(of([injected, wallet]), ["sr25519"]),
 			);
 
-			expect(accounts[0]).toHaveProperty("polkadotSigner");
-			expect(accounts[0]).not.toHaveProperty("txCreator");
+			expect(accounts).toHaveLength(2);
+			for (const account of accounts) {
+				expect(account).toHaveProperty("polkadotSigner");
+				expect(account).not.toHaveProperty("txCreator");
+			}
+			expect(getPolkadotSignerFromPjs).toHaveBeenCalledWith(
+				ALICE,
+				expect.any(Function),
+				expect.any(Function),
+				"sr25519",
+			);
 
 			vi.doUnmock("polkadot-api/pjs-signer");
 			vi.resetModules();

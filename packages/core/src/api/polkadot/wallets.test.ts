@@ -5,19 +5,17 @@ import { createKheopskitStore } from "../store";
 import type { KheopskitConfig, WalletConnectConfig } from "../types";
 import { polkadot } from "./plugin";
 
-const { connectInjectedExtension, getInjectedExtensions, injected } =
-	vi.hoisted(() => {
-		const injected = { names: ["test-extension"] };
-		return {
-			connectInjectedExtension: vi.fn().mockResolvedValue({}),
-			getInjectedExtensions: vi.fn(() => injected.names),
-			injected,
-		};
-	});
+const { getInjectedExtensions, injected } = vi.hoisted(() => {
+	const injected = { names: ["test-extension"] };
+	return {
+		getInjectedExtensions: vi.fn(() => injected.names),
+		injected,
+	};
+});
 
 vi.mock("polkadot-api/pjs-signer", () => ({
 	getInjectedExtensions,
-	connectInjectedExtension,
+	connectInjectedExtension: vi.fn().mockResolvedValue({}),
 }));
 
 const walletConnect = {
@@ -42,36 +40,37 @@ const connectWith = async (config: Partial<KheopskitConfig>) => {
 };
 
 describe("polkadot wallet connect", () => {
+	const enable = vi.fn();
+
 	beforeEach(() => {
 		localStorage.clear();
-		connectInjectedExtension.mockClear();
+		enable.mockReset().mockResolvedValue({
+			accounts: { get: async () => [], subscribe: () => () => {} },
+			signer: { signRaw: vi.fn(), signPayload: vi.fn() },
+		});
+		window.injectedWeb3 = { "test-extension": { enable } };
+	});
+
+	afterEach(() => {
+		delete window.injectedWeb3;
 	});
 
 	it("sends appName as the dapp name", async () => {
 		await connectWith({ appName: "My Dapp", walletConnect });
 
-		expect(connectInjectedExtension).toHaveBeenCalledWith(
-			"test-extension",
-			"My Dapp",
-		);
+		expect(enable).toHaveBeenCalledWith("My Dapp");
 	});
 
 	it("falls back to the WalletConnect metadata name", async () => {
 		await connectWith({ walletConnect });
 
-		expect(connectInjectedExtension).toHaveBeenCalledWith(
-			"test-extension",
-			"WalletConnect Dapp",
-		);
+		expect(enable).toHaveBeenCalledWith("WalletConnect Dapp");
 	});
 
 	it("falls back to the page hostname", async () => {
 		await connectWith({ appName: "" });
 
-		expect(connectInjectedExtension).toHaveBeenCalledWith(
-			"test-extension",
-			"localhost",
-		);
+		expect(enable).toHaveBeenCalledWith("localhost");
 	});
 });
 

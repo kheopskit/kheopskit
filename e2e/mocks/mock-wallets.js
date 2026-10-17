@@ -82,7 +82,11 @@ window.injectedWeb3["mock-polkadot-wallet"] = {
 				},
 			},
 			signer: {
-				signRaw: async () => ({ id: 1, signature: DOT_SIGNATURE }),
+				signRaw: async (payload) => {
+					window.__dotSignRawArgs ||= [];
+					window.__dotSignRawArgs.push(payload);
+					return { id: 1, signature: DOT_SIGNATURE };
+				},
 				signPayload: async () => ({ id: 1, signature: DOT_SIGNATURE }),
 			},
 		};
