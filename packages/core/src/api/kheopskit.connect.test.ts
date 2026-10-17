@@ -1290,3 +1290,80 @@ describe("getKheopskit$ connect semantics on a platform whose state lags its pro
 		});
 	});
 });
+
+const selfConnectingWalletId = "polkadot:self-connecting" as WalletId;
+
+const subscribeSelfConnectingPlatform = () => {
+	const state$ = new BehaviorSubject({ isConnected: true, others: 0 });
+	const connect = vi.fn(async () => {});
+	const walletOf = (
+		id: WalletId,
+		name: string,
+		isConnected: boolean,
+	): BaseWallet => ({
+		id,
+		platform: "polkadot",
+		type: "injected",
+		name,
+		icon: "",
+		status: isConnected ? "connected" : "disconnected",
+		error: undefined,
+		isConnected,
+		connect,
+		disconnect: async () => {},
+	});
+	const platform: KheopskitPlatform<"polkadot", BaseWallet, BaseWalletAccount> =
+		{
+			platform: "polkadot",
+			getWallets$: () =>
+				state$.pipe(
+					map(({ isConnected, others }): BaseWallet[] => [
+						walletOf(selfConnectingWalletId, "Self-connecting", isConnected),
+						...Array.from({ length: others }, (_, i) =>
+							walletOf(`polkadot:other-${i}` as WalletId, `Other ${i}`, false),
+						),
+					]),
+				),
+			getAccounts$: () => of([]),
+		};
+	const store = createKheopskitStore();
+	store.rememberWallet(selfConnectingWalletId);
+	const emissions: KheopskitState[] = [];
+	const sub = getKheopskit$(
+		{ ...engineConfig(platform), autoReconnect: true },
+		{ store },
+	).subscribe((state) => emissions.push(state));
+	return {
+		sub,
+		state$,
+		connect,
+		wallet: () => walletIn(emissions.at(-1), selfConnectingWalletId),
+	};
+};
+
+describe("getKheopskit$ automatic reconnect on a platform that reports its own connections", () => {
+	beforeEach(() => {
+		localStorage.clear();
+	});
+
+	it("a remembered wallet a platform reports connected without a connect call is not auto-connected after the wallet disconnects itself", async () => {
+		const { sub, state$, connect, wallet } = subscribeSelfConnectingPlatform();
+		await settleMicrotasks();
+		const first = wallet().status;
+
+		state$.next({ isConnected: false, others: 0 });
+		await settleMicrotasks();
+		state$.next({ isConnected: false, others: 1 });
+		await settleMicrotasks();
+		state$.next({ isConnected: false, others: 2 });
+		await settleMicrotasks();
+
+		expect({
+			first,
+			status: wallet().status,
+			autoConnects: connect.mock.calls.length,
+		}).toEqual({ first: "connected", status: "disconnected", autoConnects: 0 });
+
+		sub.unsubscribe();
+	});
+});
