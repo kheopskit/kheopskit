@@ -4,7 +4,8 @@ import {
 	createFakePolkadotExtension,
 	type FakePolkadotExtension,
 } from "@kheopskit/core/testing";
-import { act, useEffect } from "react";
+import { act } from "@testing-library/react";
+import { useEffect } from "react";
 import { hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
