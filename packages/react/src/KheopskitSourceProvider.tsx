@@ -12,7 +12,7 @@ import type { Observable } from "rxjs";
 import { KheopskitContext } from "./context";
 import { createExternalStore } from "./createExternalStore";
 
-export type KheopskitSource = {
+type KheopskitSource = {
 	store: KheopskitStore;
 	kheopskit$: Observable<KheopskitState>;
 };
