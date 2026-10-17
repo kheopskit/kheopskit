@@ -1,13 +1,13 @@
 import {
-	combineLatest,
 	distinctUntilChanged,
 	map,
 	Observable,
 	of,
+	Subscription,
 	shareReplay,
-	switchMap,
 } from "rxjs";
 import { getCachedObservable$ } from "../utils/getCachedObservable";
+import type { WalletId } from "../utils/WalletId";
 import type {
 	BaseWallet,
 	BaseWalletAccount,
@@ -17,11 +17,11 @@ import type {
 } from "./types";
 import { isWalletConnectWallet } from "./types";
 
-/**
- * The platform-specific surface of an accounts stream. The shared pipeline —
- * filter connected wallets, fan out per-wallet account streams, flatten,
- * change-detect, share — is owned by {@link createPlatformAccounts$}.
- */
+export type LiveWalletConnectWallet = Exclude<
+	WalletConnectWallet,
+	{ isPlaceholder: true }
+>;
+
 export type PlatformAccountsOptions<
 	TWallet extends BaseWallet,
 	TAccount extends BaseWalletAccount,
@@ -32,7 +32,7 @@ export type PlatformAccountsOptions<
 	getInjectedAccounts$: (wallet: TWallet) => Observable<TAccount[]>;
 	/** Account stream for the WalletConnect connector. */
 	getWalletConnectAccounts$: (
-		wallet: WalletConnectWallet,
+		wallet: LiveWalletConnectWallet,
 	) => Observable<TAccount[]>;
 	/** Optional post-flatten transform (e.g. Polkadot's `accountTypes` filter). */
 	mapAccounts?: (accounts: TAccount[]) => TAccount[];
@@ -43,6 +43,20 @@ export type PlatformAccountsOptions<
 	 */
 	accountChangeKey?: (account: TAccount) => string;
 };
+
+type WalletConnection<TAccount> = {
+	key: string;
+	accounts: TAccount[];
+	answered: boolean;
+	completed: boolean;
+	subscription: Subscription;
+};
+
+const sessionKey = (wallet: WalletConnectWallet): string =>
+	`${wallet.id}|${wallet.platforms.join(",")}`;
+
+const connectionKey = (wallet: BaseWallet | WalletConnectWallet): string =>
+	isWalletConnectWallet(wallet) ? sessionKey(wallet) : wallet.id;
 
 /** Shared engine behind every platform's `getAccounts$`. */
 export const createPlatformAccounts$ = <
@@ -63,35 +77,102 @@ export const createPlatformAccounts$ = <
 			const other = b[i];
 			return !!other && nameAndChangeKey(account) === nameAndChangeKey(other);
 		});
+	const accountsOf = (wallet: TWallet | LiveWalletConnectWallet) =>
+		isWalletConnectWallet(wallet)
+			? getWalletConnectAccounts$(wallet)
+			: getInjectedAccounts$(wallet);
 
 	return new Observable<TAccount[]>((subscriber) => {
-		const sub = wallets$
-			.pipe(
-				map((wallets) => wallets.filter((w) => w.isConnected)),
-				switchMap((wallets) =>
-					wallets.length
-						? combineLatest([
-								...wallets
-									.filter((w): w is TWallet => !isWalletConnectWallet(w))
-									.map(getInjectedAccounts$),
-								...wallets
-									.filter(isWalletConnectWallet)
-									.map(getWalletConnectAccounts$),
-							])
-						: of([]),
-				),
-				map((accounts) => {
-					const flat = accounts.flat();
-					return mapAccounts ? mapAccounts(flat) : flat;
-				}),
-				distinctUntilChanged(accountsListEqual),
+		const connections = new Map<WalletId, WalletConnection<TAccount>>();
+		let connectedIds: WalletId[] = [];
+		let walletsCompleted = false;
+		let emitted = false;
+
+		const awaitingFirstAnswers = () =>
+			!emitted &&
+			[...connections.values()].some((connection) => !connection.answered);
+
+		const emit = () => {
+			if (awaitingFirstAnswers()) return;
+			emitted = true;
+			subscriber.next(
+				connectedIds.flatMap((id) => connections.get(id)?.accounts ?? []),
+			);
+		};
+
+		const completeIfDone = () => {
+			if (
+				walletsCompleted &&
+				[...connections.values()].every((connection) => connection.completed)
 			)
-			.subscribe(subscriber);
+				subscriber.complete();
+		};
+
+		const reconcile = (wallets: (TWallet | WalletConnectWallet)[]) => {
+			const connected = wallets.filter(
+				(wallet): wallet is TWallet | LiveWalletConnectWallet =>
+					wallet.isConnected && !wallet.isPlaceholder,
+			);
+			const keys = new Map(
+				connected.map((w) => [w.id, connectionKey(w)] as const),
+			);
+			for (const [id, connection] of connections) {
+				if (keys.get(id) === connection.key) continue;
+				connection.subscription.unsubscribe();
+				connections.delete(id);
+			}
+			connectedIds = connected.map((wallet) => wallet.id);
+			const opened = connected
+				.filter((wallet) => !connections.has(wallet.id))
+				.map((wallet) => {
+					const connection: WalletConnection<TAccount> = {
+						key: connectionKey(wallet),
+						accounts: [],
+						answered: false,
+						completed: false,
+						subscription: new Subscription(),
+					};
+					connections.set(wallet.id, connection);
+					return { wallet, connection };
+				});
+			for (const { wallet, connection } of opened) {
+				connection.subscription.add(
+					accountsOf(wallet).subscribe({
+						next: (accounts) => {
+							connection.accounts = accounts;
+							connection.answered = true;
+							emit();
+						},
+						error: (error) => subscriber.error(error),
+						complete: () => {
+							connection.completed = true;
+							completeIfDone();
+						},
+					}),
+				);
+			}
+			emit();
+		};
+
+		const sub = wallets$.subscribe({
+			next: reconcile,
+			error: (error) => subscriber.error(error),
+			complete: () => {
+				walletsCompleted = true;
+				completeIfDone();
+			},
+		});
 
 		return () => {
 			sub.unsubscribe();
+			for (const connection of connections.values())
+				connection.subscription.unsubscribe();
 		};
-	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
+	}).pipe(
+		map((accounts) => (mapAccounts ? mapAccounts(accounts) : accounts)),
+		distinctUntilChanged(accountsListEqual),
+		shareReplay({ refCount: true, bufferSize: 1 }),
+	);
 };
 
 /**
@@ -131,7 +212,7 @@ export const getCaip10Addresses = (caip10s: string[]): string[] => [
 export const getWalletConnectSessionAccounts$ = <
 	TAccount extends BaseWalletAccount,
 >(options: {
-	wallet: WalletConnectWallet;
+	wallet: LiveWalletConnectWallet;
 	platform: WalletPlatform;
 	/** WalletConnect namespace, e.g. "polkadot" | "solana" | "eip155". */
 	namespace: string;

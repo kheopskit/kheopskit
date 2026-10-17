@@ -63,20 +63,22 @@ const AccountRow: FC<{ account: WalletAccount }> = ({ account }) => {
 			<TableCell>
 				{account.platform === "ethereum" ? (account.chainId ?? "-") : "-"}
 			</TableCell>
-			<TableCell className="font-mono">
+			<TableCell className="space-x-2 font-mono">
 				<SignButton account={account} />
+				{account.platform === "polkadot" ? (
+					<SignInButton account={account} />
+				) : null}
 			</TableCell>
 		</TableRow>
 	);
 };
 
 const SignButton: FC<{ account: WalletAccount }> = ({ account }) => {
-	// SDK fields (signer/client/txCreator) are absent while hydrating;
-	// disable signing until hydration completes. See MIGRATING_TO_V4.md.
 	const { isHydrating } = useWallets();
 	const MESSAGE = "Kheopskit rocks!";
 
 	const handleClick = useCallback(async () => {
+		if (account.isPlaceholder) return;
 		switch (account.platform) {
 			case "polkadot": {
 				const bytes = Binary.fromText(MESSAGE);
@@ -125,6 +127,39 @@ const SignButton: FC<{ account: WalletAccount }> = ({ account }) => {
 	return (
 		<Button onClick={handleClick} disabled={isHydrating}>
 			Sign
+		</Button>
+	);
+};
+
+const SignInButton: FC<{
+	account: Extract<WalletAccount, { platform: "polkadot" }>;
+}> = ({ account }) => {
+	const { isHydrating } = useWallets();
+
+	const handleClick = useCallback(async () => {
+		if (account.isPlaceholder) return;
+		const message = [
+			`${window.location.host} wants you to sign in with your Substrate account:`,
+			account.address,
+			"",
+			"Kheopskit sign-in",
+			"",
+			`URI: ${window.location.origin}`,
+			"Version: 1.0.0",
+			`Nonce: ${crypto.randomUUID()}`,
+			`Issued At: ${new Date().toISOString()}`,
+		].join("\n");
+		try {
+			const signature = await account.signRaw(message);
+			toast.success(`Signature: ${signature}`);
+		} catch (err) {
+			toast.error(`Error: ${(err as Error).message}`);
+		}
+	}, [account]);
+
+	return (
+		<Button onClick={handleClick} disabled={isHydrating}>
+			Sign in
 		</Button>
 	);
 };

@@ -82,4 +82,22 @@ describe("createReconnectPolicy settlement", () => {
 		expect(connect).toHaveBeenCalledTimes(1);
 		expect(policy.shouldAttempt("w2")).toBe(true);
 	});
+
+	it("a settle during a pending attempt outlives the attempt's failure", async () => {
+		const policy = createReconnectPolicy({ maxAttempts: 3 });
+		let reject!: (error: Error) => void;
+		const attempt = policy.attempt(
+			"w1",
+			() =>
+				new Promise<void>((_, rej) => {
+					reject = rej;
+				}),
+		);
+
+		policy.settle("w1");
+		reject(new Error("locked"));
+		await expect(attempt).rejects.toThrow("locked");
+
+		expect(policy.shouldAttempt("w1")).toBe(false);
+	});
 });

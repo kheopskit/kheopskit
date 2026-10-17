@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { BUTTON_RECORDER, buttonSequence } from "../buttonRecorder";
 import { expect, test } from "../fixtures";
 
 // The Wallets and Accounts tables both contain the wallet name, so rows must
@@ -7,6 +8,8 @@ const getWalletsTable = (page: Page) =>
 	page
 		.getByRole("table")
 		.filter({ has: page.getByRole("columnheader", { name: "Accounts" }) });
+
+type SignRawPayload = { address: string; data: string; type: string };
 
 const getAccountsTable = (page: Page) =>
 	page
@@ -82,7 +85,7 @@ test.describe("polkadot mock wallet", () => {
 		await expect(accountRow).toContainText("polkadot");
 
 		// Sign goes through papi pjs-signer -> signRaw on the mock extension
-		await accountRow.getByRole("button", { name: "Sign" }).click();
+		await accountRow.getByRole("button", { name: "Sign", exact: true }).click();
 		await expect(page.getByText(/Signature: 0x22/).first()).toBeVisible();
 
 		await walletRow.getByRole("button", { name: "Disconnect" }).click();
@@ -92,9 +95,48 @@ test.describe("polkadot mock wallet", () => {
 		await expect(accountRow).not.toBeVisible();
 	});
 
+	test("Sign in sends the SIWS text through signRaw", async ({ page }) => {
+		await page.goto("/");
+
+		await getWalletsTable(page)
+			.getByRole("row", { name: /mock-polkadot-wallet/ })
+			.getByRole("button", { name: "Connect" })
+			.click();
+		const accountRow = getAccountsTable(page).getByRole("row", {
+			name: /Mock Account/,
+		});
+		await accountRow.getByRole("button", { name: "Sign in" }).click();
+		await expect(page.getByText(/Signature: 0x22/).first()).toBeVisible();
+
+		const payload = await page.evaluate(() =>
+			(window as { __dotSignRawArgs?: SignRawPayload[] }).__dotSignRawArgs?.at(
+				-1,
+			),
+		);
+		const { host, origin } = new URL(page.url());
+		const expectedStart = [
+			`${host} wants you to sign in with your Substrate account:`,
+			"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+			"",
+			"Kheopskit sign-in",
+			"",
+			`URI: ${origin}`,
+			"Version: 1.0.0",
+		].join("\n");
+		expect(payload?.address).toBe(
+			"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+		);
+		expect(payload?.type).toBe("payload");
+		expect(payload?.data.slice(0, expectedStart.length)).toBe(expectedStart);
+		expect(payload?.data.slice(expectedStart.length)).toMatch(
+			/^\nNonce: [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\nIssued At: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+		);
+	});
+
 	test("clicking Connect shows Connecting… and disables the button until enable answers", async ({
 		page,
 	}) => {
+		await page.addInitScript(BUTTON_RECORDER);
 		await page.goto("/");
 		await page.evaluate(() => {
 			(window as { __dotEnableDelayMs?: number }).__dotEnableDelayMs = 1000;
@@ -104,13 +146,13 @@ test.describe("polkadot mock wallet", () => {
 			name: /mock-polkadot-wallet/,
 		});
 		await walletRow.getByRole("button", { name: "Connect" }).click();
-		const connecting = walletRow.getByRole("button", { name: "Connecting…" });
-		await expect(connecting).toBeDisabled();
-		await connecting.click({ force: true });
-
 		await expect(
 			walletRow.getByRole("button", { name: "Disconnect" }),
 		).toBeVisible();
+
+		await expect
+			.poll(() => buttonSequence(page))
+			.toEqual(["Connect", "Connecting… (disabled)", "Disconnect"]);
 		expect(
 			await page.evaluate(
 				() => (window as { __dotEnableCalls?: number }).__dotEnableCalls,

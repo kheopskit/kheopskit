@@ -19,6 +19,13 @@ export type KheopskitErrorCode =
 	| "USER_REJECTED"
 	/** The wallet's connect call failed for another reason. `cause` holds the platform error. */
 	| "CONNECT_FAILED"
+	/**
+	 * `connect()` was called on a placeholder wallet restored from the cache:
+	 * on `kheopskit$`, hydration ended without kheopskit discovering that
+	 * wallet; on `getHydratedSnapshot` and the React provider's initial
+	 * snapshot, always.
+	 */
+	| "WALLET_PENDING"
 	/** The wallet does not advertise a capability kheopskit needs to proceed. */
 	| "FEATURE_NOT_SUPPORTED"
 	/** No active WalletConnect session for the requested operation. */
@@ -28,7 +35,9 @@ export type KheopskitErrorCode =
 	/** The installed polkadot-api version exposes neither `getTxCreatorFromPjs` (v3) nor `getPolkadotSignerFromPjs` (v2). */
 	| "UNSUPPORTED_VERSION"
 	/** The requested chain cannot be used for this operation (e.g. a Solana cluster with no CAIP-2 id over WalletConnect). */
-	| "UNSUPPORTED_CHAIN";
+	| "UNSUPPORTED_CHAIN"
+	/** `getKheopskit$` received a config value it cannot use. The message names the fix. */
+	| "INVALID_CONFIG";
 
 /**
  * Error thrown by kheopskit wallet/account operations. Carries a stable
@@ -69,6 +78,13 @@ export const abortedError = (
 	new KheopskitError(
 		"ABORTED",
 		`${operation} of wallet ${walletId} was aborted`,
+		{ walletId },
+	);
+
+export const walletPendingError = (walletId: WalletId): KheopskitError =>
+	new KheopskitError(
+		"WALLET_PENDING",
+		`wallet ${walletId} was not discovered before hydration ended`,
 		{ walletId },
 	);
 

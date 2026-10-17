@@ -1,7 +1,13 @@
 /// <reference types="@testing-library/jest-dom/vitest" />
+import {
+	type CachedAccount,
+	type CachedWallet,
+	createKheopskitStore,
+} from "@kheopskit/core";
 import { ethereum } from "@kheopskit/core/ethereum";
 import { polkadot } from "@kheopskit/core/polkadot";
 import { solana } from "@kheopskit/core/solana";
+import { cachedAccountOf, cachedWalletOf } from "@kheopskit/core/testing";
 import { render, screen } from "@testing-library/react";
 import { act } from "react";
 import { hydrateRoot, type Root } from "react-dom/client";
@@ -29,7 +35,15 @@ vi.mock("@kheopskit/core", async (importOriginal) => {
 import { KheopskitProvider } from "./KheopskitProvider";
 import { useWallets } from "./useWallets";
 
-const STORAGE_KEY = "kheopskit";
+const ALICE = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+const BOB = "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty";
+const HARDHAT_0 = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+
+const seedCache = (wallets: CachedWallet[], accounts: CachedAccount[]) => {
+	const store = createKheopskitStore();
+	store.setCachedState(wallets, accounts);
+	store.destroy();
+};
 
 const WalletsConsumer = () => {
 	const { wallets, accounts, isHydrating } = useWallets();
@@ -45,6 +59,9 @@ const WalletsConsumer = () => {
 			</span>
 			<span data-testid="account-order">
 				{accounts.map((a) => `${a.platform}:${a.walletName}`).join(",")}
+			</span>
+			<span data-testid="placeholders">
+				{`${wallets.length + accounts.length}:${[...wallets, ...accounts].every((i) => i.isPlaceholder)}`}
 			</span>
 			<span data-testid="is-hydrating">{String(isHydrating)}</span>
 			<span data-testid="account-chainids">
@@ -66,29 +83,18 @@ describe("KheopskitProvider hydration (no flash on SPA reload)", () => {
 	});
 
 	it("paints cached wallets on the first client render, before the live observable emits (no ssrCookies)", () => {
-		// Simulate a prior session persisted to localStorage (SPA uses localStorage,
-		// not cookies — there is no ssrCookies in a client-only app).
-		localStorage.setItem(
-			STORAGE_KEY,
-			JSON.stringify({
-				cachedWallets: [
-					{
-						id: "polkadot:talisman",
-						platform: "polkadot",
-						type: "injected",
-						name: "Talisman",
-						isConnected: false,
-					},
-					{
-						id: "polkadot:subwallet-js",
-						platform: "polkadot",
-						type: "injected",
-						name: "SubWallet",
-						isConnected: false,
-					},
-				],
-				cachedAccounts: [],
-			}),
+		seedCache(
+			[
+				{
+					...cachedWalletOf("polkadot:talisman", "Talisman"),
+					isConnected: false,
+				},
+				{
+					...cachedWalletOf("polkadot:subwallet-js", "SubWallet"),
+					isConnected: false,
+				},
+			],
+			[],
 		);
 
 		render(
@@ -107,29 +113,10 @@ describe("KheopskitProvider hydration (no flash on SPA reload)", () => {
 	});
 
 	it("paints cached connected accounts on the first client render (no ssrCookies)", () => {
-		localStorage.setItem(
-			STORAGE_KEY,
-			JSON.stringify({
-				cachedWallets: [
-					{
-						id: "polkadot:talisman",
-						platform: "polkadot",
-						type: "injected",
-						name: "Talisman",
-						isConnected: true,
-					},
-				],
-				cachedAccounts: [
-					{
-						id: "polkadot:talisman:5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-						platform: "polkadot",
-						address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-						polkadotAccountType: "sr25519",
-						walletId: "polkadot:talisman",
-						walletName: "Talisman",
-					},
-				],
-			}),
+		const talisman = cachedWalletOf("polkadot:talisman", "Talisman");
+		seedCache(
+			[talisman],
+			[{ ...cachedAccountOf(talisman, ALICE), polkadotAccountType: "sr25519" }],
 		);
 
 		render(
@@ -157,36 +144,28 @@ describe("KheopskitProvider hydration (no flash on SPA reload)", () => {
 		// Stored out of order (solana, ethereum, polkadot). The first paint must
 		// already be in the canonical sortAccounts order so the list does not
 		// reorder once the live observable emits (which is also sorted).
-		localStorage.setItem(
-			STORAGE_KEY,
-			JSON.stringify({
-				cachedWallets: [],
-				cachedAccounts: [
-					{
-						id: "solana:mock:So11111111111111111111111111111111111111112",
-						platform: "solana",
-						address: "So11111111111111111111111111111111111111112",
-						walletId: "solana:mock",
-						walletName: "Zeta",
-					},
-					{
-						id: "ethereum:mock:0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-						platform: "ethereum",
-						address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-						chainId: 1,
-						walletId: "ethereum:mock",
-						walletName: "Beta",
-					},
-					{
-						id: "polkadot:talisman:5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-						platform: "polkadot",
-						address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-						polkadotAccountType: "sr25519",
-						walletId: "polkadot:talisman",
-						walletName: "Talisman",
-					},
-				],
-			}),
+		seedCache(
+			[],
+			[
+				cachedAccountOf(
+					cachedWalletOf("solana:mock", "Zeta"),
+					"So11111111111111111111111111111111111111112",
+				),
+				{
+					...cachedAccountOf(
+						cachedWalletOf("ethereum:mock", "Beta"),
+						HARDHAT_0,
+					),
+					chainId: 1,
+				},
+				{
+					...cachedAccountOf(
+						cachedWalletOf("polkadot:talisman", "Talisman"),
+						ALICE,
+					),
+					polkadotAccountType: "sr25519",
+				},
+			],
 		);
 
 		render(
@@ -204,29 +183,10 @@ describe("KheopskitProvider hydration (no flash on SPA reload)", () => {
 	});
 
 	it("remembers the ethereum chainId on the first render after reload", () => {
-		localStorage.setItem(
-			STORAGE_KEY,
-			JSON.stringify({
-				cachedWallets: [
-					{
-						id: "ethereum:metamask",
-						platform: "ethereum",
-						type: "injected",
-						name: "MetaMask",
-						isConnected: true,
-					},
-				],
-				cachedAccounts: [
-					{
-						id: "ethereum:metamask::0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-						platform: "ethereum",
-						address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-						chainId: 137,
-						walletId: "ethereum:metamask",
-						walletName: "MetaMask",
-					},
-				],
-			}),
+		const metamask = cachedWalletOf("ethereum:metamask", "MetaMask");
+		seedCache(
+			[metamask],
+			[{ ...cachedAccountOf(metamask, HARDHAT_0), chainId: 137 }],
 		);
 
 		render(
@@ -245,7 +205,7 @@ describe("KheopskitProvider hydration (no flash on SPA reload)", () => {
 		// and accounts missing required fields. The provider must degrade to an
 		// empty list, not throw during render and blank the dapp.
 		localStorage.setItem(
-			STORAGE_KEY,
+			"kheopskit",
 			JSON.stringify({
 				cachedWallets: [
 					{ id: "garbage", name: "X" },
@@ -299,39 +259,18 @@ describe.each([
 });
 
 describe("KheopskitProvider snapshots under an autoReconnect predicate", () => {
+	const talisman = cachedWalletOf("polkadot:talisman", "Talisman");
+	const subwallet = cachedWalletOf("polkadot:subwallet-js", "SubWallet");
 	const cachedState = {
-		cachedWallets: [
-			{
-				id: "polkadot:talisman",
-				platform: "polkadot",
-				type: "injected",
-				name: "Talisman",
-				isConnected: true,
-			},
-			{
-				id: "polkadot:subwallet-js",
-				platform: "polkadot",
-				type: "injected",
-				name: "SubWallet",
-				isConnected: true,
-			},
-		],
+		cachedWallets: [talisman, subwallet],
 		cachedAccounts: [
 			{
-				id: "polkadot:talisman::5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-				platform: "polkadot",
-				address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-				polkadotAccountType: "sr25519",
-				walletId: "polkadot:talisman",
-				walletName: "Talisman",
+				...cachedAccountOf(talisman, ALICE),
+				polkadotAccountType: "sr25519" as const,
 			},
 			{
-				id: "polkadot:subwallet-js::5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-				platform: "polkadot",
-				address: "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-				polkadotAccountType: "sr25519",
-				walletId: "polkadot:subwallet-js",
-				walletName: "SubWallet",
+				...cachedAccountOf(subwallet, BOB),
+				polkadotAccountType: "sr25519" as const,
 			},
 		],
 	};
@@ -380,6 +319,29 @@ describe("KheopskitProvider snapshots under an autoReconnect predicate", () => {
 		);
 	});
 
+	it("the server snapshot and the client initial snapshot hold only placeholders", () => {
+		const ssrCookies = `kheopskit=${encodeURIComponent(JSON.stringify(cachedState))}`;
+		// biome-ignore lint/suspicious/noDocumentCookie: necessary for test setup
+		document.cookie = ssrCookies;
+		seedCache(cachedState.cachedWallets, cachedState.cachedAccounts);
+		const withCookies = (
+			<KheopskitProvider config={config} ssrCookies={ssrCookies}>
+				<WalletsConsumer />
+			</KheopskitProvider>
+		);
+
+		expect(renderToString(withCookies)).toContain(
+			`data-testid="placeholders">3:true</span>`,
+		);
+
+		render(
+			<KheopskitProvider config={config}>
+				<WalletsConsumer />
+			</KheopskitProvider>,
+		);
+		expect(screen.getByTestId("placeholders")).toHaveTextContent("3:true");
+	});
+
 	it("hydrating the server markup on the client raises no hydration warning and keeps the connecting status", async () => {
 		const ssrCookies = `kheopskit=${encodeURIComponent(JSON.stringify(cachedState))}`;
 		// biome-ignore lint/suspicious/noDocumentCookie: necessary for test setup
@@ -416,24 +378,51 @@ describe("KheopskitProvider snapshots under an autoReconnect predicate", () => {
 		container.remove();
 	});
 
-	it("without ssrCookies the server renders no wallets and the client applies the predicate to its cache", () => {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(cachedState));
+	it("without ssrCookies, hydrating the empty server markup raises no warning and then shows the client cache under the predicate", async () => {
+		seedCache(cachedState.cachedWallets, cachedState.cachedAccounts);
 		const tree = (
 			<KheopskitProvider config={config}>
 				<WalletsConsumer />
 			</KheopskitProvider>
 		);
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		const recoverable: unknown[] = [];
+		const container = document.createElement("div");
+		container.innerHTML = renderToString(tree);
+		document.body.appendChild(container);
+		const textOf = (testId: string) =>
+			container.querySelector(`[data-testid="${testId}"]`)?.textContent;
+		const server = {
+			status: textOf("wallet-status"),
+			accounts: textOf("account-order"),
+		};
 
-		const html = renderToString(tree);
-		expect(html).toContain(`data-testid="wallet-status"></span>`);
+		let root: Root | undefined;
+		await act(async () => {
+			root = hydrateRoot(container, tree, {
+				onRecoverableError: (error) => recoverable.push(error),
+			});
+		});
 
-		render(tree);
-		expect(screen.getByTestId("wallet-status")).toHaveTextContent(
-			expectedStatuses,
-		);
-		expect(screen.getByTestId("account-order")).toHaveTextContent(
-			expectedAccounts,
-		);
+		expect({
+			server,
+			client: {
+				status: textOf("wallet-status"),
+				accounts: textOf("account-order"),
+			},
+			recoverable,
+			consoleErrors: consoleError.mock.calls,
+		}).toEqual({
+			server: { status: "", accounts: "" },
+			client: { status: expectedStatuses, accounts: expectedAccounts },
+			recoverable: [],
+			consoleErrors: [],
+		});
+
+		await act(async () => root?.unmount());
+		container.remove();
 	});
 });
 
@@ -450,31 +439,14 @@ describe("KheopskitProvider hydration end", () => {
 	});
 
 	it("isHydrating ends without a reconnect when autoReconnect is false", async () => {
-		localStorage.setItem(
-			STORAGE_KEY,
-			JSON.stringify({
-				remembered: ["polkadot:talisman"],
-				cachedWallets: [
-					{
-						id: "polkadot:talisman",
-						platform: "polkadot",
-						type: "injected",
-						name: "Talisman",
-						isConnected: true,
-					},
-				],
-				cachedAccounts: [
-					{
-						id: "polkadot:talisman::5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-						platform: "polkadot",
-						address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-						polkadotAccountType: "sr25519",
-						walletId: "polkadot:talisman",
-						walletName: "Talisman",
-					},
-				],
-			}),
+		const store = createKheopskitStore();
+		const talisman = cachedWalletOf("polkadot:talisman", "Talisman");
+		store.rememberWallet(talisman.id);
+		store.setCachedState(
+			[talisman],
+			[{ ...cachedAccountOf(talisman, ALICE), polkadotAccountType: "sr25519" }],
 		);
+		store.destroy();
 		const config = {
 			platforms: [polkadot()],
 			autoReconnect: false,

@@ -54,6 +54,16 @@
 				"default": "./dist/solana.js"
 			}
 		},
+		"./walletconnect": {
+			"import": {
+				"types": "./dist/walletconnect.d.mts",
+				"default": "./dist/walletconnect.mjs"
+			},
+			"require": {
+				"types": "./dist/walletconnect.d.ts",
+				"default": "./dist/walletconnect.js"
+			}
+		},
 		"./internal": {
 			"import": {
 				"types": "./dist/internal.d.mts",
@@ -62,6 +72,16 @@
 			"require": {
 				"types": "./dist/internal.d.ts",
 				"default": "./dist/internal.js"
+			}
+		},
+		"./testing": {
+			"import": {
+				"types": "./dist/testing.d.mts",
+				"default": "./dist/testing.mjs"
+			},
+			"require": {
+				"types": "./dist/testing.d.ts",
+				"default": "./dist/testing.js"
 			}
 		},
 		"./package.json": "./package.json"
@@ -140,7 +160,9 @@
 			"src/polkadot.ts",
 			"src/ethereum.ts",
 			"src/solana.ts",
-			"src/internal.ts"
+			"src/walletconnect.ts",
+			"src/internal.ts",
+			"src/testing.ts"
 		],
 		"tsconfig": "tsconfig.build.json",
 		"fixedExtension": false,

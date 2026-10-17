@@ -15,19 +15,19 @@ type HydrationBufferResult<T> = {
 	isHydrating: boolean;
 };
 
-const createBufferCore = <T>(
-	cachedItems: T[],
-	liveItems$: Observable<T[]>,
+const createBufferCore = <L, C>(
+	cachedItems: C[],
+	liveItems$: Observable<L[]>,
 	gracePeriodMs: number,
 	timeoutMs: number,
-	mergeFn: (liveItems: T[], cachedItems: T[]) => T[],
+	mergeFn: (liveItems: L[], cachedItems: C[]) => (L | C)[],
 	settled$?: Observable<boolean>,
-): Observable<HydrationBufferResult<T>> => {
+): Observable<HydrationBufferResult<L | C>> => {
 	if (gracePeriodMs <= 0 || cachedItems.length === 0) {
 		return liveItems$.pipe(map((items) => ({ items, isHydrating: false })));
 	}
 
-	return new Observable<HydrationBufferResult<T>>((subscriber) => {
+	return new Observable<HydrationBufferResult<L | C>>((subscriber) => {
 		const subscriptions = new Subscription();
 		const isHydrating$ = new BehaviorSubject(true);
 		const endHydration = () => {
@@ -48,7 +48,7 @@ const createBufferCore = <T>(
 		subscriptions.add(timer(timeoutMs).subscribe(endHydration));
 
 		subscriptions.add(
-			combineLatest([liveItems$.pipe(startWith([] as T[])), isHydrating$])
+			combineLatest([liveItems$.pipe(startWith([] as L[])), isHydrating$])
 				.pipe(
 					map(([liveItems, isHydrating]) =>
 						isHydrating
@@ -82,16 +82,16 @@ const createBufferCore = <T>(
  * @param mergeItem - Optional function to merge a live item with its cached counterpart
  * @param transformCachedOnly - Optional function to transform cached items not yet in the live stream
  */
-export const createHydrationBuffer = <T>(
-	cachedItems: T[],
-	liveItems$: Observable<T[]>,
+export const createHydrationBuffer = <L, C>(
+	cachedItems: C[],
+	liveItems$: Observable<L[]>,
 	gracePeriodMs: number,
 	timeoutMs: number,
-	getKey: (item: T) => string,
+	getKey: (item: L | C) => string,
 	settled$?: Observable<boolean>,
-	mergeItem?: (liveItem: T, cachedItem: T) => T,
-	transformCachedOnly?: (cachedItem: T) => T,
-): Observable<HydrationBufferResult<T>> => {
+	mergeItem?: (liveItem: L, cachedItem: C) => L | C,
+	transformCachedOnly?: (cachedItem: C) => C,
+): Observable<HydrationBufferResult<L | C>> => {
 	return createBufferCore(
 		cachedItems,
 		liveItems$,
@@ -104,7 +104,7 @@ export const createHydrationBuffer = <T>(
 			// For items in both live and cached, prefer cached (preserves connected state)
 			// but allow mergeItem to customize how they're combined
 			// For items only in live (newly discovered), use the live version
-			const mergedItems: T[] = liveItems.map((liveItem) => {
+			const mergedItems: (L | C)[] = liveItems.map((liveItem) => {
 				const key = getKey(liveItem);
 				const cachedItem = cachedByKey.get(key);
 				if (!cachedItem) return liveItem;

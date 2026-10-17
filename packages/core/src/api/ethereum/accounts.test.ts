@@ -1,7 +1,8 @@
 import { filter, firstValueFrom, of, take, toArray } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../../utils/WalletId";
-import type { WalletConnectWallet } from "../types";
+import type { LiveWalletConnectWallet } from "../platformAccounts";
+import type { AppKitInstance } from "../types";
 import type { EthereumInjectedWallet } from "./types";
 
 // Valid Ethereum address for tests
@@ -45,13 +46,17 @@ const createMockProvider = () => {
 
 const createMockInjectedWallet = (
 	provider: ReturnType<typeof createMockProvider>,
-	overrides: Partial<EthereumInjectedWallet> = {},
+	overrides: Partial<
+		Exclude<EthereumInjectedWallet, { isPlaceholder: true }>
+	> = {},
 ): EthereumInjectedWallet => ({
 	platform: "ethereum",
 	type: "injected",
 	id: "ethereum:mock-wallet" as WalletId,
 	sourceId: "mock-wallet",
-	provider: provider as unknown as EthereumInjectedWallet["provider"],
+	provider: provider as unknown as NonNullable<
+		EthereumInjectedWallet["provider"]
+	>,
 	name: "Mock Wallet",
 	icon: "data:image/svg+xml,...",
 	status: "connected",
@@ -65,8 +70,8 @@ const createMockInjectedWallet = (
 // eip155 namespace.
 const createMockAppKitWallet = (
 	provider: ReturnType<typeof createMockProvider>,
-	overrides: Partial<WalletConnectWallet> = {},
-): WalletConnectWallet => ({
+	overrides: Partial<LiveWalletConnectWallet> = {},
+): LiveWalletConnectWallet => ({
 	type: "walletconnect",
 	id: WALLET_CONNECT_WALLET_ID,
 	platforms: ["ethereum"],
@@ -85,7 +90,7 @@ const createMockAppKitWallet = (
 		// again, every appKit test below loses its accounts.
 		getAccount: vi.fn(() => ({ allAccounts: [] })),
 		getProvider: vi.fn(() => provider),
-	} as unknown as WalletConnectWallet["appKit"],
+	} as unknown as AppKitInstance,
 	...overrides,
 });
 

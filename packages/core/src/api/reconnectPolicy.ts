@@ -32,13 +32,17 @@ export const createReconnectPolicy = ({
 
 		const before = states.get(walletId);
 		states.set(walletId, { kind: "pending" });
+		const recordOutcome = (outcome: ReconnectAttemptState) => {
+			if (states.get(walletId)?.kind !== "settled")
+				states.set(walletId, outcome);
+		};
 		try {
 			await connect();
-			states.set(walletId, { kind: "reconnected" });
+			recordOutcome({ kind: "reconnected" });
 			return true;
 		} catch (err) {
 			const attempts = before?.kind === "failed" ? before.attempts + 1 : 1;
-			states.set(walletId, { kind: "failed", attempts });
+			recordOutcome({ kind: "failed", attempts });
 			throw err;
 		}
 	};

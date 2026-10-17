@@ -26,7 +26,7 @@ import { sortWallets } from "../utils/sortWallets";
 import type { WalletId } from "../utils/WalletId";
 import { getAccounts$ } from "./accounts";
 import { resolveConfig } from "./config";
-import { abortedError } from "./errors";
+import { abortedError, walletPendingError } from "./errors";
 import { getHydratedSnapshot } from "./hydration";
 import { createKheopskitStore } from "./store";
 import type {
@@ -96,7 +96,11 @@ export const getKheopskit$ = <
 		let latest: KheopskitState | undefined;
 		let closed = false;
 		const waiters = new Set<StateWaiter>();
-		const wrapped = new WeakMap<BaseWallet, BaseWallet>();
+		const liveWaiters = new Set<(state: KheopskitState | undefined) => void>();
+		const wrapped = new WeakMap<
+			BaseWallet | WalletConnectWallet,
+			BaseWallet | WalletConnectWallet
+		>();
 
 		const abandon = (waiter: StateWaiter) => {
 			waiters.delete(waiter);
@@ -107,8 +111,7 @@ export const getKheopskit$ = <
 
 		const settleIn = (waiter: StateWaiter, state: KheopskitState) => {
 			const wallet = state.wallets.find((w) => w.id === waiter.walletId);
-			if (!wallet) abandon(waiter);
-			else if (wallet.isConnected === waiter.isConnected) {
+			if (!wallet || wallet.isConnected === waiter.isConnected) {
 				waiters.delete(waiter);
 				waiter.resolve();
 			}
@@ -128,12 +131,52 @@ export const getKheopskit$ = <
 				if (closed && waiters.has(waiter)) abandon(waiter);
 			});
 
+		const whenLive = (walletId: WalletId, signal: AbortSignal | undefined) =>
+			new Promise<BaseWallet | WalletConnectWallet>((resolve, reject) => {
+				const settle = (finish: () => void) => {
+					liveWaiters.delete(check);
+					signal?.removeEventListener("abort", onAbort);
+					finish();
+				};
+				const onAbort = () =>
+					settle(() => reject(abortedError(walletId, "connect")));
+				const check = (state: KheopskitState | undefined) => {
+					if (!state) return onAbort();
+					const live = state.wallets.find(
+						(w) => w.id === walletId && !w.isPlaceholder,
+					);
+					if (live) settle(() => resolve(live));
+					else if (!state.isHydrating)
+						settle(() => reject(walletPendingError(walletId)));
+				};
+				if (closed || signal?.aborted) return onAbort();
+				signal?.addEventListener("abort", onAbort, { once: true });
+				liveWaiters.add(check);
+				if (latest) check(latest);
+			});
+
+		const deferToLive = (
+			placeholder: BaseWallet | WalletConnectWallet,
+		): BaseWallet | WalletConnectWallet => ({
+			...placeholder,
+			connect: async (options) => {
+				const live = await whenLive(placeholder.id, options?.signal);
+				if (closed) throw abortedError(placeholder.id, "connect");
+				await live.connect(options);
+			},
+		});
+
 		const settleWithState = (
 			wallet: BaseWallet | WalletConnectWallet,
 		): BaseWallet | WalletConnectWallet => {
-			if (!isInjectedWallet(wallet)) return wallet;
 			const existing = wrapped.get(wallet);
 			if (existing) return existing;
+			if (wallet.isPlaceholder) {
+				const deferred = deferToLive(wallet);
+				wrapped.set(wallet, deferred);
+				return deferred;
+			}
+			if (!isInjectedWallet(wallet)) return wallet;
 			const settled: BaseWallet = {
 				...wallet,
 				connect: async (options) => {
@@ -155,11 +198,8 @@ export const getKheopskit$ = <
 
 		// Get live wallets and accounts
 		const liveWallets$ = getWallets$(kc, store);
-		const liveAccounts$ = combineLatest([
-			liveWallets$,
-			getAccounts$(kc, liveWallets$),
-		]).pipe(
-			map(([wallets, accounts]) => accountsOfConnected(wallets, accounts)),
+		const liveAccounts$ = getAccounts$(kc, liveWallets$).pipe(
+			map((accounts) => accounts.map(asLive)),
 		);
 
 		const isDiscovering$ = pageLoaded$.pipe(
@@ -203,7 +243,7 @@ export const getKheopskit$ = <
 		// Apply hydration buffer to wallets
 		const bufferedWallets$ = createHydrationBuffer(
 			cachedWallets,
-			liveWallets$,
+			liveWallets$.pipe(map((wallets) => wallets.map(asLive))),
 			kc.hydrationGracePeriod,
 			kc.hydrationTimeout,
 			(w) => w.id,
@@ -213,13 +253,10 @@ export const getKheopskit$ = <
 					? "connecting"
 					: live.status;
 				return {
-					...cached,
+					...live,
 					status,
 					isConnected: status === "connected",
-					error: live.error,
 					icon: cached.icon || getCachedIcon(cached.id) || live.icon,
-					connect: live.connect,
-					disconnect: live.disconnect,
 				};
 			},
 			// Transform cached-only items: add icon from localStorage cache
@@ -283,6 +320,7 @@ export const getKheopskit$ = <
 				distinctUntilChanged(statesEqual),
 				tap((state) => {
 					latest = state;
+					for (const check of liveWaiters) check(state);
 					for (const waiter of waiters) settleIn(waiter, state);
 				}),
 			)
@@ -347,6 +385,7 @@ export const getKheopskit$ = <
 			persistSub.unsubscribe();
 			closed = true;
 			for (const waiter of waiters) abandon(waiter);
+			for (const check of liveWaiters) check(undefined);
 		};
 	}).pipe(
 		logObservable("kheopskit$", { enabled: kc.debug, printValue: true }),
@@ -372,6 +411,16 @@ const sessionRestoring = (
 	isWalletConnectWallet(live) &&
 	live.status === "disconnected" &&
 	cached.status === "connecting";
+
+const flagged = new WeakMap<object, object>();
+
+const asLive = <T extends object>(item: T): T & { isPlaceholder: false } => {
+	const existing = flagged.get(item);
+	if (existing) return existing as T & { isPlaceholder: false };
+	const live = { ...item, isPlaceholder: false as const };
+	flagged.set(item, live);
+	return live;
+};
 
 /**
  * A remembered wallet that reads disconnected without an error is still
@@ -432,16 +481,6 @@ const persistedSnapshot = (
 			...previous.accounts.filter((a) => connecting.has(a.walletId)),
 		],
 	};
-};
-
-const accountsOfConnected = (
-	wallets: (BaseWallet | WalletConnectWallet)[],
-	accounts: BaseWalletAccount[],
-): BaseWalletAccount[] => {
-	const connected = new Set(
-		wallets.filter((w) => w.isConnected).map((w) => w.id),
-	);
-	return accounts.filter((account) => connected.has(account.walletId));
 };
 
 const arraysEqual = (a: string[], b: string[]) =>
@@ -513,9 +552,17 @@ const statesEqual = (a: KheopskitState, b: KheopskitState): boolean =>
 	a.accounts.length === b.accounts.length &&
 	a.wallets.every((w, i) => {
 		const other = b.wallets[i];
-		return !!other && walletUiKey(w) === walletUiKey(other);
+		return (
+			!!other &&
+			w.isPlaceholder === other.isPlaceholder &&
+			walletUiKey(w) === walletUiKey(other)
+		);
 	}) &&
 	a.accounts.every((acc, i) => {
 		const other = b.accounts[i];
-		return !!other && accountChangeKey(acc) === accountChangeKey(other);
+		return (
+			!!other &&
+			acc.isPlaceholder === other.isPlaceholder &&
+			accountChangeKey(acc) === accountChangeKey(other)
+		);
 	});

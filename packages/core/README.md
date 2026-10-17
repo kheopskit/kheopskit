@@ -31,6 +31,34 @@ pnpm add @reown/appkit                                           # WalletConnect
 A Polkadot-only dapp that doesn't use WalletConnect installs none of the
 Ethereum/Solana SDKs nor `@reown/appkit`, and none of their code is bundled.
 
+WalletConnect is a plugin from its own entry point, so only a dapp that imports
+`@kheopskit/core/walletconnect` bundles AppKit:
+
+```ts
+import { getKheopskit$ } from "@kheopskit/core";
+import { polkadot } from "@kheopskit/core/polkadot";
+import { walletConnect } from "@kheopskit/core/walletconnect";
+import { defineChain } from "@reown/appkit/networks";
+
+const polkadotNetwork = defineChain({
+  id: "91b171bb158e2d3848fa23a9f1c25182",
+  name: "Polkadot",
+  nativeCurrency: { name: "Polkadot", symbol: "DOT", decimals: 10 },
+  rpcUrls: { default: { http: ["https://rpc.polkadot.io"] } },
+  chainNamespace: "polkadot",
+  caipNetworkId: "polkadot:91b171bb158e2d3848fa23a9f1c25182",
+});
+
+const kheopskit$ = getKheopskit$({
+  platforms: [polkadot()],
+  walletConnect: walletConnect({
+    projectId: "<your Reown project id>",
+    metadata: { name: "My Dapp", description: "", url: "https://my.dapp", icons: [] },
+    networks: [polkadotNetwork],
+  }),
+});
+```
+
 ## Usage
 
 Platforms are enabled by passing **plugins** (imported from their entry points)
@@ -48,7 +76,7 @@ const kheopskit$ = getKheopskit$({
     ethereum(),
     solana({ chain: "solana:mainnet" }),
   ],
-  appName: "My Dapp", // shown by Polkadot extensions; defaults to walletConnect.metadata.name, then the hostname
+  appName: "My Dapp", // shown by Polkadot extensions; defaults to the WalletConnect metadata name, then the hostname
   autoReconnect: true,
 });
 
@@ -62,9 +90,24 @@ Each platform entry point also exports its SDK-precise types
 carries the SDK-free `KheopskitConfig`, `KheopskitState`, `BaseWallet` and
 `BaseWalletAccount`.
 
-> While `state.isHydrating` is `true`, wallets/accounts are cached placeholders
-> carrying only the base fields — SDK fields (`signer`, `client`,
-> provider/extension handles) are absent until hydration completes.
+While `state.isHydrating` is `true`, wallets and accounts restored from the
+cache are placeholders with `isPlaceholder: true`. Each platform type is a union
+on that flag, and a placeholder has no SDK handle (`txCreator`, `client`,
+`signer`, `provider`, `extension`, …), so the compiler makes you narrow before
+you sign:
+
+```ts
+if (account.isPlaceholder) return;
+await account.txCreator.signBytes(bytes);
+```
+
+A placeholder wallet's `connect()` waits for kheopskit to discover the live
+wallet and connects that one. It rejects with `WALLET_PENDING` if hydration
+ends first, and with `ABORTED` if its `signal` fires while it waits. Its
+`disconnect()` resolves at once. No item is a placeholder once `isHydrating`
+is `false`. In React, the provider's initial snapshot, shown until the first
+stream emission, has no stream to wait on, so a placeholder's `connect()` from
+it rejects with `WALLET_PENDING` at once.
 
 `wallet.connect()` and `wallet.disconnect()` are safe to call straight from UI
 code. Concurrent `connect()` calls on one wallet share one platform attempt, so
@@ -77,11 +120,9 @@ platform granted the connect changes nothing. A refused prompt rejects with
 platform error as `cause`. `connect()` resolves only after `kheopskit$` has
 emitted the wallet with `isConnected: true`. On platforms that list accounts
 asynchronously (Ethereum `eth_accounts`) the accounts may arrive in a later
-emission. No emission shows a disconnected wallet still listing accounts.
-Until a fix tracked for 6.0.0 lands, an Ethereum wallet that reconnects while
-another connected Ethereum wallet's `eth_accounts` request is pending may show
-the accounts of its previous connection for as long as that request goes
-unanswered, and `connect()` may resolve on that emission. `disconnect()`
+emission. No emission shows a disconnected wallet still listing accounts, or a
+connected wallet listing the accounts of a previous connection. Another
+wallet's pending `eth_accounts` request never delays them. `disconnect()`
 resolves once it has emitted `isConnected: false`, or once a later `connect()`
 or the end of the subscription makes that emission impossible. After the last
 subscriber has unsubscribed, `connect()` and `disconnect()` on a wallet object
@@ -95,6 +136,22 @@ already lists every Polkadot extension injected by then. Wait for it before you
 conclude that a wallet is missing. It is `false` from the first emission when you
 subscribe after `load`, and always `true` on the server. It says nothing about
 wallets that inject after `load`.
+
+`account.signRaw(data, options?)` on a Polkadot account signs arbitrary data
+with the wallet's raw signing call and resolves the hex signature. A string is
+sent as text with `type: "payload"` and a `Uint8Array` as `0x` hex with
+`type: "bytes"`; an explicit `options.type` is sent as given for either input.
+A hex-looking string is sent as text, so pass a `Uint8Array` for bytes and a
+string for a Sign-In With Substrate message. Talisman opens its Sign In screen
+for a string that parses as a SIWS message (`Version: 1.0.0`) and a generic
+Sign Request screen for hex; the screen follows the text `data`, not `type`.
+Enkrypt reads `type` as the encoding of `data`, so it needs the value the
+derived default sends. On a connected Polkadot wallet, `wallet.extension` is the raw object
+`enable()` returned, typed as `PolkadotInjected`. Use it for extension calls
+kheopskit does not wrap. `connect()` reads `accounts.get()` before it resolves,
+so the emission that first shows the wallet connected already lists its
+accounts, and a rejected `accounts.get()` fails the connect with
+`CONNECT_FAILED`.
 
 ## Persisted store
 
@@ -133,7 +190,9 @@ extension prompts once; a refusal forgets the wallet and the next load stays
 silent. Any other failure sets `error`, keeps the wallet remembered and is
 retried up to three times when discovery changes. A manual `connect()` or
 `disconnect()` on a remembered wallet ends its automatic reconnect for the
-session, so a disconnect the user makes is never undone.
+session, so a disconnect the user makes is never undone. Automatic
+reconnect also ends when the wallet disappears mid-attempt; the wallet stays
+remembered for the next load.
 
 `autoReconnect` governs injected wallets and is `true` by default. Pass `false`
 to reconnect none of them, or a
@@ -232,6 +291,125 @@ The store holds that subscription only while `store.observable` has subscribers.
 `store.destroy()` completes `store.observable`, which ends it.
 `store.rememberWallet(walletId)` and `store.forgetWallet(walletId)` edit the
 remembered list directly.
+
+## Testing
+
+`@kheopskit/core/testing` runs kheopskit in a test without a browser
+extension. It has no test-runner dependency, so it works with vitest and jest.
+
+- `createFakePolkadotExtension(options?)` installs a fake extension on
+  `window.injectedWeb3[name]`. `options.name` defaults to `"fake-extension"`.
+  `options.accounts` is the account list. `options.enable` sets how `enable()`
+  answers: `"resolve"` (the default) at once, `"reject"` at once with
+  `new Error("Rejected")`, which `connect()` reports as `USER_REJECTED`, or
+  `"hold"` until the test calls `resolveEnable()` or `rejectEnable(error?)`.
+- The fake returns `{ name, walletId, setAccounts, resolveEnable, rejectEnable,
+  enableCalls, signRawCalls, uninstall }`. `setAccounts(accounts)` pushes the
+  list to every `accounts.subscribe` listener. `enableCalls()` lists the app
+  name of each `enable()` call. `signRaw` and `signPayload` resolve
+  `FAKE_SIGNATURE`, and `signRawCalls()` lists what `signRaw` received.
+- `createMemoryStorage()` returns a `SyncableStorage` held in memory, for
+  `createKheopskitStore({ storage })`. Stores created on the same instance see
+  each other's writes.
+- `cachedWalletOf(walletId, name)` and `cachedAccountOf(wallet, address,
+  name?)` build the entries `store.setCachedState(wallets, accounts)` takes, so
+  a test seeds a previous session without writing the persisted shape.
+
+A vitest test that seeds a remembered wallet and checks that it reconnects:
+
+```ts
+import {
+  createKheopskitStore,
+  getKheopskit$,
+  type KheopskitState,
+  type KheopskitStore,
+} from "@kheopskit/core";
+import { polkadot } from "@kheopskit/core/polkadot";
+import {
+  cachedAccountOf,
+  cachedWalletOf,
+  createFakePolkadotExtension,
+  createMemoryStorage,
+  type FakePolkadotExtension,
+} from "@kheopskit/core/testing";
+import type { Subscription } from "rxjs";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+
+const alice = {
+  address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+  name: "Alice",
+  type: "sr25519" as const,
+};
+
+let talisman: FakePolkadotExtension;
+let store: KheopskitStore;
+let subscription: Subscription;
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  talisman = createFakePolkadotExtension({ name: "talisman", accounts: [alice] });
+  store = createKheopskitStore({ storage: createMemoryStorage() });
+});
+
+afterEach(() => {
+  talisman.uninstall();
+  subscription.unsubscribe();
+  store.destroy();
+  vi.useRealTimers();
+});
+
+it("reconnects the wallet the user connected last time", async () => {
+  const wallet = cachedWalletOf(talisman.walletId, "Talisman");
+  store.rememberWallet(talisman.walletId);
+  store.setCachedState([wallet], [cachedAccountOf(wallet, alice.address, alice.name)]);
+
+  let state: KheopskitState | undefined;
+  subscription = getKheopskit$({ platforms: [polkadot()] }, { store }).subscribe(
+    (next) => {
+      state = next;
+    },
+  );
+  await vi.advanceTimersByTimeAsync(1000);
+
+  expect(talisman.enableCalls()).toHaveLength(1);
+  expect(state?.wallets.map((w) => [w.id, w.isConnected])).toEqual([
+    ["polkadot:talisman", true],
+  ]);
+  expect(state?.accounts.map((a) => a.name)).toEqual(["Alice"]);
+});
+```
+
+
+Tear down with three calls:
+
+```ts
+talisman.uninstall();
+subscription.unsubscribe();
+store.destroy();
+```
+
+Unsubscribing from `getKheopskit$` stops every timer it started, among them
+discovery polling, the hydration grace period and the 1 second debounced
+persist. Without it, a persist can write to storage after the test ended. `store.destroy()` ends
+the store's storage subscription. `uninstall()` removes the fake from
+`window.injectedWeb3`, and removes `window.injectedWeb3` once it is empty.
+
+With fake timers, advance time with `vi.advanceTimersByTimeAsync` (jest:
+`jest.advanceTimersByTimeAsync`). Kheopskit settles connects and reconnects in
+promises, and the async variants run those microtasks between timers. The
+synchronous variants leave them pending.
+
+When the code under test calls `getKheopskit$` without a `store`, it uses
+`localStorage`. Seed it through a store on the same storage, then destroy that
+store:
+
+```ts
+const seed = createKheopskitStore();
+seed.rememberWallet("polkadot:talisman");
+seed.destroy();
+```
+
+The kit fakes Polkadot extensions only.
 
 ## License
 

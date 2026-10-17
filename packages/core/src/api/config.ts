@@ -1,3 +1,4 @@
+import { KheopskitError } from "./errors";
 import type { KheopskitConfig, KheopskitPlatform } from "./types";
 
 /**
@@ -37,6 +38,19 @@ export const resolveConfig = <
 				'imported from "@kheopskit/core/<platform>"). ' +
 				`Invalid entries: ${JSON.stringify(invalidPlatforms)}. ` +
 				'String platform names like "polkadot" were removed in v4 — see MIGRATING_TO_V4.md.',
+		);
+	}
+
+	if (
+		config?.walletConnect !== undefined &&
+		typeof (config.walletConnect as { getWallet$?: unknown } | null)
+			?.getWallet$ !== "function"
+	) {
+		throw new KheopskitError(
+			"INVALID_CONFIG",
+			"config.walletConnect must be created by walletConnect() imported from " +
+				'"@kheopskit/core/walletconnect", e.g. walletConnect: walletConnect({ projectId, metadata, networks }). ' +
+				"Raw WalletConnect options were removed in v6, see MIGRATING_TO_V6.md.",
 		);
 	}
 
