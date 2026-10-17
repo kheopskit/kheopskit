@@ -1,7 +1,7 @@
 # @kheopskit/react
 
-React bindings for [Kheopskit](https://github.com/kheopskit/kheopskit) — list
-wallets and accounts across Polkadot, Ethereum and Solana, with injected wallets
+React bindings for [Kheopskit](https://github.com/kheopskit/kheopskit). They
+list wallets and accounts across Polkadot, Ethereum and Solana, with injected wallets
 and WalletConnect (Reown AppKit).
 
 The framework-agnostic core lives in
@@ -13,10 +13,17 @@ https://github.com/kheopskit/kheopskit
 > (and WalletConnect) optional peer dependencies. See
 > [MIGRATING_TO_V4.md](../core/MIGRATING_TO_V4.md).
 
+> **Upgrading from v5?** v6 makes `connect()` shared, idempotent and
+> abortable, types every rejection, adds `status`, `isDiscovering`,
+> `isPlaceholder` and `signRaw`, and moves WalletConnect to a plugin. See
+> [MIGRATING_TO_V6.md](https://github.com/kheopskit/kheopskit/blob/main/packages/core/MIGRATING_TO_V6.md).
+> The [core README](https://github.com/kheopskit/kheopskit/blob/main/packages/core/README.md#wallet-lifecycle)
+> explains the wallet lifecycle that `useWallets()` reflects.
+
 ## Install
 
-`rxjs` is always required; every platform SDK (and WalletConnect) is an optional
-peer dependency — install only what you use:
+`rxjs` is always required. Every platform SDK (and WalletConnect) is an
+optional peer dependency, so install only what you use:
 
 ```bash
 pnpm add @kheopskit/core @kheopskit/react rxjs
