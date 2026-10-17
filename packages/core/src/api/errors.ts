@@ -96,45 +96,40 @@ export const isEip1193UserRejection = (error: unknown): boolean =>
 	(error as { code?: unknown }).code === EIP1193_USER_REJECTED_REQUEST;
 
 type RefusalMessage = {
-	message: string;
+	pattern: RegExp;
 	wallet: string;
-	evidence: "live" | "source" | "inferred";
+	evidence: "live" | "inferred";
 };
 
 /**
- * Messages Polkadot extensions and Wallet Standard wallets reject a refused
- * connect prompt with. They send a plain `Error`, so the message is the only
- * signal. `evidence` records how each row was established.
+ * How Polkadot extensions and Wallet Standard wallets reject a refused connect
+ * prompt. They send a plain `Error`, so the message is the only signal.
+ * `evidence` records whether the row was observed live or inferred from the
+ * wallet's source or documentation.
  */
 const REFUSAL_MESSAGES: readonly RefusalMessage[] = [
 	{
-		message: "Rejected",
-		wallet: "Talisman 3.11.0, Reject button (sitesAuthorised/handler.ts)",
-		evidence: "source",
+		pattern: /^Site .+ has not been authorised for Talisman yet$/,
+		wallet: "Talisman 3.11.0, Reject button or prompt window closed",
+		evidence: "live",
 	},
 	{
-		message: "Cancelled",
-		wallet: "Talisman 3.11.0, popup closed (libs/requests/store.ts)",
-		evidence: "source",
-	},
-	{
-		message: "Rejected",
+		pattern: /^Rejected$/,
 		wallet: "polkadot-js extension",
 		evidence: "inferred",
 	},
-	{ message: "Rejected", wallet: "SubWallet", evidence: "inferred" },
+	{ pattern: /^Rejected$/, wallet: "SubWallet", evidence: "inferred" },
 	{
-		message: "User rejected the request.",
+		pattern: /^User rejected the request\.$/,
 		wallet: "Phantom (Wallet Standard)",
 		evidence: "inferred",
 	},
 ];
 
-/** Matches the exact refusal messages listed in the table above. */
 export const isRefusalMessage = (error: unknown): boolean => {
 	const message = (error as { message?: unknown } | null | undefined)?.message;
 	return (
 		typeof message === "string" &&
-		REFUSAL_MESSAGES.some((row) => row.message === message)
+		REFUSAL_MESSAGES.some((row) => row.pattern.test(message))
 	);
 };

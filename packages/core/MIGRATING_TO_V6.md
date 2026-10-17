@@ -50,8 +50,11 @@ This guide grows with each v6 change. Each section covers one area.
   `disconnect()` was called while it pended, or the last `kheopskit$`
   subscriber unsubscribed.
 - `USER_REJECTED`: the user refused the wallet prompt. `cause` holds the
-  platform error: an EIP-1193 error with `code: 4001` on Ethereum, the
-  extension's `Error("Rejected")` or `Error("Cancelled")` on Polkadot.
+  platform error: an EIP-1193 error with `code: 4001` on Ethereum; on
+  Polkadot the extension's own `Error`, for Talisman
+  `Site <url> has not been authorised for Talisman yet` (observed live for
+  both the Reject button and a closed prompt), for polkadot-js and SubWallet
+  `Rejected`.
 - `CONNECT_FAILED`: any other platform failure. `cause` holds the platform
   error.
 

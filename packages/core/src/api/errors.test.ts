@@ -18,14 +18,16 @@ describe("connect rejection classification", () => {
 		expect(error).toMatchObject({ code: "USER_REJECTED", walletId, cause });
 	});
 
-	it("maps Talisman's Reject button message to USER_REJECTED", () => {
-		const cause = new Error("Rejected");
+	it("maps Talisman's live refusal message to USER_REJECTED", () => {
+		const cause = new Error(
+			"Site http://localhost:3002/ has not been authorised for Talisman yet",
+		);
 		const error = toConnectError(cause, walletId, isRefusalMessage);
 		expect(error).toMatchObject({ code: "USER_REJECTED", walletId, cause });
 	});
 
-	it("maps Talisman's closed popup message to USER_REJECTED", () => {
-		const cause = new Error("Cancelled");
+	it("maps polkadot-js's Rejected message to USER_REJECTED", () => {
+		const cause = new Error("Rejected");
 		expect(toConnectError(cause, walletId, isRefusalMessage)).toMatchObject({
 			code: "USER_REJECTED",
 			cause,
@@ -39,11 +41,16 @@ describe("connect rejection classification", () => {
 		expect(error.message).toContain(walletId);
 	});
 
-	it("does not read polkadot-js's pending-request refusal as a user rejection", () => {
-		const cause = new Error("Pending authorisation request already exists");
-		expect(toConnectError(cause, walletId, isRefusalMessage).code).toBe(
-			"CONNECT_FAILED",
-		);
+	it("does not read other extension failures as a user rejection", () => {
+		for (const message of [
+			"Pending authorisation request already exists",
+			"No Talisman wallet accounts are authorised to connect to http://localhost:3002/",
+			"Rejected by someone else",
+		]) {
+			expect(
+				toConnectError(new Error(message), walletId, isRefusalMessage).code,
+			).toBe("CONNECT_FAILED");
+		}
 	});
 
 	it("does not read a 4001 message without the code as an EIP-1193 rejection", () => {
