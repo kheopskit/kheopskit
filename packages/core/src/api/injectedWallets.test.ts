@@ -430,6 +430,55 @@ describe("createInjectedWallets$", () => {
 		expect(connect).toHaveBeenCalledTimes(1);
 	}, 1000);
 
+	it("a teardown in the microtask after the pending disconnect settles still rejects the queued connect ABORTED", async () => {
+		const platformDisconnect = createDeferred<void>();
+		const connect = vi.fn().mockResolvedValue("handle");
+		const { sub, wallet } = setup({
+			connect,
+			disconnect: () => platformDisconnect.promise,
+		});
+
+		await wallet().connect();
+		const disconnecting = wallet().disconnect();
+		capReentries(disconnecting, 50);
+		const queued = wallet().connect();
+		disconnecting.then(() => sub.unsubscribe());
+		platformDisconnect.resolve();
+
+		expect(await settlementOf(queued)).toBe("rejected");
+		await expect(queued).rejects.toMatchObject({ code: "ABORTED", walletId });
+		expect(connect).toHaveBeenCalledTimes(1);
+		expect(rememberedWalletIds()).toEqual([]);
+	});
+
+	it("a platform disconnect that rejects after teardown leaves the wallet forgotten and a stale connect rejects ABORTED", async () => {
+		const platformDisconnect = createDeferred<void>();
+		const connect = vi.fn().mockResolvedValue("handle");
+		const { sub, wallet, emissions } = setup({
+			connect,
+			disconnect: () => platformDisconnect.promise,
+		});
+
+		await wallet().connect();
+		const disconnecting = wallet().disconnect();
+		const stale = wallet();
+		sub.unsubscribe();
+		const emitted = emissions.length;
+		const failure = new Error("extension busy");
+		platformDisconnect.reject(failure);
+
+		await expect(disconnecting).rejects.toBe(failure);
+		expect(rememberedWalletIds()).toEqual([]);
+		const reconnect = stale.connect();
+		expect(await settlementOf(reconnect)).toBe("rejected");
+		await expect(reconnect).rejects.toMatchObject({
+			code: "ABORTED",
+			walletId,
+		});
+		expect(connect).toHaveBeenCalledTimes(1);
+		expect(emissions.length).toBe(emitted);
+	});
+
 	it("a platform disconnect that resolves after teardown forgets the wallet without touching the stream's state", async () => {
 		const platformDisconnect = createDeferred<void>();
 		const onDisconnected = vi.fn();
