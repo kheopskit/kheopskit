@@ -34,7 +34,16 @@ imports it bundles AppKit:
 import { createKheopskit } from "@kheopskit/react";
 import { polkadot } from "@kheopskit/core/polkadot";
 import { walletConnect } from "@kheopskit/core/walletconnect";
-import { polkadot as polkadotNetwork } from "@reown/appkit/networks";
+import { defineChain } from "@reown/appkit/networks";
+
+const polkadotNetwork = defineChain({
+  id: "91b171bb158e2d3848fa23a9f1c25182",
+  name: "Polkadot",
+  nativeCurrency: { name: "Polkadot", symbol: "DOT", decimals: 10 },
+  rpcUrls: { default: { http: ["https://rpc.polkadot.io"] } },
+  chainNamespace: "polkadot",
+  caipNetworkId: "polkadot:91b171bb158e2d3848fa23a9f1c25182",
+});
 
 export const { KheopskitProvider, useWallets, useAccounts } = createKheopskit({
   platforms: [polkadot()],

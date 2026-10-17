@@ -51,7 +51,16 @@ To enable WalletConnect, pass the plugin to `config.walletConnect`:
 import { getKheopskit$ } from "@kheopskit/core";
 import { polkadot } from "@kheopskit/core/polkadot";
 import { walletConnect } from "@kheopskit/core/walletconnect";
-import { polkadot as polkadotNetwork } from "@reown/appkit/networks";
+import { defineChain } from "@reown/appkit/networks";
+
+const polkadotNetwork = defineChain({
+  id: "91b171bb158e2d3848fa23a9f1c25182",
+  name: "Polkadot",
+  nativeCurrency: { name: "Polkadot", symbol: "DOT", decimals: 10 },
+  rpcUrls: { default: { http: ["https://rpc.polkadot.io"] } },
+  chainNamespace: "polkadot",
+  caipNetworkId: "polkadot:91b171bb158e2d3848fa23a9f1c25182",
+});
 
 const kheopskit$ = getKheopskit$({
   platforms: [polkadot()],
