@@ -646,11 +646,47 @@ describe("getKheopskit$ hydration end", () => {
 		injected.names = ["talisman"];
 		await fireLoad();
 		expect(await hydratingAt(states, 699)).toBe(true);
+		expect(walletIn(states, talisman)?.status).toBe("connecting");
 		expect(await hydratingAt(states, 1)).toBe(false);
 		expect(walletIn(states, talisman)?.status).toBe("connected");
 		expect(states.at(-1)?.accounts.map((a) => a.address)).toEqual([
 			ALICE.address,
 			BOB.address,
+		]);
+	});
+
+	it("hydration waits for the accounts of a reconnected wallet that lists them later", async () => {
+		enableAnswers.set(
+			"talisman",
+			() =>
+				new Promise((resolve) =>
+					setTimeout(
+						() =>
+							resolve({
+								getAccounts: () => [],
+								subscribe: (listener: (accounts: FakeAccount[]) => void) => {
+									const timer = setTimeout(() => listener([ALICE]), 200);
+									return () => clearTimeout(timer);
+								},
+								disconnect: vi.fn(),
+							}),
+						1000,
+					),
+				),
+		);
+		const store = createKheopskitStore();
+		cacheConnected(store, talisman, cachedTalismanAccounts);
+		const states = subscribe({ hydrationGracePeriod: 500 }, store);
+
+		expect(await hydratingAt(states, 1100)).toBe(true);
+		expect(walletIn(states, talisman)?.status).toBe("connected");
+		expect(states.at(-1)?.accounts.map((a) => a.address)).toEqual([
+			"5CachedOne",
+			"5CachedTwo",
+		]);
+		expect(await hydratingAt(states, 100)).toBe(false);
+		expect(states.at(-1)?.accounts.map((a) => a.address)).toEqual([
+			ALICE.address,
 		]);
 	});
 
