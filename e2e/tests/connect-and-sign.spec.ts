@@ -91,6 +91,29 @@ test.describe("polkadot mock wallet", () => {
 		).toBeVisible();
 		await expect(accountRow).not.toBeVisible();
 	});
+
+	test("clicking Connect twice quickly calls enable once", async ({ page }) => {
+		await page.goto("/");
+		await page.evaluate(() => {
+			(window as { __dotEnableDelayMs?: number }).__dotEnableDelayMs = 1000;
+		});
+
+		const walletRow = getWalletsTable(page).getByRole("row", {
+			name: /mock-polkadot-wallet/,
+		});
+		const connect = walletRow.getByRole("button", { name: "Connect" });
+		await connect.click();
+		await connect.click();
+
+		await expect(
+			walletRow.getByRole("button", { name: "Disconnect" }),
+		).toBeVisible();
+		expect(
+			await page.evaluate(
+				() => (window as { __dotEnableCalls?: number }).__dotEnableCalls,
+			),
+		).toBe(1);
+	});
 });
 
 test.describe("solana mock wallet", () => {
