@@ -17,15 +17,15 @@ const walletsTable = (page: Page) =>
 		.getByRole("table")
 		.filter({ has: page.getByRole("columnheader", { name: "Accounts" }) });
 
-/** Names of the wallets in the persisted cache, across both storage backends. */
-const cachedWalletNames = (page: Page): Promise<string[]> =>
+/** Names of the wallets the persisted cache holds as connected, across both storage backends. */
+const cachedConnectedWalletNames = (page: Page): Promise<string[]> =>
 	page.evaluate(() => {
 		try {
 			const raw = localStorage.getItem("kheopskit");
 			if (raw)
-				return (JSON.parse(raw).cachedWallets ?? []).map(
-					(w: { name: string }) => w.name,
-				);
+				return (JSON.parse(raw).cachedWallets ?? [])
+					.filter((w: { isConnected: boolean }) => w.isConnected)
+					.map((w: { name: string }) => w.name);
 		} catch {}
 		const entry = document.cookie
 			.split("; ")
@@ -34,7 +34,9 @@ const cachedWalletNames = (page: Page): Promise<string[]> =>
 		const value = JSON.parse(
 			decodeURIComponent(entry.slice("kheopskit=".length)),
 		);
-		return (value.w ?? []).map((w: [string, string]) => w[1]);
+		return (value.w ?? [])
+			.filter((w: [string, string, number]) => w[2] === 1)
+			.map((w: [string, string]) => w[1]);
 	});
 
 test("a remembered wallet shows Connecting… before Disconnect after a reload", async ({
@@ -53,7 +55,7 @@ test("a remembered wallet shows Connecting… before Disconnect after a reload",
 	await row.getByRole("button", { name: "Connect" }).click();
 	await expect(row.getByRole("button", { name: "Disconnect" })).toBeVisible();
 	await expect
-		.poll(() => cachedWalletNames(page), { timeout: 15_000 })
+		.poll(() => cachedConnectedWalletNames(page), { timeout: 15_000 })
 		.toContain("mock-polkadot-wallet");
 
 	await page.reload();
