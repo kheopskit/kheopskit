@@ -34,6 +34,7 @@ This guide grows with each v6 change. Each section covers one area.
 | `ethereum` accounts | signer built with type `ethereum`, 64-byte mock signature | signer built with `ecdsa`, 65-byte mock signature |
 | Extension account subscription | kept after disconnect | released on disconnect and on teardown |
 | `readonly`, `partOfPortfolio` (Talisman, its own origins) | present at runtime, not typed | typed on `PolkadotAccount` |
+| Test kit | none; apps fake `injectedWeb3` themselves | `@kheopskit/core/testing` |
 
 ---
 
@@ -491,3 +492,34 @@ shrinks. A Polkadot-only Vite app built against 5.3.0 and against 6.0.0, with
 
 Without `@reown/appkit` installed, 5.3.0 builds a stub chunk that throws
 `Could not resolve "@reown/appkit/core"`; 6.0.0 builds none.
+
+---
+
+## 6. Test kit
+
+v6 adds `@kheopskit/core/testing` (see the
+[core README](README.md#testing)). It replaces the `injectedWeb3` fakes that
+signet and talisman-web keep in `domains/extension/fakeInjectedWeb3.ts`.
+
+| App helper | Kit |
+|------------|-----|
+| `fakeWallet(accounts)` in an `injectedWeb3` map passed to `vi.stubGlobal` | `createFakePolkadotExtension({ name, accounts })`, which installs itself |
+| `publish(accounts)` | `setAccounts(accounts)` |
+| `enable.mock.calls` | `enableCalls()`, one app name per call |
+| the `signRaw` mock (signet) and `signer.signRaw` (talisman-web) | `signRawCalls()`; signatures resolve `FAKE_SIGNATURE` |
+| `heldWallet(accounts)` with `approve()` and `refuse()` (signet) | `{ enable: "hold" }` with `resolveEnable()` and `rejectEnable()`, which rejects with `new Error("Rejected")` |
+| `refusingWallet()` (talisman-web) | `{ enable: "reject" }` |
+| `enableDelay.ms` (signet) | `{ enable: "hold" }`, then `resolveEnable()` after advancing the timers |
+| `localStorage.setItem("kheopskit", JSON.stringify(cache))` (signet's `load`) | `store.rememberWallet(id)` and `store.setCachedState([cachedWalletOf(id, name)], [cachedAccountOf(wallet, address, name)])` |
+| `vi.doMock("@kheopskit/core")` wrapping `getKheopskit$` in `takeUntil(disposed$)` (signet's `load`) | unsubscribe from `getKheopskit$` and `store.destroy()`; unsubscribing stops kheopskit's timers |
+| `vi.unstubAllGlobals()` | `uninstall()` on each fake |
+
+Two things stay in the apps. The kit has no hook to make `disconnect` fail,
+so signet's `disconnectFailure` keeps its `getKheopskit$` wrapper. An extension
+that returns a broken `enable()` result, such as signet's
+`broken.enable.mockResolvedValue(...)`, stays a hand-written entry next to the
+fakes on `window.injectedWeb3`.
+
+An app that calls `getKheopskit$` without a `store` persists to
+`localStorage`. Seed it with `createKheopskitStore()`, then call `destroy()` on
+that seeding store. The seeded data uses `remembered`, not v5's `autoReconnect`.

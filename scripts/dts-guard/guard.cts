@@ -3,7 +3,13 @@
  * land on the CJS declarations (`dist/index.d.ts`). Keep in sync with guard.mts.
  */
 
-import type { KheopskitConfig, KheopskitPlatform } from "@kheopskit/core";
+import type {
+	createKheopskitStore,
+	KheopskitConfig,
+	KheopskitPlatform,
+	SyncableStorage,
+	WalletId,
+} from "@kheopskit/core";
 import type {
 	EthereumAccount,
 	EthereumWallet,
@@ -25,6 +31,12 @@ import type {
 	SolanaWallet,
 	solana,
 } from "@kheopskit/core/solana";
+import type {
+	cachedAccountOf,
+	cachedWalletOf,
+	createFakePolkadotExtension,
+	createMemoryStorage,
+} from "@kheopskit/core/testing";
 import type { walletConnect } from "@kheopskit/core/walletconnect";
 import type {
 	createKheopskit,
@@ -102,3 +114,30 @@ export const rawWalletConnectOptions: KheopskitConfig["walletConnect"] = {
 	// @ts-expect-error raw WalletConnect options are no longer a valid config value
 	projectId: "x",
 };
+
+export type TestingIsTyped = Expect<
+	NoneAny<
+		[
+			ReturnType<typeof createFakePolkadotExtension>,
+			ReturnType<typeof createMemoryStorage>,
+			ReturnType<typeof cachedWalletOf>,
+			ReturnType<typeof cachedAccountOf>,
+		]
+	>
+>;
+
+declare const createStore: typeof createKheopskitStore;
+declare const memoryStorage: typeof createMemoryStorage;
+declare const fakeExtension: typeof createFakePolkadotExtension;
+declare const walletOf: typeof cachedWalletOf;
+declare const accountOf: typeof cachedAccountOf;
+const storage: SyncableStorage = memoryStorage();
+const seeded = createStore({ storage });
+const fake = fakeExtension({ name: "talisman", enable: "hold" });
+const fakeWalletId: WalletId = fake.walletId;
+const talisman = walletOf(fake.walletId, "Talisman");
+seeded.rememberWallet(fakeWalletId);
+export const seededState = seeded.setCachedState(
+	[talisman],
+	[accountOf(talisman, "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY")],
+);
