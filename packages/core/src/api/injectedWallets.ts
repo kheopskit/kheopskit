@@ -137,7 +137,7 @@ export const createInjectedWallets$ = <
 		const connections$ = new BehaviorSubject<
 			ReadonlyMap<WalletId, Connection<THandle>>
 		>(new Map());
-		let closed = false;
+		const teardown = new AbortController();
 
 		const setConnection = (
 			walletId: WalletId,
@@ -174,8 +174,8 @@ export const createInjectedWallets$ = <
 							return;
 						}
 						setConnection(walletId, { status: "connected", handle });
-						store.rememberWallet(walletId);
 						resolve();
+						store.rememberWallet(walletId);
 					},
 					(error) => {
 						connecting.answered = true;
@@ -206,6 +206,24 @@ export const createInjectedWallets$ = <
 			return join(connecting, walletId, signal);
 		};
 
+		const untilSettled = (
+			disconnecting: Promise<void>,
+			walletId: WalletId,
+			signal: AbortSignal | undefined,
+		): Promise<void> =>
+			new Promise<void>((resolve, reject) => {
+				const signals = signal ? [teardown.signal, signal] : [teardown.signal];
+				const settle = () => {
+					for (const s of signals) s.removeEventListener("abort", settle);
+					if (signals.some((s) => s.aborted)) reject(abortedError(walletId));
+					else resolve();
+				};
+				if (signals.some((s) => s.aborted)) return settle();
+				for (const s of signals)
+					s.addEventListener("abort", settle, { once: true });
+				disconnecting.then(settle, settle);
+			});
+
 		const connect = (
 			source: TSource,
 			walletId: WalletId,
@@ -214,11 +232,11 @@ export const createInjectedWallets$ = <
 			const current = connections$.value.get(walletId);
 			if (current?.status === "connected") {
 				if (!current.disconnecting) return Promise.resolve();
-				const retry = () =>
-					closed
-						? Promise.reject(abortedError(walletId))
-						: connect(source, walletId, options);
-				return current.disconnecting.then(retry, retry);
+				return untilSettled(
+					current.disconnecting,
+					walletId,
+					options?.signal,
+				).then(() => connect(source, walletId, options));
 			}
 			if (options?.signal?.aborted)
 				return Promise.reject(abortedError(walletId));
@@ -236,19 +254,21 @@ export const createInjectedWallets$ = <
 			}
 			if (current.disconnecting) return current.disconnecting;
 
+			store.forgetWallet(walletId);
 			const disconnecting = (async () => {
 				try {
 					await adapter.disconnect?.(source, walletId);
 				} catch (error) {
-					if (!closed)
+					if (!teardown.signal.aborted) {
 						setConnection(walletId, {
 							status: "connected",
 							handle: current.handle,
 						});
+						store.rememberWallet(walletId);
+					}
 					throw error;
 				}
-				store.forgetWallet(walletId);
-				if (closed) return;
+				if (teardown.signal.aborted) return;
 				setConnection(walletId, undefined);
 				adapter.onDisconnected?.(walletId);
 			})();
@@ -279,7 +299,7 @@ export const createInjectedWallets$ = <
 			.subscribe(subscriber);
 
 		return () => {
-			closed = true;
+			teardown.abort();
 			for (const connection of connections$.value.values())
 				if (connection.status === "connecting") connection.abort();
 			sub.unsubscribe();
