@@ -19,8 +19,9 @@ export type KheopskitErrorCode =
 	/** The wallet's connect call failed for another reason. `cause` holds the platform error. */
 	| "CONNECT_FAILED"
 	/**
-	 * `connect()` was called on a placeholder wallet restored from the cache,
-	 * and hydration ended without kheopskit discovering that wallet.
+	 * `connect()` was called on a placeholder wallet restored from the cache:
+	 * on `kheopskit$`, hydration ended without kheopskit discovering that
+	 * wallet; on `getHydratedSnapshot`, always.
 	 */
 	| "WALLET_PENDING"
 	/** The wallet does not advertise a capability kheopskit needs to proceed. */

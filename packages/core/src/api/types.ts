@@ -83,9 +83,10 @@ export type BaseWallet = {
 	/**
 	 * `true` for a wallet restored from the cache that kheopskit has not
 	 * discovered yet: its SDK handle and `sourceId` are absent and it is never
-	 * connected. Its `connect()` waits for the live wallet and connects that
-	 * one; its `disconnect()` resolves at once. Set on every wallet of
-	 * `kheopskit$` and of the hydrated snapshot; plugins leave it unset.
+	 * connected. On `kheopskit$` its `connect()` waits for the live wallet and
+	 * connects that one; on `getHydratedSnapshot` it rejects with
+	 * `WALLET_PENDING`. Its `disconnect()` resolves at once. Set on every wallet
+	 * of `kheopskit$` and of the hydrated snapshot; plugins leave it unset.
 	 */
 	isPlaceholder?: boolean;
 	/**

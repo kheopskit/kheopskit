@@ -30,24 +30,16 @@ const lookupWalletIcon = (platform: string, identifier: string): string => {
 	return "";
 };
 
-/**
- * Converts a CachedWallet to a placeholder wallet for SSR hydration display.
- *
- * The placeholder carries only the SDK-free {@link BaseWallet} fields; the real
- * wallet (with its injected provider/extension/standard-wallet handle) replaces
- * it once it loads. `kheopskit$` defers its `connect` to the live wallet; on a
- * bare snapshot `connect` rejects with `WALLET_PENDING`.
- */
+type PlaceholderOf<W> = W & { isPlaceholder: true; isConnected: false };
+
 export const hydrateWallet = (
 	cached: CachedWallet,
-): BaseWallet | WalletConnectWallet => {
+): PlaceholderOf<BaseWallet | WalletConnectWallet> => {
 	const connect = async () => {
 		throw walletPendingError(cached.id);
 	};
 	const disconnect = async () => {};
 
-	// `WalletConnectWallet` still types `appKit` as present on a placeholder;
-	// the cast hides its absence until that handle joins the union.
 	if (cached.type === "walletconnect") {
 		return {
 			id: cached.id,
@@ -60,7 +52,7 @@ export const hydrateWallet = (
 			isConnected: false,
 			connect,
 			disconnect,
-		} as unknown as WalletConnectWallet;
+		} as unknown as PlaceholderOf<WalletConnectWallet>;
 	}
 
 	const { platform, identifier } = parseWalletId(cached.id);
@@ -79,17 +71,9 @@ export const hydrateWallet = (
 	};
 };
 
-/**
- * Converts a CachedAccount to a placeholder account for SSR hydration display.
- *
- * The placeholder carries the SDK-free {@link BaseWalletAccount} fields plus the
- * plain, serializable platform data that lives in the cache — Ethereum `chainId`
- * and the Polkadot key `type`. Those render immediately on reload (no blank →
- * value flicker) and match what the live account will report. Only the SDK
- * handles (`client`/`signer`/`txCreator`) are absent until the real account
- * replaces this placeholder.
- */
-export const hydrateAccount = (cached: CachedAccount): BaseWalletAccount => ({
+export const hydrateAccount = (
+	cached: CachedAccount,
+): BaseWalletAccount & { isPlaceholder: true } => ({
 	id: cached.id as WalletAccountId,
 	isPlaceholder: true,
 	platform: cached.platform,
