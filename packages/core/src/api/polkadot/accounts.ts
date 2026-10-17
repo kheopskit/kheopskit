@@ -72,10 +72,19 @@ const getInjectedWalletAccounts$ = (
 			} as PolkadotAccount;
 		};
 
+		const toAccounts = (accounts: PolkadotInjectedAccount[]) =>
+			accounts.flatMap((account) => {
+				try {
+					return [toAccount(account)];
+				} catch {
+					return [];
+				}
+			});
+
 		let emitted = false;
 		const emit = (accounts: PolkadotInjectedAccount[]) => {
 			emitted = true;
-			subscriber.next(accounts.map(toAccount));
+			subscriber.next(toAccounts(accounts));
 		};
 
 		const unsubscribe = injected.accounts.subscribe(emit);

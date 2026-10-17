@@ -13,17 +13,32 @@ import type { KheopskitStore } from "../store";
 import type { KheopskitConfig } from "../types";
 import type { PolkadotInjected, PolkadotInjectedWallet } from "./types";
 
+type EnableResult = Omit<PolkadotInjected, "signer"> & {
+	signer: Partial<PolkadotInjected["signer"]>;
+};
+
 type InjectedWeb3Window = {
 	injectedWeb3?: Record<
 		string,
-		{ enable(appName: string): Promise<PolkadotInjected> } | undefined
+		{ enable(appName: string): Promise<EnableResult> } | undefined
 	>;
 };
+
+const isPolkadotInjected = (
+	injected: EnableResult,
+): injected is PolkadotInjected =>
+	typeof injected.accounts.get === "function" &&
+	typeof injected.accounts.subscribe === "function" &&
+	typeof injected.signer.signPayload === "function" &&
+	typeof injected.signer.signRaw === "function";
 
 const enableExtension = async (identifier: string, appName: string) => {
 	const entry = (globalThis as InjectedWeb3Window).injectedWeb3?.[identifier];
 	if (!entry) throw new Error(`Unavailable extension: "${identifier}"`);
-	return entry.enable(appName);
+	const injected = await entry.enable(appName);
+	if (!isPolkadotInjected(injected))
+		throw new Error(`Unsupported extension: "${identifier}"`);
+	return injected;
 };
 
 const getInjectedWalletsIds = () =>
