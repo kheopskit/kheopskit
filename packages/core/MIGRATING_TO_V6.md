@@ -50,6 +50,7 @@ This guide grows with each v6 change. Each section covers one area.
 | Hydration end | `isHydrating` stays `true` until every cached connected wallet reconnected, capped at six times the grace period | `isHydrating` ends once the grace period has elapsed, discovery has ended and every wallet that hydrated as `connecting` has settled, or at `hydrationTimeout` (default 3000 ms) | [8](#8-discovery-hydration-end-and-persistence) |
 | Discovery at page load | the Polkadot registry was read at 0, 100, 300, 600 and 1100 ms after subscribe only | read again at `load` and 100 ms later; `state.isDiscovering` says whether that read has landed | [8](#8-discovery-hydration-end-and-persistence) |
 | Cache during a slow reconnect | a reconnect slower than the persistence debounce wrote `isConnected: false` and no accounts | a wallet still `connecting` keeps its previous cached entry and accounts | [8](#8-discovery-hydration-end-and-persistence) |
+| React instance and hooks | `createKheopskit` returns a provider and `useWallets`/`useAccounts`; reaching one wallet means reading the whole state; unmounting the provider leaves the pipeline running | `createKheopskit` also returns `kheopskit$` and `store`; `useWallet`, `useAccount` and `useConnect` read one item; unmounting the provider stops the pipeline | [9](#9-kheopskitreact-one-shared-instance-and-wallet-hooks) |
 
 ---
 
@@ -70,6 +71,8 @@ Each section ends with the app code it makes redundant. In short:
 - A second `enable()` call made to reach `signer.signRaw`. Call
   `account.signRaw(message)` (section 3).
 - A hand-built `ecdsa` tx creator for ethereum-format accounts (section 3).
+- A second `getKheopskit$` subscription next to the React provider. Subscribe
+  to the `kheopskit$` that `createKheopskit` returns (section 9).
 - Test seeds that write the persisted shape to raw storage. Use
   `store.rememberWallet` and `store.setCachedState` with the test kit's
   builders (section 6).
@@ -772,7 +775,7 @@ subscriber is left.
 | `createKheopskit(config, { store? })` returns `kheopskit$` and `store` | the stream its provider subscribes to and the store that stream persists into; code outside React subscribes to the same pipeline |
 | `useWallet(walletId)`, `useAccount(accountId)` | one item or `undefined`; re-render only when that item changes; also returned by `createKheopskit`, typed to its platforms |
 | `useConnect(walletId)` | `{ connect, disconnect, status, error }`; aborts a pending `connect()` on unmount or when `walletId` changes; rejects `ABORTED` a `connect()` that starts after either |
-| wallet actions act on the instance's pipeline | `connect` and `disconnect` from `useConnect`, `useWallet` and `useWallets` act on the instance's pipeline when they are called, while any provider of the instance or any `kheopskit$` subscriber holds it, and wait for its first emission after an `<Activity>` reveal restarts it; called once nothing holds the pipeline, they reject `ABORTED` without restarting it |
+| wallet actions act on the instance's pipeline | `connect` and `disconnect` from `useWallet` and `useWallets`, and `disconnect` from `useConnect`, act on the instance's pipeline when they are called, while any provider of the instance or any `kheopskit$` subscriber holds it, and wait for its first emission after an `<Activity>` reveal restarts it; called once nothing holds the pipeline, they reject `ABORTED` without restarting it. `useConnect`'s `connect` is component-scoped. It rejects `ABORTED` once its component has unmounted or been hidden by `<Activity>`, even while something else holds the pipeline |
 | `store` prop on `KheopskitProvider` | the store the provider persists into, such as a memory store in tests |
 
 See the [React README](../react/README.md#one-instance-for-react-and-rxjs-code).

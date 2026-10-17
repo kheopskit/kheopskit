@@ -65,7 +65,7 @@ export const { KheopskitProvider, useWallets, useAccounts } = createKheopskit({
 ## Usage
 
 Recommended: bind your platform tuple once with `createKheopskit` and get a
-provider plus hooks already typed to those platforms — no generic to repeat.
+provider plus hooks already typed to those platforms, with no generic to repeat.
 
 ```ts
 // kheopskit.ts
@@ -252,10 +252,11 @@ const ssrCookies = cookieStore
 <KheopskitProvider ssrCookies={ssrCookies}>{children}</KheopskitProvider>;
 ```
 
-> While `state.isHydrating` is `true`, wallets/accounts are cached placeholders
-> carrying only the base fields — SDK fields (`signer`, `client`,
-> provider/extension handles) are absent until hydration completes. Guard access
-> behind `!isHydrating`.
+> While `state.isHydrating` is `true`, wallets and accounts restored from the
+> cache are placeholders with `isPlaceholder: true` and no SDK handle
+> (`txCreator`, `signer`, `client`, `provider`, `extension`). Narrow on
+> `isPlaceholder` before you read one, as in `if (account.isPlaceholder) return;`.
+> `isHydrating` can still disable a button.
 
 ## Testing
 

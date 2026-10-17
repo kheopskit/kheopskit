@@ -80,7 +80,7 @@ const kheopskit$ = getKheopskit$({
 
 ### With React
 
-Platforms are enabled by passing **plugins** (imported from their entry points) to `config.platforms`. Bind them once with `createKheopskit` to get a `KheopskitProvider` plus `useWallets` / `useAccounts` hooks already typed to those platforms — no generic to repeat.
+Platforms are enabled by passing **plugins** (imported from their entry points) to `config.platforms`. Bind them once with `createKheopskit` to get a `KheopskitProvider` plus `useWallets` / `useAccounts` hooks already typed to those platforms, with no generic to repeat.
 
 ```tsx
 // kheopskit.ts
@@ -134,7 +134,7 @@ export const App = () => (
 
 > **What `useWallets()` returns.** The whole state. `isDiscovering` is `true` until the page has loaded and the wallet list is complete; wait for it before you tell the user a wallet is missing. Each wallet has `status` (`disconnected`, `connecting` or `connected`) and `error`, so a button can show `Connecting…` without local state. While `isHydrating` is `true`, wallets and accounts restored from the cache carry `isPlaceholder: true` and no SDK handle. Check `!account.isPlaceholder` before you sign.
 
-> **Prefer the component directly?** Use `<KheopskitProvider config={{ platforms }}>` and recover platform-precise account types (e.g. `account.signer` on Solana, `account.client` on Ethereum) with a type argument — `useWallets<typeof platforms>()`. React context can't be generic, so the bare `useWallets()` returns the SDK-free base shapes. Pass a **referentially stable** `config` (module scope, `useMemo`, or `createKheopskit`); a new object each render recreates the store and re-subscribes.
+> **Prefer the component directly?** Use `<KheopskitProvider config={{ platforms }}>` and recover platform-precise account types (e.g. `account.signer` on Solana, `account.client` on Ethereum) with a type argument, `useWallets<typeof platforms>()`. React context can't be generic, so the bare `useWallets()` returns the SDK-free base shapes. Pass a **referentially stable** `config` (module scope, `useMemo`, or `createKheopskit`); a new object each render recreates the store and re-subscribes.
 
 > **Reading a wallet's SDK handle?** `state.wallets` mixes injected wallets with the single, platform-less WalletConnect connector. Narrow with `isInjectedWallet(wallet)` (the complement of `isWalletConnectWallet`) to recover `wallet.platform`, `wallet.sourceId`, and the injected SDK handle (`provider` on Ethereum, `extension` on Polkadot, `wallet` on Solana).
 
@@ -145,10 +145,14 @@ export const App = () => (
 returns `{ connect, disconnect, status, error }`. It aborts a pending
 `connect()` when the component unmounts or `walletId` changes, and rejects
 `ABORTED` a `connect()` that starts after. `useWallets()` and `useAccounts()`
-re-render on every state change. Every `connect` and `disconnect` a hook hands
-out acts on the instance's pipeline when it is called, including right after an
+re-render on every state change. A wallet's `connect` and `disconnect` from
+`useWallet` or `useWallets()`, and `useConnect`'s `disconnect`, act on the
+instance's pipeline when they are called, including right after an
 `<Activity>` reveal restarts it and while another provider or a `kheopskit$`
-subscriber holds it; once nothing holds it, they reject `ABORTED`.
+subscriber holds it. Once nothing holds it, they reject `ABORTED`.
+`useConnect`'s `connect` is scoped to its component instead. It rejects
+`ABORTED` once the component has unmounted or been hidden by `<Activity>`, even
+while something else holds the pipeline.
 
 ```tsx
 import type { WalletId } from "@kheopskit/core";
@@ -303,7 +307,7 @@ When you pass `ssrCookies`:
 
 #### Next.js (App Router)
 
-`@kheopskit/react` ships with a `"use client"` directive, so you can import `KheopskitProvider` straight into a Server Component (like the root layout below) — no manual client-boundary wrapper needed.
+`@kheopskit/react` ships with a `"use client"` directive, so you can import `KheopskitProvider` straight into a Server Component (like the root layout below), with no manual client-boundary wrapper.
 
 ```tsx
 // app/layout.tsx
