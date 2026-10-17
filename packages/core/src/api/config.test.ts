@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { resolveConfig } from "./config";
+import { KheopskitError } from "./errors";
 import { polkadot } from "./polkadot/plugin";
 import { solana } from "./solana/plugin";
 
@@ -75,6 +76,27 @@ describe("resolveConfig", () => {
 
 		it("accepts valid plugin instances", () => {
 			expect(() => resolveConfig({ platforms: [polkadot()] })).not.toThrow();
+		});
+	});
+
+	describe("walletConnect guard", () => {
+		it("throws on raw WalletConnect options, naming the plugin entry and the migration guide", () => {
+			const call = () =>
+				resolveConfig({
+					platforms: [polkadot()],
+					walletConnect: {
+						projectId: "x",
+						metadata: { name: "", description: "", url: "", icons: [] },
+						networks: [{}],
+					} as never,
+				});
+
+			expect(call).toThrow(KheopskitError);
+			expect(call).toThrow(
+				"[kheopskit] config.walletConnect must be created by walletConnect() imported from " +
+					'"@kheopskit/core/walletconnect", e.g. walletConnect: walletConnect({ projectId, metadata, networks }). ' +
+					"Raw WalletConnect options were removed in v6, see MIGRATING_TO_V6.md.",
+			);
 		});
 	});
 

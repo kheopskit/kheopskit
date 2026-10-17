@@ -9,7 +9,6 @@ import {
 	take,
 } from "rxjs";
 import { sortWallets } from "../utils/sortWallets";
-import { getWalletConnectWallet$ } from "./appKit";
 import { KheopskitError } from "./errors";
 import { createReconnectPolicy, reconnectAccepts } from "./reconnectPolicy";
 import type { KheopskitStore } from "./store";
@@ -41,18 +40,19 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 
 		// The single, platform-less WalletConnect connector is appended here (not
 		// emitted per platform). It sorts last (see sortWallets).
-		const wallets$ = combineLatest([
-			platformWallets$,
-			getWalletConnectWallet$(config),
-		]).pipe(
-			map(([platformWallets, walletConnect]) => {
-				const all: (BaseWallet | WalletConnectWallet)[] = walletConnect
-					? [...platformWallets, walletConnect]
-					: platformWallets;
-				return all.sort(sortWallets);
-			}),
-			// Note: No startWith([]) here - the hydration buffer handles initial state
-		);
+		const walletConnect$ = config.walletConnect?.getWallet$(ctx);
+		const unsortedWallets$: Observable<(BaseWallet | WalletConnectWallet)[]> =
+			walletConnect$
+				? combineLatest([platformWallets$, walletConnect$]).pipe(
+						map(([platformWallets, walletConnect]) =>
+							walletConnect
+								? [...platformWallets, walletConnect]
+								: platformWallets,
+						),
+					)
+				: platformWallets$;
+		// Note: No startWith([]) here - the hydration buffer handles initial state
+		const wallets$ = unsortedWallets$.pipe(map((all) => all.sort(sortWallets)));
 
 		const reconnectPolicy = createReconnectPolicy();
 

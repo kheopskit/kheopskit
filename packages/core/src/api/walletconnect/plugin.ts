@@ -9,15 +9,31 @@ import {
 	switchMap,
 	tap,
 } from "rxjs";
-import { clearCachedObservablesByPrefix } from "../utils/getCachedObservable";
-import { WALLET_CONNECT_WALLET_ID } from "../utils/WalletId";
-import { type KheopskitError, toConnectError } from "./errors";
+import { clearCachedObservablesByPrefix } from "../../utils/getCachedObservable";
+import { WALLET_CONNECT_WALLET_ID } from "../../utils/WalletId";
+import { type KheopskitError, toConnectError } from "../errors";
 import type {
 	AppKitInstance,
-	KheopskitConfig,
+	WalletConnectMetadata,
+	WalletConnectPlugin,
 	WalletConnectWallet,
 	WalletPlatform,
-} from "./types";
+} from "../types";
+
+export type WalletConnectOptions = {
+	projectId: string;
+	metadata: WalletConnectMetadata;
+	/**
+	 * Networks AppKit should enable. Pass `AppKitNetwork[]` from
+	 * `@reown/appkit/networks` (see
+	 * https://docs.reown.com/advanced/multichain/polkadot/dapp-integration-guide#walletconnect-code%2Fcomponent-setup).
+	 * Loosely typed (`unknown`) so the declarations don't depend on
+	 * `@reown/appkit`'s types; the value is forwarded to AppKit as-is.
+	 */
+	networks: [unknown, ...unknown[]];
+	themeMode?: "light" | "dark";
+	themeVariables?: Record<string, string | number>;
+};
 
 /**
  * Dynamically import @reown/appkit/core to avoid loading browser-only code
@@ -98,9 +114,8 @@ const dropAccountsCache = (platform: WalletPlatform): void => {
 };
 
 /**
- * The single, platform-less WalletConnect connector for the given config — or
- * `null` when WalletConnect isn't configured, on the server, or when
- * `@reown/appkit` isn't installed.
+ * The single, platform-less WalletConnect connector for the given options — or
+ * `null` on the server, or when `@reown/appkit` isn't installed.
  *
  * @remarks
  * The AppKit instance is a process-wide singleton (Reown AppKit itself cannot
@@ -116,15 +131,12 @@ const dropAccountsCache = (platform: WalletPlatform): void => {
  * supports in that single pairing, and `platforms` reflects what the live
  * session carries. Per-namespace accounts are derived by each platform plugin.
  */
-export const getWalletConnectWallet$ = (
-	config: KheopskitConfig,
+const getWalletConnectWallet$ = (
+	walletConnect: WalletConnectOptions,
+	debug: boolean,
 ): Observable<WalletConnectWallet | null> => {
-	if (!config.walletConnect) return of(null);
-
 	// SSR guard - don't try to load AppKit on the server
 	if (typeof window === "undefined") return of(null);
-
-	const walletConnect = config.walletConnect;
 
 	const cachedProjectId = getCachedAppKitProjectId();
 	if (
@@ -153,7 +165,7 @@ export const getWalletConnectWallet$ = (
 					const appKit = createAppKit({
 						projectId: walletConnect.projectId,
 						metadata: walletConnect.metadata,
-						// Loosely typed in WalletConnectConfig to keep @reown/appkit's
+						// Loosely typed in WalletConnectOptions to keep @reown/appkit's
 						// types out of core; forwarded to AppKit verbatim.
 						networks: walletConnect.networks as never,
 						themeMode: walletConnect.themeMode,
@@ -169,7 +181,7 @@ export const getWalletConnectWallet$ = (
 							},
 						},
 						allWallets: "HIDE",
-						debug: config.debug,
+						debug,
 						allowUnsupportedChain: true,
 					});
 
@@ -312,3 +324,26 @@ export const getWalletConnectWallet$ = (
 
 	return cachedAppKit;
 };
+
+/**
+ * The WalletConnect plugin for `config.walletConnect`. Importing this entry is
+ * what brings Reown AppKit into a dapp's bundle; a dapp that does not set
+ * `walletConnect` ships none of it.
+ *
+ * @example
+ * ```ts
+ * import { walletConnect } from "@kheopskit/core/walletconnect";
+ *
+ * getKheopskit$({
+ *   platforms: [polkadot()],
+ *   walletConnect: walletConnect({ projectId, metadata, networks }),
+ * });
+ * ```
+ */
+export const walletConnect = (
+	options: WalletConnectOptions,
+): WalletConnectPlugin => ({
+	type: "walletconnect",
+	metadata: options.metadata,
+	getWallet$: ({ config }) => getWalletConnectWallet$(options, config.debug),
+});

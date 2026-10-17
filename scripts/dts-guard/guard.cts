@@ -3,7 +3,7 @@
  * land on the CJS declarations (`dist/index.d.ts`). Keep in sync with guard.mts.
  */
 
-import type { KheopskitPlatform } from "@kheopskit/core";
+import type { KheopskitConfig, KheopskitPlatform } from "@kheopskit/core";
 import type {
 	EthereumAccount,
 	EthereumWallet,
@@ -24,6 +24,7 @@ import type {
 	SolanaWallet,
 	solana,
 } from "@kheopskit/core/solana";
+import type { walletConnect } from "@kheopskit/core/walletconnect";
 import type {
 	createKheopskit,
 	useAccounts,
@@ -75,3 +76,10 @@ export type InternalIsTyped = Expect<
 		]
 	>
 >;
+export type WalletConnectIsTyped = Expect<
+	NoneAny<[typeof walletConnect, ReturnType<typeof walletConnect>]>
+>;
+export const rawWalletConnectOptions: KheopskitConfig["walletConnect"] = {
+	// @ts-expect-error raw WalletConnect options are no longer a valid config value
+	projectId: "x",
+};

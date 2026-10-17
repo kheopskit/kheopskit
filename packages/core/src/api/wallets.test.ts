@@ -7,12 +7,14 @@ import {
 	type InjectedWalletsAdapter,
 } from "./injectedWallets";
 import { createKheopskitStore } from "./store";
-import type { BaseWallet, KheopskitConfig, KheopskitPlatform } from "./types";
+import type {
+	BaseWallet,
+	KheopskitConfig,
+	KheopskitPlatform,
+	WalletConnectPlugin,
+	WalletConnectWallet,
+} from "./types";
 import { getWallets$ } from "./wallets";
-
-vi.mock("./appKit", () => ({
-	getWalletConnectWallet$: vi.fn(() => of(null)),
-}));
 
 type Source = { id: WalletId; name?: string };
 
@@ -249,5 +251,68 @@ describe("getWallets$ auto-reconnect", () => {
 		});
 		const wallets = await firstValueFrom(getWallets$(config, store));
 		expect(wallets.map((w) => w.id)).toEqual([walletA]);
+	});
+});
+
+describe("getWallets$ WalletConnect connector", () => {
+	const fakeConnector = {
+		id: "walletconnect" as WalletId,
+		type: "walletconnect",
+		platforms: [],
+		appKit: {} as WalletConnectWallet["appKit"],
+		name: "A WalletConnect wallet",
+		icon: "",
+		status: "disconnected",
+		isConnected: false,
+		connect: async () => {},
+		disconnect: async () => {},
+	} satisfies WalletConnectWallet;
+
+	const fakePlugin = {
+		type: "walletconnect",
+		metadata: { name: "Test Dapp", description: "", url: "", icons: [] },
+		getWallet$: () => of(fakeConnector),
+	} satisfies WalletConnectPlugin;
+
+	const platformSources = () =>
+		new BehaviorSubject<Source[]>([
+			{ id: walletB, name: "B" },
+			{ id: walletA, name: "A" },
+		]);
+
+	beforeEach(() => {
+		localStorage.clear();
+	});
+
+	it("appends the plugin's connector after the platform wallets", async () => {
+		const config = resolveConfig({
+			platforms: [enginePlugin(platformSources(), {})],
+			walletConnect: fakePlugin,
+			autoReconnect: false,
+		});
+
+		const wallets = await firstValueFrom(
+			getWallets$(config, createKheopskitStore()),
+		);
+
+		expect(wallets.map((w) => w.id)).toEqual([
+			"polkadot:a",
+			"polkadot:b",
+			"walletconnect",
+		]);
+	});
+
+	it("lists no WalletConnect connector without walletConnect", async () => {
+		const config = resolveConfig({
+			platforms: [enginePlugin(platformSources(), {})],
+			autoReconnect: false,
+		});
+
+		const wallets = await firstValueFrom(
+			getWallets$(config, createKheopskitStore()),
+		);
+
+		expect(wallets.map((w) => w.id)).toEqual(["polkadot:a", "polkadot:b"]);
+		expect(wallets.filter((w) => w.type === "walletconnect")).toEqual([]);
 	});
 });

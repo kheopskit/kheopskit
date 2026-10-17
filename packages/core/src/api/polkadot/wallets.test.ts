@@ -1,8 +1,8 @@
-import { firstValueFrom } from "rxjs";
+import { firstValueFrom, of } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveConfig } from "../config";
 import { createKheopskitStore } from "../store";
-import type { KheopskitConfig, WalletConnectConfig } from "../types";
+import type { KheopskitConfig, WalletConnectPlugin } from "../types";
 import { polkadot } from "./plugin";
 
 const { connectInjectedExtension, getInjectedExtensions, injected } =
@@ -21,15 +21,15 @@ vi.mock("polkadot-api/pjs-signer", () => ({
 }));
 
 const walletConnect = {
-	projectId: "test",
+	type: "walletconnect",
 	metadata: {
 		name: "WalletConnect Dapp",
 		description: "",
 		url: "",
 		icons: [],
 	},
-	networks: [{}],
-} satisfies WalletConnectConfig;
+	getWallet$: () => of(null),
+} satisfies WalletConnectPlugin;
 
 const connectWith = async (config: Partial<KheopskitConfig>) => {
 	const plugin = polkadot();

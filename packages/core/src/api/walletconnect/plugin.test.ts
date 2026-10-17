@@ -1,18 +1,18 @@
 import { firstValueFrom } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { WALLET_CONNECT_WALLET_ID } from "../utils/WalletId";
-import type { KheopskitConfig, WalletConnectWallet } from "./types";
+import { WALLET_CONNECT_WALLET_ID } from "../../utils/WalletId";
+import type { PlatformContext, WalletConnectWallet } from "../types";
+import type { WalletConnectOptions } from "./plugin";
 
-const walletConnectConfig = {
-	walletConnect: {
-		projectId: "test",
-		metadata: { name: "", description: "", url: "", icons: [] },
-		networks: [{}],
-	},
-	debug: false,
-} as unknown as KheopskitConfig;
+const options: WalletConnectOptions = {
+	projectId: "test",
+	metadata: { name: "Test Dapp", description: "", url: "", icons: [] },
+	networks: [{}],
+};
 
-describe("getWalletConnectWallet$ when @reown/appkit is unavailable", () => {
+const ctx = { config: { debug: false } } as PlatformContext;
+
+describe("walletConnect().getWallet$ when @reown/appkit is unavailable", () => {
 	afterEach(() => {
 		vi.resetModules();
 		vi.restoreAllMocks();
@@ -26,14 +26,10 @@ describe("getWalletConnectWallet$ when @reown/appkit is unavailable", () => {
 		});
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-		const { getWalletConnectWallet$, resetAppKitCache } = await import(
-			"./appKit"
-		);
+		const { walletConnect, resetAppKitCache } = await import("./plugin");
 		resetAppKitCache();
 
-		const result = await firstValueFrom(
-			getWalletConnectWallet$(walletConnectConfig),
-		);
+		const result = await firstValueFrom(walletConnect(options).getWallet$(ctx));
 
 		expect(result).toBeNull();
 		expect(errorSpy).toHaveBeenCalledWith(
@@ -45,7 +41,7 @@ describe("getWalletConnectWallet$ when @reown/appkit is unavailable", () => {
 	});
 });
 
-describe("getWalletConnectWallet$ disconnect", () => {
+describe("walletConnect().getWallet$ disconnect", () => {
 	afterEach(() => {
 		vi.resetModules();
 		vi.restoreAllMocks();
@@ -72,19 +68,17 @@ describe("getWalletConnectWallet$ disconnect", () => {
 			createAppKit: () => fakeAppKit,
 		}));
 
-		const { getWalletConnectWallet$, resetAppKitCache } = await import(
-			"./appKit"
-		);
+		const { walletConnect, resetAppKitCache } = await import("./plugin");
 		const { getCachedObservable$, clearAllCachedObservables } = await import(
-			"../utils/getCachedObservable"
+			"../../utils/getCachedObservable"
 		);
 		resetAppKitCache();
 		clearAllCachedObservables();
 
 		const emissions: (WalletConnectWallet | null)[] = [];
-		const sub = getWalletConnectWallet$(walletConnectConfig).subscribe((w) =>
-			emissions.push(w),
-		);
+		const sub = walletConnect(options)
+			.getWallet$(ctx)
+			.subscribe((w) => emissions.push(w));
 		// Keep the stream subscribed so the status pipeline (and its disconnect
 		// cache-clearing) stays alive while we drive transitions.
 		await vi.waitFor(() =>
@@ -118,7 +112,7 @@ describe("getWalletConnectWallet$ disconnect", () => {
 	});
 });
 
-describe("getWalletConnectWallet$ single-session connect model", () => {
+describe("walletConnect().getWallet$ single-session connect model", () => {
 	afterEach(() => {
 		vi.resetModules();
 		vi.restoreAllMocks();
@@ -143,23 +137,20 @@ describe("getWalletConnectWallet$ single-session connect model", () => {
 	};
 
 	const subscribeConnector = async () => {
-		const { getWalletConnectWallet$, resetAppKitCache } = await import(
-			"./appKit"
-		);
+		const { walletConnect, resetAppKitCache } = await import("./plugin");
 		resetAppKitCache();
-		return { getWalletConnectWallet$, resetAppKitCache };
+		return { walletConnect, resetAppKitCache };
 	};
 
 	it("exposes a single disconnected connector (no platforms) while fully disconnected", async () => {
 		vi.resetModules();
 		mockAppKit(["polkadot", "eip155", "solana"]);
-		const { getWalletConnectWallet$, resetAppKitCache } =
-			await subscribeConnector();
+		const { walletConnect, resetAppKitCache } = await subscribeConnector();
 
 		const emissions: (WalletConnectWallet | null)[] = [];
-		const sub = getWalletConnectWallet$(walletConnectConfig).subscribe((w) =>
-			emissions.push(w),
-		);
+		const sub = walletConnect(options)
+			.getWallet$(ctx)
+			.subscribe((w) => emissions.push(w));
 		await vi.waitFor(() => expect(emissions.length).toBeGreaterThan(0));
 
 		const wallet = emissions.at(-1);
@@ -175,13 +166,12 @@ describe("getWalletConnectWallet$ single-session connect model", () => {
 	it("reports only the namespaces the wallet approved (no dead per-platform entries)", async () => {
 		vi.resetModules();
 		const { emit } = mockAppKit(["polkadot", "eip155", "solana"]);
-		const { getWalletConnectWallet$, resetAppKitCache } =
-			await subscribeConnector();
+		const { walletConnect, resetAppKitCache } = await subscribeConnector();
 
 		const emissions: (WalletConnectWallet | null)[] = [];
-		const sub = getWalletConnectWallet$(walletConnectConfig).subscribe((w) =>
-			emissions.push(w),
-		);
+		const sub = walletConnect(options)
+			.getWallet$(ctx)
+			.subscribe((w) => emissions.push(w));
 		await vi.waitFor(() => expect(emissions.length).toBeGreaterThan(0));
 
 		// Wallet approves only eip155 in the single pairing.
@@ -198,13 +188,12 @@ describe("getWalletConnectWallet$ single-session connect model", () => {
 	it("reports every namespace when the wallet approves all of them", async () => {
 		vi.resetModules();
 		const { emit } = mockAppKit(["polkadot", "eip155", "solana"]);
-		const { getWalletConnectWallet$, resetAppKitCache } =
-			await subscribeConnector();
+		const { walletConnect, resetAppKitCache } = await subscribeConnector();
 
 		const emissions: (WalletConnectWallet | null)[] = [];
-		const sub = getWalletConnectWallet$(walletConnectConfig).subscribe((w) =>
-			emissions.push(w),
-		);
+		const sub = walletConnect(options)
+			.getWallet$(ctx)
+			.subscribe((w) => emissions.push(w));
 		await vi.waitFor(() => expect(emissions.length).toBeGreaterThan(0));
 
 		emit({ polkadot: {}, eip155: {}, solana: {} });
@@ -223,13 +212,12 @@ describe("getWalletConnectWallet$ single-session connect model", () => {
 		// Only eip155 enabled; even if a provider for another namespace appears,
 		// it's not in the connector's platforms.
 		const { emit } = mockAppKit(["eip155"]);
-		const { getWalletConnectWallet$, resetAppKitCache } =
-			await subscribeConnector();
+		const { walletConnect, resetAppKitCache } = await subscribeConnector();
 
 		const emissions: (WalletConnectWallet | null)[] = [];
-		const sub = getWalletConnectWallet$(walletConnectConfig).subscribe((w) =>
-			emissions.push(w),
-		);
+		const sub = walletConnect(options)
+			.getWallet$(ctx)
+			.subscribe((w) => emissions.push(w));
 		await vi.waitFor(() => expect(emissions.length).toBeGreaterThan(0));
 
 		emit({ eip155: {}, polkadot: {} });
@@ -243,7 +231,7 @@ describe("getWalletConnectWallet$ single-session connect model", () => {
 	});
 });
 
-describe("getWalletConnectWallet$ single AppKit instance", () => {
+describe("walletConnect().getWallet$ single AppKit instance", () => {
 	afterEach(() => {
 		vi.resetModules();
 		vi.restoreAllMocks();
@@ -270,19 +258,17 @@ describe("getWalletConnectWallet$ single AppKit instance", () => {
 		const createAppKit = makeCreateAppKit();
 		vi.doMock("@reown/appkit/core", () => ({ createAppKit }));
 
-		const { getWalletConnectWallet$, resetAppKitCache } = await import(
-			"./appKit"
-		);
+		const { walletConnect, resetAppKitCache } = await import("./plugin");
 		resetAppKitCache();
 
 		// First subscriber, then fully unsubscribe (drains refCount to 0).
-		const sub1 = getWalletConnectWallet$(walletConnectConfig).subscribe();
+		const sub1 = walletConnect(options).getWallet$(ctx).subscribe();
 		await vi.waitFor(() => expect(createAppKit).toHaveBeenCalledTimes(1));
 		sub1.unsubscribe();
 
 		// Re-subscribe after the previous subscriber drained — must reuse the
 		// existing AppKit instance, not create a second one.
-		const sub2 = getWalletConnectWallet$(walletConnectConfig).subscribe();
+		const sub2 = walletConnect(options).getWallet$(ctx).subscribe();
 		await new Promise((r) => setTimeout(r, 10));
 		expect(createAppKit).toHaveBeenCalledTimes(1);
 
@@ -295,22 +281,12 @@ describe("getWalletConnectWallet$ single AppKit instance", () => {
 		const createAppKit = makeCreateAppKit();
 		vi.doMock("@reown/appkit/core", () => ({ createAppKit }));
 
-		const { getWalletConnectWallet$, resetAppKitCache } = await import(
-			"./appKit"
-		);
+		const { walletConnect, resetAppKitCache } = await import("./plugin");
 		resetAppKitCache();
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		const cfgB = {
-			...walletConnectConfig,
-			walletConnect: {
-				...walletConnectConfig.walletConnect,
-				projectId: "different",
-			},
-		} as unknown as KheopskitConfig;
-
-		const sub = getWalletConnectWallet$(walletConnectConfig).subscribe();
-		getWalletConnectWallet$(cfgB); // different projectId → warns, reuses instance
+		const sub = walletConnect(options).getWallet$(ctx).subscribe();
+		walletConnect({ ...options, projectId: "different" }).getWallet$(ctx);
 
 		expect(warnSpy).toHaveBeenCalledWith(
 			expect.stringContaining("already initialised with projectId"),
@@ -320,5 +296,16 @@ describe("getWalletConnectWallet$ single AppKit instance", () => {
 
 		sub.unsubscribe();
 		resetAppKitCache();
+	});
+});
+
+describe("walletConnect()", () => {
+	it("exposes the dapp metadata it was created with", async () => {
+		const { walletConnect } = await import("./plugin");
+
+		const plugin = walletConnect(options);
+
+		expect(plugin.type).toBe("walletconnect");
+		expect(plugin.metadata).toBe(options.metadata);
 	});
 });

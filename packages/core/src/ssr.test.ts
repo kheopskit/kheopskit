@@ -10,7 +10,9 @@
  * If these tests fail, it means someone introduced code that accesses
  * browser globals at module load time, which breaks SSR/edge runtimes.
  */
+import { firstValueFrom } from "rxjs";
 import { beforeAll, describe, expect, it } from "vitest";
+import type { PlatformContext } from "./api/types";
 
 describe("SSR safety", () => {
 	beforeAll(() => {
@@ -53,11 +55,25 @@ describe("SSR safety", () => {
 		expect(typeof getDefaultStore).toBe("function");
 	});
 
-	it("can import appKit without browser globals", async () => {
-		const { getWalletConnectWallet$ } = await import("./api/appKit");
+	it("can import the walletconnect entry without browser globals", async () => {
+		const { walletConnect } = await import("./walletconnect");
 
-		expect(getWalletConnectWallet$).toBeDefined();
-		expect(typeof getWalletConnectWallet$).toBe("function");
+		expect(typeof walletConnect).toBe("function");
+	});
+
+	it("the WalletConnect connector emits null on the server", async () => {
+		const { walletConnect } = await import("./walletconnect");
+		const plugin = walletConnect({
+			projectId: "test",
+			metadata: { name: "Test", description: "", url: "", icons: [] },
+			networks: [{}],
+		});
+
+		const wallet = await firstValueFrom(
+			plugin.getWallet$({ config: { debug: false } } as PlatformContext),
+		);
+
+		expect(wallet).toBeNull();
 	});
 
 	it("can import wallets API without browser globals", async () => {
