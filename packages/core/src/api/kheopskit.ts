@@ -134,6 +134,7 @@ export const getKheopskit$ = <
 					await whenState(wallet.id, true);
 				},
 				disconnect: async () => {
+					if (closed) throw abortedError(wallet.id);
 					await wallet.disconnect();
 					supersede(wallet.id, false);
 					await whenState(wallet.id, false);

@@ -229,6 +229,8 @@ export const createInjectedWallets$ = <
 			walletId: WalletId,
 			options?: ConnectOptions,
 		): Promise<void> => {
+			if (teardown.signal.aborted)
+				return Promise.reject(abortedError(walletId));
 			const current = connections$.value.get(walletId);
 			if (current?.status === "connected") {
 				if (!current.disconnecting) return Promise.resolve();
