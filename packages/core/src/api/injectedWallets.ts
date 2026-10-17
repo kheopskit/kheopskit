@@ -84,6 +84,8 @@ export type InjectedWalletsAdapter<
 type Connecting = {
 	status: "connecting";
 	promise: Promise<void>;
+	anchored: boolean;
+	waiting: number;
 	abort: () => void;
 };
 
@@ -91,10 +93,27 @@ type Connection<THandle> =
 	| Connecting
 	| { status: "connected"; handle: THandle; disconnecting?: Promise<void> };
 
-const followSignal = (signal: AbortSignal, connecting: Connecting) => {
-	signal.addEventListener("abort", connecting.abort, { once: true });
-	const stop = () => signal.removeEventListener("abort", connecting.abort);
-	connecting.promise.then(stop, stop);
+const join = (
+	connecting: Connecting,
+	walletId: WalletId,
+	signal: AbortSignal | undefined,
+): Promise<void> => {
+	if (!signal) {
+		connecting.anchored = true;
+		return connecting.promise;
+	}
+	connecting.waiting++;
+	return new Promise<void>((resolve, reject) => {
+		const leave = () => {
+			reject(abortedError(walletId));
+			connecting.waiting--;
+			if (!connecting.anchored && connecting.waiting === 0) connecting.abort();
+		};
+		signal.addEventListener("abort", leave, { once: true });
+		connecting.promise
+			.then(resolve, reject)
+			.finally(() => signal.removeEventListener("abort", leave));
+	});
 };
 
 /**
@@ -170,14 +189,15 @@ export const createInjectedWallets$ = <
 			const connecting: Connecting = {
 				status: "connecting",
 				promise,
+				anchored: false,
+				waiting: 0,
 				abort: () => {
 					if (connections$.value.get(walletId) === connecting)
 						controller.abort();
 				},
 			};
 			setConnection(walletId, connecting);
-			if (signal) followSignal(signal, connecting);
-			return promise;
+			return join(connecting, walletId, signal);
 		};
 
 		const connect = (
@@ -193,10 +213,8 @@ export const createInjectedWallets$ = <
 			}
 			if (options?.signal?.aborted)
 				return Promise.reject(abortedError(walletId));
-			if (current?.status === "connecting") {
-				if (options?.signal) followSignal(options.signal, current);
-				return current.promise;
-			}
+			if (current?.status === "connecting")
+				return join(current, walletId, options?.signal);
 			return startConnect(source, walletId, options?.signal);
 		};
 
