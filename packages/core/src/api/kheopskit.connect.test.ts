@@ -1,7 +1,7 @@
 import { getWallets } from "@wallet-standard/app";
 import type { Wallet as WalletStandardWallet } from "@wallet-standard/base";
 import { announceProvider, type EIP6963ProviderDetail } from "mipd";
-import { BehaviorSubject, firstValueFrom, of } from "rxjs";
+import { BehaviorSubject, firstValueFrom, map, of } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	clearCachedObservable,
@@ -905,7 +905,7 @@ describe("getKheopskit$ connect semantics", () => {
 		sub.unsubscribe();
 	});
 
-	it("a disconnect whose platform call fails while a granted connect waits for the state leaves that connect to resolve, with the wallet remembered and connected", async () => {
+	it("a disconnect whose platform call fails after a granted connect during hydration leaves the wallet connected and remembered", async () => {
 		const standard = registerFakeStandardWallet({
 			disconnect: () => Promise.reject(new Error("refused")),
 		});
@@ -1149,5 +1149,144 @@ describe("getKheopskit$ connect semantics", () => {
 		expect(addresses(emissions.at(-1))).toEqual([a.address]);
 
 		sub.unsubscribe();
+	});
+});
+
+const laggingWalletId = "polkadot:lagging" as WalletId;
+
+const subscribeLaggingPlatform = (disconnect: () => Promise<void>) => {
+	const isConnected$ = new BehaviorSubject(false);
+	const platform: KheopskitPlatform<"polkadot", BaseWallet, BaseWalletAccount> =
+		{
+			platform: "polkadot",
+			getWallets$: () =>
+				isConnected$.pipe(
+					map((isConnected): BaseWallet[] => [
+						{
+							id: laggingWalletId,
+							platform: "polkadot",
+							type: "injected",
+							name: "Lagging",
+							icon: "",
+							status: isConnected ? "connected" : "disconnected",
+							error: undefined,
+							isConnected,
+							connect: async () => {},
+							disconnect,
+						},
+					]),
+				),
+			getAccounts$: () => of([]),
+		};
+	const emissions: KheopskitState[] = [];
+	const sub = getKheopskit$(engineConfig(platform), {
+		store: createKheopskitStore(),
+	}).subscribe((state) => emissions.push(state));
+	return {
+		sub,
+		isConnected$,
+		wallet: () => walletIn(emissions.at(-1), laggingWalletId),
+	};
+};
+
+describe("getKheopskit$ connect semantics on a platform whose state lags its promises", () => {
+	beforeEach(() => {
+		localStorage.clear();
+		vi.useFakeTimers({
+			toFake: [
+				"setTimeout",
+				"clearTimeout",
+				"setInterval",
+				"clearInterval",
+				"setImmediate",
+				"clearImmediate",
+				"Date",
+			],
+		});
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("a disconnect the platform refuses leaves a granted connect waiting, and that connect resolves once the state shows connected", async () => {
+		const { sub, isConnected$, wallet } = subscribeLaggingPlatform(() =>
+			Promise.reject(new Error("refused")),
+		);
+		await settleMicrotasks();
+
+		const connecting = wallet().connect();
+		expect(await settlementOf(connecting)).toBe("pending");
+		const disconnecting = wallet().disconnect();
+		expect(await settlementOf(disconnecting)).toBe("rejected");
+		expect(await settlementOf(connecting)).toBe("pending");
+
+		isConnected$.next(true);
+		expect({
+			connect: await settlementOf(connecting),
+			isConnected: wallet().isConnected,
+		}).toEqual({ connect: "resolved", isConnected: true });
+
+		sub.unsubscribe();
+	});
+
+	it("a connect resolves a disconnect that waits for the state", async () => {
+		const { sub, isConnected$, wallet } = subscribeLaggingPlatform(
+			async () => {},
+		);
+		await settleMicrotasks();
+		const first = wallet().connect();
+		isConnected$.next(true);
+		expect(await settlementOf(first)).toBe("resolved");
+
+		const disconnecting = wallet().disconnect();
+		expect(await settlementOf(disconnecting)).toBe("pending");
+		const reconnecting = wallet().connect();
+		expect({
+			disconnect: await settlementOf(disconnecting),
+			connect: await settlementOf(reconnecting),
+			isConnected: wallet().isConnected,
+		}).toEqual({
+			disconnect: "resolved",
+			connect: "resolved",
+			isConnected: true,
+		});
+
+		sub.unsubscribe();
+	});
+
+	it("a disconnect rejects a connect that waits for the state as ABORTED", async () => {
+		const { sub, wallet } = subscribeLaggingPlatform(async () => {});
+		await settleMicrotasks();
+
+		const connecting = wallet().connect();
+		expect(await settlementOf(connecting)).toBe("pending");
+		const disconnecting = wallet().disconnect();
+		expect({
+			connect: await settlementOf(connecting),
+			disconnect: await settlementOf(disconnecting),
+		}).toEqual({ connect: "rejected", disconnect: "resolved" });
+		await expect(connecting).rejects.toMatchObject({
+			name: "KheopskitError",
+			code: "ABORTED",
+			walletId: laggingWalletId,
+		});
+
+		sub.unsubscribe();
+	});
+
+	it("tearing down the last subscriber rejects a connect that waits for the state as ABORTED", async () => {
+		const { sub, wallet } = subscribeLaggingPlatform(async () => {});
+		await settleMicrotasks();
+
+		const connecting = wallet().connect();
+		expect(await settlementOf(connecting)).toBe("pending");
+		sub.unsubscribe();
+		expect(await settlementOf(connecting)).toBe("rejected");
+		await expect(connecting).rejects.toMatchObject({
+			name: "KheopskitError",
+			code: "ABORTED",
+			walletId: laggingWalletId,
+		});
 	});
 });

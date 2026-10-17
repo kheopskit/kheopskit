@@ -318,6 +318,109 @@ describe("getWallets$ auto-reconnect", () => {
 		expect(walletById(walletA).status).toBe("disconnected");
 	});
 
+	type Attempt = {
+		resolve: (handle: string) => void;
+		reject: (error: Error) => void;
+	};
+
+	const autoReconnectAnsweredAfterTwoDiscoveryChanges = async ({
+		manualConnect,
+		answer,
+	}: {
+		manualConnect: boolean;
+		answer: (attempt: Attempt) => void;
+	}) => {
+		const attempts: Attempt[] = [];
+		const { connect, walletById, sources$ } = setup({
+			adapter: {
+				connect: () =>
+					new Promise<string>((resolve, reject) => {
+						attempts.push({ resolve, reject });
+					}),
+				isUserRejection: (error) =>
+					error instanceof Error && error.message === "refused",
+			},
+		});
+
+		await flush();
+		expect(walletById(walletA).status).toBe("connecting");
+		const manual = manualConnect
+			? walletById(walletA)
+					.connect()
+					.then(
+						() => "resolved",
+						(error) => `rejected ${error.code}`,
+					)
+			: Promise.resolve("none");
+		await flush();
+		expect(attempts).toHaveLength(1);
+		answer(attempts[0]);
+		await flush();
+
+		sources$.next([{ id: walletA }, { id: walletB }]);
+		await flush();
+		sources$.next([{ id: walletA }, { id: walletB }, { id: walletC }]);
+		await flush();
+		return {
+			manual: await manual,
+			calls: connectedIds(connect.mock.calls),
+			status: walletById(walletA).status,
+			remembered: remembered(),
+		};
+	};
+
+	it("an auto-reconnect that fails with nobody joining it is retried on the next discovery change", async () => {
+		const result = await autoReconnectAnsweredAfterTwoDiscoveryChanges({
+			manualConnect: false,
+			answer: (attempt) => attempt.reject(new Error("locked")),
+		});
+		expect(result).toEqual({
+			manual: "none",
+			calls: [walletA, walletA],
+			status: "connecting",
+			remembered: [walletA],
+		});
+	});
+
+	it("a manual connect that joins a pending auto-reconnect which then fails ends automatic reconnect for the session", async () => {
+		const result = await autoReconnectAnsweredAfterTwoDiscoveryChanges({
+			manualConnect: true,
+			answer: (attempt) => attempt.reject(new Error("locked")),
+		});
+		expect(result).toEqual({
+			manual: "rejected CONNECT_FAILED",
+			calls: [walletA],
+			status: "disconnected",
+			remembered: [walletA],
+		});
+	});
+
+	it("a manual connect that joins a pending auto-reconnect the user refuses forgets the wallet and prompts no more", async () => {
+		const result = await autoReconnectAnsweredAfterTwoDiscoveryChanges({
+			manualConnect: true,
+			answer: (attempt) => attempt.reject(new Error("refused")),
+		});
+		expect(result).toEqual({
+			manual: "rejected USER_REJECTED",
+			calls: [walletA],
+			status: "disconnected",
+			remembered: [],
+		});
+	});
+
+	it("a manual connect that joins a pending auto-reconnect which is granted leaves the wallet connected and prompts no more", async () => {
+		const result = await autoReconnectAnsweredAfterTwoDiscoveryChanges({
+			manualConnect: true,
+			answer: (attempt) => attempt.resolve("handle"),
+		});
+		expect(result).toEqual({
+			manual: "resolved",
+			calls: [walletA],
+			status: "connected",
+			remembered: [walletA],
+		});
+	});
+
 	it("a remembered wallet whose source leaves during its auto-reconnect and returns stays remembered and is not re-attempted", async () => {
 		const deferred = createDeferred();
 		const { connect, walletById, sources$ } = setup({
