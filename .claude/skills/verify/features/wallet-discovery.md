@@ -9,6 +9,7 @@ When the playground loads, the Wallets table lists every wallet that Kheopskit d
 - `discovery-solana` lists each Wallet Standard wallet under platform `solana`.
 - `discovery-walletconnect` shows a single `WalletConnect` row with platform `—` when a project ID is configured.
 - `discovery-count` shows `0` accounts for every wallet that is not connected.
+- `discovery-settled` shows `Looking for wallets…` above the table until the page fires `load`, then hides it. A Polkadot extension that injects before `load` but after the subscribe-anchored poll (0 to 1100 ms) is listed within a few frames of `load`, without a reload.
 
 ## How to get to it (user POV)
 
@@ -28,8 +29,21 @@ Preconditions:
 - **Counts.** Every row has a cell with exact text `0`: `row.getByRole("cell", { name: "0", exact: true })`.
 - **Proof.** Run `snap(page, testInfo, "01-discovered")`. The ARIA snapshot lists all four rows.
 
+## Driving `discovery-settled`
+
+`e2e/tests/discovery-at-load.spec.ts` drives it on every app:
+
+```bash
+.claude/skills/verify/scripts/run.sh vite-react e2e/tests/discovery-at-load.spec.ts
+```
+
+- **Race.** The init script `e2e/mocks/late-wallet.js` injects `late-mock-wallet` 1500 ms after kheopskit's first `injectedWeb3` read, and inserts an image at `DOMContentLoaded` that the spec holds for 2500 ms, so `load` fires after the injection.
+- **Expected end state.** `Looking for wallets…` is visible until `load` and hidden after. The `late-mock-wallet` row appears no later than 300 ms after `load`.
+- **Proof.** The spec attaches `discovery-timestamps.json` (registry reads, injection, `load`, first row frame, status shown and hidden) and logs the `load`-to-row delay.
+
 ## Gotchas
 
+- `page.goto` waits for `load` by default, and `Looking for wallets…` is gone by then. To see the page before `load`, navigate with `{ waitUntil: "commit" }`.
 - The Polkadot mock has no icon. Its row name is the extension key `mock-polkadot-wallet`, not a display name.
 - On the real-wallet path, the list reflects the extensions installed in the user's Chrome. Assert only on wallets you know are there.
 - Clicking `Connect` on the WalletConnect row opens the AppKit modal and needs a phone wallet. It is not provable on the mock path.
