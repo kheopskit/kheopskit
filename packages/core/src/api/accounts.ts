@@ -1,5 +1,6 @@
 import { combineLatest, map, Observable, of, shareReplay } from "rxjs";
 import { sortAccounts } from "../utils/sortAccounts";
+import { framesOf, type PlatformAccountsFrame } from "./platformAccounts";
 import type {
 	BaseWallet,
 	BaseWalletAccount,
@@ -8,33 +9,43 @@ import type {
 } from "./types";
 import { isWalletConnectWallet } from "./types";
 
+export type AccountsFrame = PlatformAccountsFrame<BaseWalletAccount>;
+
 export const getAccounts$ = (
 	config: KheopskitConfig,
 	wallets: Observable<(BaseWallet | WalletConnectWallet)[]>,
 ) => {
-	return new Observable<BaseWalletAccount[]>((subscriber) => {
+	return new Observable<AccountsFrame>((subscriber) => {
 		// Each plugin gets its own platform's (injected) wallets plus the shared
 		// WalletConnect connector; it derives WC accounts only for the namespaces
 		// the session carries.
 		const sources = config.platforms.map((plugin) =>
-			plugin.getAccounts$(
-				wallets.pipe(
-					map((ws) =>
-						ws.filter(
-							(w) => isWalletConnectWallet(w) || w.platform === plugin.platform,
+			framesOf(
+				plugin.getAccounts$(
+					wallets.pipe(
+						map((ws) =>
+							ws.filter(
+								(w) =>
+									isWalletConnectWallet(w) || w.platform === plugin.platform,
+							),
 						),
 					),
 				),
 			),
 		);
 
-		const accounts$ = sources.length
+		const frames$ = sources.length
 			? combineLatest(sources).pipe(
-					map((accounts) => accounts.flat().sort(sortAccounts)),
+					map((frames) => ({
+						accounts: frames
+							.flatMap((frame) => frame.accounts)
+							.sort(sortAccounts),
+						answered: frames.flatMap((frame) => frame.answered),
+					})),
 				)
-			: of<BaseWalletAccount[]>([]);
+			: of<AccountsFrame>({ accounts: [], answered: [] });
 
-		const sub = accounts$.subscribe(subscriber);
+		const sub = frames$.subscribe(subscriber);
 
 		return () => {
 			sub.unsubscribe();

@@ -17,6 +17,7 @@ describe("resolveConfig", () => {
 				debug: false,
 				storageKey: "kheopskit",
 				hydrationGracePeriod: 500,
+				hydrationTimeout: 3000,
 			});
 			expect(warn).toHaveBeenCalledWith(
 				expect.stringContaining("No platforms configured"),

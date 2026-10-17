@@ -44,6 +44,31 @@ export type PlatformAccountsOptions<
 	accountChangeKey?: (account: TAccount) => string;
 };
 
+/** The account list plus the connected wallets whose stream has answered, an empty list included. */
+export type PlatformAccountsFrame<TAccount> = {
+	accounts: TAccount[];
+	answered: WalletId[];
+};
+
+export type PlatformAccounts$<TAccount> = Observable<TAccount[]> & {
+	frames$: Observable<PlatformAccountsFrame<TAccount>>;
+};
+
+const isPlatformAccounts$ = <TAccount extends BaseWalletAccount>(
+	accounts$: Observable<TAccount[]>,
+): accounts$ is PlatformAccounts$<TAccount> => "frames$" in accounts$;
+
+/** A plugin not built on `createPlatformAccounts$` reports no answered wallet. */
+export const framesOf = <TAccount extends BaseWalletAccount>(
+	accounts$: Observable<TAccount[]>,
+): Observable<PlatformAccountsFrame<TAccount>> =>
+	isPlatformAccounts$(accounts$)
+		? accounts$.frames$
+		: accounts$.pipe(map((accounts) => ({ accounts, answered: [] })));
+
+const idsEqual = (a: WalletId[], b: WalletId[]) =>
+	a.length === b.length && a.every((id, i) => id === b[i]);
+
 type WalletConnection<TAccount> = {
 	key: string;
 	accounts: TAccount[];
@@ -68,7 +93,8 @@ export const createPlatformAccounts$ = <
 	getWalletConnectAccounts$,
 	mapAccounts,
 	accountChangeKey = (account) => account.id,
-}: PlatformAccountsOptions<TWallet, TAccount>): Observable<TAccount[]> => {
+}: PlatformAccountsOptions<TWallet, TAccount>): PlatformAccounts$<TAccount> => {
+	type Frame = PlatformAccountsFrame<TAccount>;
 	const nameAndChangeKey = (account: TAccount) =>
 		`${account.name ?? ""}|${accountChangeKey(account)}`;
 	const accountsListEqual = (a: TAccount[], b: TAccount[]) =>
@@ -82,7 +108,7 @@ export const createPlatformAccounts$ = <
 			? getWalletConnectAccounts$(wallet)
 			: getInjectedAccounts$(wallet);
 
-	return new Observable<TAccount[]>((subscriber) => {
+	const frames$ = new Observable<Frame>((subscriber) => {
 		const connections = new Map<WalletId, WalletConnection<TAccount>>();
 		let connectedIds: WalletId[] = [];
 		let walletsCompleted = false;
@@ -92,12 +118,18 @@ export const createPlatformAccounts$ = <
 			!emitted &&
 			[...connections.values()].some((connection) => !connection.answered);
 
+		const accountsListed = () =>
+			connectedIds.flatMap((id) => connections.get(id)?.accounts ?? []);
+		const walletsAnswered = () =>
+			connectedIds.filter((id) => connections.get(id)?.answered);
+
 		const emit = () => {
 			if (awaitingFirstAnswers()) return;
 			emitted = true;
-			subscriber.next(
-				connectedIds.flatMap((id) => connections.get(id)?.accounts ?? []),
-			);
+			subscriber.next({
+				accounts: accountsListed(),
+				answered: walletsAnswered(),
+			});
 		};
 
 		const completeIfDone = () => {
@@ -169,10 +201,22 @@ export const createPlatformAccounts$ = <
 				connection.subscription.unsubscribe();
 		};
 	}).pipe(
-		map((accounts) => (mapAccounts ? mapAccounts(accounts) : accounts)),
+		map((frame) =>
+			mapAccounts ? { ...frame, accounts: mapAccounts(frame.accounts) } : frame,
+		),
+		distinctUntilChanged(
+			(a, b) =>
+				accountsListEqual(a.accounts, b.accounts) &&
+				idsEqual(a.answered, b.answered),
+		),
+		shareReplay({ refCount: true, bufferSize: 1 }),
+	);
+	const accounts$ = frames$.pipe(
+		map((frame) => frame.accounts),
 		distinctUntilChanged(accountsListEqual),
 		shareReplay({ refCount: true, bufferSize: 1 }),
 	);
+	return Object.assign(accounts$, { frames$ });
 };
 
 /**

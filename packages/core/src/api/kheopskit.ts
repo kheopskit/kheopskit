@@ -8,6 +8,7 @@ import {
 	Observable,
 	of,
 	shareReplay,
+	startWith,
 	switchMap,
 	take,
 	tap,
@@ -23,7 +24,7 @@ import { pageLoaded$ } from "../utils/pageLoad";
 import { sortAccounts } from "../utils/sortAccounts";
 import { sortWallets } from "../utils/sortWallets";
 import type { WalletId } from "../utils/WalletId";
-import { getAccounts$ } from "./accounts";
+import { type AccountsFrame, getAccounts$ } from "./accounts";
 import { resolveConfig } from "./config";
 import { abortedError, walletPendingError } from "./errors";
 import { getHydratedSnapshot } from "./hydration";
@@ -31,6 +32,8 @@ import { createKheopskitStore } from "./store";
 import type {
 	BaseWallet,
 	BaseWalletAccount,
+	CachedAccount,
+	CachedWallet,
 	KheopskitConfig,
 	KheopskitPlatform,
 	KheopskitState,
@@ -195,8 +198,48 @@ export const getKheopskit$ = <
 
 		// Get live wallets and accounts
 		const liveWallets$ = getWallets$(kc, store);
-		const liveAccounts$ = getAccounts$(kc, liveWallets$).pipe(
-			map((accounts) => accounts.map(asLive)),
+		const accountFrames$ = getAccounts$(kc, liveWallets$);
+		const liveAccounts$ = accountFrames$.pipe(
+			map(({ accounts }) => accounts.map(asLive)),
+		);
+
+		const isDiscovering$ = pageLoaded$.pipe(
+			switchMap((loaded) =>
+				loaded
+					? liveWallets$.pipe(
+							take(1),
+							map(() => false),
+						)
+					: of(true),
+			),
+			shareReplay({ bufferSize: 1, refCount: true }),
+		);
+
+		const reconnecting = cachedWallets.filter((w) => w.status === "connecting");
+		const hydrationSettled$ = combineLatest([
+			liveWallets$,
+			accountFrames$.pipe(startWith(noAnswerYet)),
+			isDiscovering$,
+			store.observable.pipe(
+				map((s) => s.remembered ?? []),
+				take(1),
+			),
+		]).pipe(
+			map(
+				([wallets, { accounts, answered }, isDiscovering, remembered]) =>
+					!isDiscovering &&
+					reconnecting.every((cached) =>
+						reconnectSettled(cached, {
+							wallets,
+							accounts,
+							answered,
+							cachedAccounts,
+							remembered,
+						}),
+					),
+			),
+			debounceTime(0, asapScheduler),
+			distinctUntilChanged(),
 		);
 
 		// Apply hydration buffer to wallets
@@ -204,16 +247,9 @@ export const getKheopskit$ = <
 			cachedWallets,
 			liveWallets$.pipe(map((wallets) => wallets.map(asLive))),
 			kc.hydrationGracePeriod,
+			kc.hydrationTimeout,
 			(w) => w.id,
-			(liveWallets, cached) => {
-				const reconnectingIds = new Set(
-					cached.filter((w) => w.status === "connecting").map((w) => w.id),
-				);
-				if (reconnectingIds.size === 0) return true;
-				return [...reconnectingIds].every((id) =>
-					liveWallets.some((w) => w.id === id && w.isConnected),
-				);
-			},
+			hydrationSettled$,
 			(live, cached) => {
 				const status = sessionRestoring(live, cached)
 					? "connecting"
@@ -237,14 +273,9 @@ export const getKheopskit$ = <
 			cachedAccounts,
 			liveAccounts$,
 			kc.hydrationGracePeriod,
+			kc.hydrationTimeout,
 			(a) => a.walletId,
-			// Hydration converges when all wallets with cached accounts have provided live accounts
-			(liveAccounts, cached) => {
-				const cachedWalletIds = new Set(cached.map((a) => a.walletId));
-				if (cachedWalletIds.size === 0) return true;
-				const liveWalletIds = new Set(liveAccounts.map((a) => a.walletId));
-				return [...cachedWalletIds].every((id) => liveWalletIds.has(id));
-			},
+			hydrationSettled$,
 		);
 
 		// Share the buffered streams so the main and persistence subscriptions
@@ -261,16 +292,7 @@ export const getKheopskit$ = <
 		const subscription = combineLatest({
 			wallets: sharedWallets$,
 			accounts: sharedAccounts$,
-			isDiscovering: pageLoaded$.pipe(
-				switchMap((loaded) =>
-					loaded
-						? liveWallets$.pipe(
-								take(1),
-								map(() => false),
-							)
-						: of(true),
-				),
-			),
+			isDiscovering: isDiscovering$,
 		})
 			.pipe(
 				map(({ wallets, accounts, isDiscovering }) => {
@@ -324,8 +346,8 @@ export const getKheopskit$ = <
 				// keeps the same account id but changes the cached chainId, so an
 				// id-only comparator would skip persisting it.
 				distinctUntilChanged((prev, curr) => {
-					const prevWalletKeys = prev.wallets.items.map(walletPersistKey);
-					const currWalletKeys = curr.wallets.items.map(walletPersistKey);
+					const prevWalletKeys = prev.wallets.items.map(persistedWalletKey);
+					const currWalletKeys = curr.wallets.items.map(persistedWalletKey);
 					const prevAccountKeys = prev.accounts.items.map(accountChangeKey);
 					const currAccountKeys = curr.accounts.items.map(accountChangeKey);
 					return (
@@ -335,26 +357,20 @@ export const getKheopskit$ = <
 				}),
 			)
 			.subscribe(({ wallets, accounts }) => {
-				// Cache ALL wallets to avoid wallet list flash on reload
-				// Only accounts from connected wallets are cached
-				const connectedWalletIds = new Set(
-					wallets.items.filter((w) => w.isConnected).map((w) => w.id),
-				);
-				const relevantAccounts = accounts.items.filter((a) =>
-					connectedWalletIds.has(a.walletId),
+				const snapshot = persistedSnapshot(
+					wallets.items,
+					accounts.items,
+					store.getCachedState(),
 				);
 
 				if (kc.debug) {
 					console.debug("[kheopskit] persisting state snapshot:", {
-						wallets: wallets.items.length,
-						accounts: relevantAccounts.length,
+						wallets: snapshot.wallets.length,
+						accounts: snapshot.accounts.length,
 					});
 				}
 
-				store.setCachedState(
-					wallets.items.map(serializeWallet),
-					relevantAccounts.map(serializeAccount),
-				);
+				store.setCachedState(snapshot.wallets, snapshot.accounts);
 
 				// Cache wallet icons in localStorage (separate from cookies for size)
 				const icons: Record<string, string> = {};
@@ -408,6 +424,69 @@ const asLive = <T extends object>(item: T): T & { isPlaceholder: false } => {
 	return live;
 };
 
+const noAnswerYet: AccountsFrame = { accounts: [], answered: [] };
+
+/**
+ * A remembered wallet that reads disconnected without an error is still
+ * waiting for its reconnect: getWallets$ emits the wallet list before its
+ * connect() flips the status to connecting.
+ */
+const reconnectSettled = (
+	cached: BaseWallet | WalletConnectWallet,
+	live: AccountsFrame & {
+		wallets: (BaseWallet | WalletConnectWallet)[];
+		cachedAccounts: BaseWalletAccount[];
+		remembered: WalletId[];
+	},
+): boolean => {
+	const wallet = live.wallets.find((w) => w.id === cached.id);
+	if (!wallet) return true;
+	const status = sessionRestoring(wallet, cached)
+		? "connecting"
+		: wallet.status;
+	if (status === "connecting") return false;
+	if (status === "disconnected")
+		return wallet.error !== undefined || !live.remembered.includes(cached.id);
+	return (
+		live.answered.includes(cached.id) ||
+		!live.cachedAccounts.some((a) => a.walletId === cached.id) ||
+		live.accounts.some((a) => a.walletId === cached.id)
+	);
+};
+
+/**
+ * A wallet still connecting keeps its previous cache entry and accounts:
+ * written live it would read isConnected: false with no accounts, and the
+ * next load would hydrate it as disconnected without placeholders while its
+ * reconnect runs.
+ */
+const persistedSnapshot = (
+	wallets: (BaseWallet | WalletConnectWallet)[],
+	accounts: BaseWalletAccount[],
+	previous: { wallets: CachedWallet[]; accounts: CachedAccount[] },
+): { wallets: CachedWallet[]; accounts: CachedAccount[] } => {
+	const connecting = new Set(
+		wallets.filter((w) => w.status === "connecting").map((w) => w.id),
+	);
+	const connected = new Set(
+		wallets.filter((w) => w.isConnected).map((w) => w.id),
+	);
+	const previousWallets = new Map(previous.wallets.map((w) => [w.id, w]));
+	return {
+		wallets: wallets.map(
+			(w) =>
+				(connecting.has(w.id) && previousWallets.get(w.id)) ||
+				serializeWallet(w),
+		),
+		accounts: [
+			...accounts
+				.filter((a) => connected.has(a.walletId))
+				.map(serializeAccount),
+			...previous.accounts.filter((a) => connecting.has(a.walletId)),
+		],
+	};
+};
+
 const arraysEqual = (a: string[], b: string[]) =>
 	a.length === b.length && a.every((v, i) => v === b[i]);
 
@@ -448,6 +527,14 @@ const walletPlatforms = (wallet: BaseWallet | WalletConnectWallet): string =>
 /** Fields persisted to the cache for a wallet (icon is stored separately). */
 const walletPersistKey = (wallet: BaseWallet | WalletConnectWallet): string =>
 	`${wallet.id}|${wallet.isConnected ? 1 : 0}|${wallet.name}`;
+
+/**
+ * What decides a cache write: the persisted fields plus `status`, because a
+ * wallet whose kept entry was written while connecting must be rewritten live
+ * once its reconnect fails, and `isConnected` reads false on both sides.
+ */
+const persistedWalletKey = (wallet: BaseWallet | WalletConnectWallet): string =>
+	`${walletPersistKey(wallet)}|${wallet.status}`;
 
 /**
  * UI-significant signature of a wallet: the persisted fields plus icon and the

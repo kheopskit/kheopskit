@@ -13,6 +13,7 @@ const DEFAULTS = {
 	debug: false,
 	storageKey: DEFAULT_STORAGE_KEY,
 	hydrationGracePeriod: 500,
+	hydrationTimeout: 3000,
 } satisfies Omit<KheopskitConfig, "platforms" | "walletConnect">;
 
 export const resolveConfig = <
