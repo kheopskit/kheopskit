@@ -149,7 +149,6 @@ export const getKheopskit$ = <
 		const subscription = combineLatest({
 			wallets: sharedWallets$,
 			accounts: sharedAccounts$,
-			// Subscribed after `wallets` so the poller's load listener runs first.
 			isDiscovering: pageLoaded$.pipe(map((loaded) => !loaded)),
 		})
 			.pipe(

@@ -1,6 +1,4 @@
 import path from "node:path";
-// Raw Playwright (not ../fixtures): AppKit logs console errors in headless runs,
-// which the shared fixture treats as failures.
 import { expect, type Page, test } from "@playwright/test";
 
 const MOCKS_DIR = path.join(__dirname, "..", "mocks");

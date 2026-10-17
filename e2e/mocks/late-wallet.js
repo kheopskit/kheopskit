@@ -1,9 +1,3 @@
-// Injected after mock-wallets.js (Playwright addInitScript). Reproduces the
-// pre-load race: a Polkadot extension that injects after kheopskit's
-// subscribe-anchored poll tail has finished, but before window `load`. The
-// injection is timed from kheopskit's first registry read, not from
-// DOMContentLoaded, because SSR apps subscribe several hundred ms after it. An
-// image inserted at DOMContentLoaded holds `load` while the spec delays it.
 (() => {
 	const LATE_WALLET = "late-mock-wallet";
 	const DISCOVERING_TEXT = "Looking for wallets…";
