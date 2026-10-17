@@ -13,7 +13,8 @@ const { getInjectedExtensions, injected } = vi.hoisted(() => {
 	};
 });
 
-vi.mock("polkadot-api/pjs-signer", () => ({
+vi.mock("polkadot-api/pjs-signer", async (importOriginal) => ({
+	...(await importOriginal<typeof import("polkadot-api/pjs-signer")>()),
 	getInjectedExtensions,
 }));
 
@@ -70,6 +71,83 @@ describe("polkadot wallet connect", () => {
 		await connectWith({ appName: "" });
 
 		expect(enable).toHaveBeenCalledWith("localhost");
+	});
+});
+
+describe("polkadot wallet enable() result", () => {
+	const alice = {
+		address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+		name: "Alice",
+		type: "sr25519" as const,
+		genesisHash: null,
+	};
+	let pushAccounts: (accounts: (typeof alice)[]) => void = () => {};
+	const extensionWith = (signer: Record<string, unknown>) => ({
+		enable: vi.fn().mockResolvedValue({
+			accounts: {
+				get: async () => [alice],
+				subscribe: (cb: (accounts: (typeof alice)[]) => void) => {
+					pushAccounts = cb;
+					cb([alice]);
+					return () => {};
+				},
+			},
+			signer,
+		}),
+	});
+
+	beforeEach(() => {
+		localStorage.clear();
+		injected.names = ["good", "bad"];
+	});
+
+	afterEach(() => {
+		delete window.injectedWeb3;
+		injected.names = ["test-extension"];
+	});
+
+	it("rejects connect() when signer.signRaw is missing and keeps the other wallet's accounts streaming", async () => {
+		window.injectedWeb3 = {
+			good: extensionWith({ signPayload: vi.fn(), signRaw: vi.fn() }),
+			bad: extensionWith({ signPayload: vi.fn() }),
+		};
+		const plugin = polkadot();
+		const store = createKheopskitStore();
+		const wallets$ = plugin.getWallets$({
+			store,
+			config: resolveConfig({ appName: "test", platforms: [plugin] }),
+		});
+		const emissions: string[][] = [];
+		const subscription = plugin
+			.getAccounts$(wallets$)
+			.subscribe((accounts) =>
+				emissions.push(
+					accounts.map((account) => `${account.walletId}:${account.name}`),
+				),
+			);
+		const walletById = async (id: string) => {
+			const wallet = (await firstValueFrom(wallets$)).find((w) => w.id === id);
+			if (!wallet) throw new Error(`no wallet ${id}`);
+			return wallet;
+		};
+
+		await (await walletById("polkadot:good")).connect();
+		await expect((await walletById("polkadot:bad")).connect()).rejects.toThrow(
+			'Unsupported extension: "bad"',
+		);
+
+		const wallets = await firstValueFrom(wallets$);
+		expect(wallets.map((w) => [w.id, w.isConnected])).toEqual([
+			["polkadot:good", true],
+			["polkadot:bad", false],
+		]);
+		expect((await firstValueFrom(store.observable)).remembered).toEqual([
+			"polkadot:good",
+		]);
+
+		pushAccounts([{ ...alice, name: "Alice (renamed)" }]);
+		expect(emissions.at(-1)).toEqual(["polkadot:good:Alice (renamed)"]);
+		subscription.unsubscribe();
 	});
 });
 

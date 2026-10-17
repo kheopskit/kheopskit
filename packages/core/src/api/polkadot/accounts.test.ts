@@ -30,6 +30,13 @@ const alice: PolkadotInjectedAccount = {
 	genesisHash: null,
 };
 
+const broken: PolkadotInjectedAccount = {
+	address: "not-an-address",
+	name: "Broken",
+	type: "sr25519",
+	genesisHash: null,
+};
+
 const createMockExtension = (
 	accounts: PolkadotInjectedAccount[],
 	overrides: Partial<PolkadotInjected["accounts"]> = {},
@@ -222,6 +229,39 @@ describe("getPolkadotAccounts$", () => {
 			subscribe: vi.fn(() => vi.fn()),
 		});
 		const wallet = createMockInjectedWallet([alice], { extension });
+		const emissions: string[][] = [];
+
+		const subscription = getPolkadotAccounts$(of([wallet]), [
+			"sr25519",
+		]).subscribe((accounts) =>
+			emissions.push(accounts.map((account) => account.address)),
+		);
+		await nextMacrotask();
+
+		expect(emissions).toEqual([[ALICE]]);
+		subscription.unsubscribe();
+	});
+
+	it("skips an account it cannot build and emits the rest from subscribe", async () => {
+		const wallet = createMockInjectedWallet([alice, broken]);
+		const emissions: string[][] = [];
+
+		const subscription = getPolkadotAccounts$(of([wallet]), [
+			"sr25519",
+		]).subscribe((accounts) =>
+			emissions.push(accounts.map((account) => account.address)),
+		);
+		await nextMacrotask();
+
+		expect(emissions).toEqual([[ALICE]]);
+		subscription.unsubscribe();
+	});
+
+	it("skips an account it cannot build and emits the rest from get()", async () => {
+		const { extension } = createMockExtension([alice, broken], {
+			subscribe: vi.fn(() => vi.fn()),
+		});
+		const wallet = createMockInjectedWallet([alice, broken], { extension });
 		const emissions: string[][] = [];
 
 		const subscription = getPolkadotAccounts$(of([wallet]), [
