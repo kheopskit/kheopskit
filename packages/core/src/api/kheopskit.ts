@@ -87,37 +87,57 @@ export const getKheopskit$ = <
 
 	return new Observable<KheopskitState>((subscriber) => {
 		let latest: KheopskitState | undefined;
+		let closed = false;
 		const waiters = new Set<StateWaiter>();
-
-		const whenState = (
-			walletId: WalletId,
-			matches: (state: KheopskitState) => boolean,
-		): Promise<void> =>
-			latest && matches(latest)
-				? Promise.resolve()
-				: new Promise((resolve, reject) => {
-						waiters.add({ walletId, matches, resolve, reject });
-					});
+		const wrapped = new WeakMap<BaseWallet, BaseWallet>();
 
 		const isConnectedIn = (state: KheopskitState, walletId: WalletId) =>
 			state.wallets.some((w) => w.id === walletId && w.isConnected);
 
+		const abandon = (waiter: StateWaiter) => {
+			waiters.delete(waiter);
+			if (waiter.isConnected) waiter.reject(abortedError(waiter.walletId));
+			else waiter.resolve();
+		};
+
+		const supersede = (walletId: WalletId, isConnected: boolean) => {
+			for (const waiter of waiters)
+				if (waiter.walletId === walletId && waiter.isConnected !== isConnected)
+					abandon(waiter);
+		};
+
+		const whenState = (walletId: WalletId, isConnected: boolean) =>
+			new Promise<void>((resolve, reject) => {
+				const waiter = { walletId, isConnected, resolve, reject };
+				if (latest && isConnectedIn(latest, walletId) === isConnected)
+					resolve();
+				else if (closed) abandon(waiter);
+				else waiters.add(waiter);
+			});
+
 		const settleWithState = (
 			wallet: BaseWallet | WalletConnectWallet,
-		): BaseWallet | WalletConnectWallet =>
-			isInjectedWallet(wallet)
-				? {
-						...wallet,
-						connect: async (options) => {
-							await wallet.connect(options);
-							await whenState(wallet.id, (s) => isConnectedIn(s, wallet.id));
-						},
-						disconnect: async () => {
-							await wallet.disconnect();
-							await whenState(wallet.id, (s) => !isConnectedIn(s, wallet.id));
-						},
-					}
-				: wallet;
+		): BaseWallet | WalletConnectWallet => {
+			if (!isInjectedWallet(wallet)) return wallet;
+			const existing = wrapped.get(wallet);
+			if (existing) return existing;
+			const settled: BaseWallet = {
+				...wallet,
+				connect: async (options) => {
+					if (closed) throw abortedError(wallet.id);
+					await wallet.connect(options);
+					supersede(wallet.id, true);
+					await whenState(wallet.id, true);
+				},
+				disconnect: async () => {
+					await wallet.disconnect();
+					supersede(wallet.id, false);
+					await whenState(wallet.id, false);
+				},
+			};
+			wrapped.set(wallet, settled);
+			return settled;
+		};
 
 		// Get live wallets and accounts
 		const liveWallets$ = getWallets$(kc, store);
@@ -212,7 +232,8 @@ export const getKheopskit$ = <
 				tap((state) => {
 					latest = state;
 					for (const waiter of waiters) {
-						if (!waiter.matches(state)) continue;
+						if (isConnectedIn(state, waiter.walletId) !== waiter.isConnected)
+							continue;
 						waiters.delete(waiter);
 						waiter.resolve();
 					}
@@ -283,9 +304,8 @@ export const getKheopskit$ = <
 		return () => {
 			subscription.unsubscribe();
 			persistSub.unsubscribe();
-			for (const waiter of waiters)
-				waiter.reject(abortedError(waiter.walletId));
-			waiters.clear();
+			closed = true;
+			for (const waiter of waiters) abandon(waiter);
 		};
 	}).pipe(
 		logObservable("kheopskit$", { enabled: kc.debug, printValue: true }),
@@ -297,7 +317,7 @@ export const getKheopskit$ = <
 
 type StateWaiter = {
 	walletId: WalletId;
-	matches: (state: KheopskitState) => boolean;
+	isConnected: boolean;
 	resolve: () => void;
 	reject: (error: unknown) => void;
 };
