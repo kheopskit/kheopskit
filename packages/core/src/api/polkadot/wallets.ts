@@ -42,10 +42,12 @@ const isPolkadotInjected = (
 	typeof injected.signer.signRaw === "function";
 
 /**
- * The accounts each extension listed when its connect was granted, so the
- * emission that first shows the wallet connected already lists them.
+ * The list each extension last reported: read when its connect was granted,
+ * so the emission that first shows the wallet connected already lists it, and
+ * updated by every `subscribe` callback, so an accounts stream that restarts
+ * resumes from the current list rather than the connect-time one.
  */
-export const accountsAtConnect = new WeakMap<
+export const latestAccounts = new WeakMap<
 	PolkadotInjected,
 	PolkadotInjectedAccount[]
 >();
@@ -56,7 +58,7 @@ const connectExtension = async (identifier: string, appName: string) => {
 	const injected = await entry.enable(appName);
 	if (!isPolkadotInjected(injected))
 		throw new Error(`Unsupported extension: "${identifier}"`);
-	accountsAtConnect.set(injected, await injected.accounts.get());
+	latestAccounts.set(injected, await injected.accounts.get());
 	return injected;
 };
 

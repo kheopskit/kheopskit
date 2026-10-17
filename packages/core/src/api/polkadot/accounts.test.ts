@@ -9,7 +9,7 @@ import type {
 	PolkadotInjectedAccount,
 	PolkadotInjectedWallet,
 } from "./types";
-import { accountsAtConnect } from "./wallets";
+import { latestAccounts } from "./wallets";
 
 vi.mock("polkadot-api/pjs-signer", async (importOriginal) => {
 	const real = await importOriginal<typeof import("polkadot-api/pjs-signer")>();
@@ -57,7 +57,7 @@ const createMockExtension = (
 			signPayload: vi.fn(async () => ({ signature: "0x" })),
 		},
 	};
-	accountsAtConnect.set(extension, accounts);
+	latestAccounts.set(extension, accounts);
 	return { extension, unsubscribe };
 };
 
