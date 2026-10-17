@@ -125,8 +125,11 @@ test.describe("polkadot mock wallet", () => {
 		expect(payload?.address).toBe(
 			"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
 		);
-		expect(payload?.type).toBe("bytes");
+		expect(payload?.type).toBe("payload");
 		expect(payload?.data.slice(0, expectedStart.length)).toBe(expectedStart);
+		expect(payload?.data.slice(expectedStart.length)).toMatch(
+			/^\nNonce: [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\nIssued At: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+		);
 	});
 });
 

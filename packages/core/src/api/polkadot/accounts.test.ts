@@ -293,31 +293,40 @@ describe("getPolkadotAccounts$", () => {
 		subscription.unsubscribe();
 	});
 
-	it("signRaw sends text as text and bytes as hex with the given type and returns the signature", async () => {
-		const { extension } = createMockExtension([alice]);
-		const wallet = createMockInjectedWallet([alice], { extension });
+	it.each([
+		["a string", "hello", undefined, { data: "hello", type: "payload" }],
+		["a string", "hello", { type: "bytes" }, { data: "hello", type: "bytes" }],
+		[
+			"a Uint8Array",
+			new Uint8Array([1, 255]),
+			undefined,
+			{ data: "0x01ff", type: "bytes" },
+		],
+		[
+			"a Uint8Array",
+			new Uint8Array([1, 255]),
+			{ type: "payload" },
+			{ data: "0x01ff", type: "payload" },
+		],
+	] as const)(
+		"signRaw sends %s %j with options %j as %j and returns the signature",
+		async (_, data, options, sent) => {
+			const { extension } = createMockExtension([alice]);
+			const wallet = createMockInjectedWallet([alice], { extension });
 
-		const [account] = await firstValueFrom(
-			getPolkadotAccounts$(of([wallet]), ["sr25519"]),
-		);
-		if (!account) throw new Error("no account");
+			const [account] = await firstValueFrom(
+				getPolkadotAccounts$(of([wallet]), ["sr25519"]),
+			);
+			if (!account) throw new Error("no account");
 
-		await expect(account.signRaw("hello")).resolves.toBe("0xabcd");
-		expect(extension.signer.signRaw).toHaveBeenLastCalledWith({
-			address: ALICE,
-			data: "hello",
-			type: "bytes",
-		});
-
-		await expect(
-			account.signRaw(new Uint8Array([1, 255]), { type: "payload" }),
-		).resolves.toBe("0xabcd");
-		expect(extension.signer.signRaw).toHaveBeenLastCalledWith({
-			address: ALICE,
-			data: "0x01ff",
-			type: "payload",
-		});
-	});
+			await expect(account.signRaw(data, options)).resolves.toBe("0xabcd");
+			expect(extension.signer.signRaw).toHaveBeenCalledTimes(1);
+			expect(extension.signer.signRaw).toHaveBeenCalledWith({
+				address: ALICE,
+				...sent,
+			});
+		},
+	);
 
 	describe("appKit (WalletConnect) wallets", () => {
 		const GENESIS = "91b171bb158e2d3848fa23a9f1c25182";

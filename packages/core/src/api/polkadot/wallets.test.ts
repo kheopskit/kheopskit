@@ -82,7 +82,7 @@ describe("polkadot wallet enable() result", () => {
 		genesisHash: null,
 	};
 	let pushAccounts: (accounts: (typeof alice)[]) => void = () => {};
-	const extensionWith = (signer: Record<string, unknown>) => ({
+	const good = {
 		enable: vi.fn().mockResolvedValue({
 			accounts: {
 				get: async () => [alice],
@@ -92,9 +92,15 @@ describe("polkadot wallet enable() result", () => {
 					return () => {};
 				},
 			},
-			signer,
+			signer: { signPayload: vi.fn(), signRaw: vi.fn() },
 		}),
-	});
+	};
+	const get = async () => [];
+	const subscribe = () => () => {};
+	const signPayload = vi.fn();
+	const signRaw = vi.fn();
+	const accounts = { get, subscribe };
+	const signer = { signPayload, signRaw };
 
 	beforeEach(() => {
 		localStorage.clear();
@@ -106,49 +112,64 @@ describe("polkadot wallet enable() result", () => {
 		injected.names = ["test-extension"];
 	});
 
-	it("rejects connect() when signer.signRaw is missing and keeps the other wallet's accounts streaming", async () => {
-		window.injectedWeb3 = {
-			good: extensionWith({ signPayload: vi.fn(), signRaw: vi.fn() }),
-			bad: extensionWith({ signPayload: vi.fn() }),
-		};
-		const plugin = polkadot();
-		const store = createKheopskitStore();
-		const wallets$ = plugin.getWallets$({
-			store,
-			config: resolveConfig({ appName: "test", platforms: [plugin] }),
-		});
-		const emissions: string[][] = [];
-		const subscription = plugin
-			.getAccounts$(wallets$)
-			.subscribe((accounts) =>
-				emissions.push(
-					accounts.map((account) => `${account.walletId}:${account.name}`),
-				),
-			);
-		const walletById = async (id: string) => {
-			const wallet = (await firstValueFrom(wallets$)).find((w) => w.id === id);
-			if (!wallet) throw new Error(`no wallet ${id}`);
-			return wallet;
-		};
+	it.each([
+		["signer.signRaw", { accounts, signer: { signPayload } }],
+		["signer.signPayload", { accounts, signer: { signRaw } }],
+		["accounts.get", { accounts: { subscribe }, signer }],
+		["accounts.subscribe", { accounts: { get }, signer }],
+		["a signer object", { accounts }],
+		["an accounts object", { signer }],
+		["an object (null)", null],
+		["an object (undefined)", undefined],
+		["an object (a string)", "not an object"],
+	])(
+		"rejects connect() when enable() resolves without %s and keeps the other wallet's accounts streaming",
+		async (_, enableResult) => {
+			window.injectedWeb3 = {
+				good,
+				bad: { enable: vi.fn().mockResolvedValue(enableResult) },
+			};
+			const plugin = polkadot();
+			const store = createKheopskitStore();
+			const wallets$ = plugin.getWallets$({
+				store,
+				config: resolveConfig({ appName: "test", platforms: [plugin] }),
+			});
+			const emissions: string[][] = [];
+			const subscription = plugin
+				.getAccounts$(wallets$)
+				.subscribe((accounts) =>
+					emissions.push(
+						accounts.map((account) => `${account.walletId}:${account.name}`),
+					),
+				);
+			const walletById = async (id: string) => {
+				const wallet = (await firstValueFrom(wallets$)).find(
+					(w) => w.id === id,
+				);
+				if (!wallet) throw new Error(`no wallet ${id}`);
+				return wallet;
+			};
 
-		await (await walletById("polkadot:good")).connect();
-		await expect((await walletById("polkadot:bad")).connect()).rejects.toThrow(
-			'Unsupported extension: "bad"',
-		);
+			await (await walletById("polkadot:good")).connect();
+			await expect(
+				(await walletById("polkadot:bad")).connect(),
+			).rejects.toThrow('Unsupported extension: "bad"');
 
-		const wallets = await firstValueFrom(wallets$);
-		expect(wallets.map((w) => [w.id, w.isConnected])).toEqual([
-			["polkadot:good", true],
-			["polkadot:bad", false],
-		]);
-		expect((await firstValueFrom(store.observable)).remembered).toEqual([
-			"polkadot:good",
-		]);
+			const wallets = await firstValueFrom(wallets$);
+			expect(wallets.map((w) => [w.id, w.isConnected])).toEqual([
+				["polkadot:good", true],
+				["polkadot:bad", false],
+			]);
+			expect((await firstValueFrom(store.observable)).remembered).toEqual([
+				"polkadot:good",
+			]);
 
-		pushAccounts([{ ...alice, name: "Alice (renamed)" }]);
-		expect(emissions.at(-1)).toEqual(["polkadot:good:Alice (renamed)"]);
-		subscription.unsubscribe();
-	});
+			pushAccounts([{ ...alice, name: "Alice (renamed)" }]);
+			expect(emissions.at(-1)).toEqual(["polkadot:good:Alice (renamed)"]);
+			subscription.unsubscribe();
+		},
+	);
 });
 
 describe("polkadot wallet discovery", () => {
