@@ -103,45 +103,52 @@ const config = (hydrationGracePeriod: number, autoReconnect = false) => ({
 	hydrationGracePeriod,
 });
 
-const installFakeEthereumProvider = () => {
+const installedEthereumProviders: Array<{ uninstall: () => void }> = [];
+
+const installFakeEthereumProvider = ({
+	rdns = ETH_RDNS,
+	uuid = "00000000-0000-4000-8000-000000000001",
+	address = ETH_ADDRESS,
+} = {}) => {
+	const walletId = `ethereum:${rdns}` as WalletId;
 	const pendingAccounts: Array<(addresses: string[]) => void> = [];
 	let holdAccounts = false;
 	const provider = {
 		request: async ({ method }: { method: string }) => {
-			if (method === "eth_requestAccounts") return [ETH_ADDRESS];
+			if (method === "eth_requestAccounts") return [address];
 			if (method === "eth_chainId") return "0x1";
 			if (method === "eth_accounts")
 				return holdAccounts
 					? new Promise<string[]>((resolve) => pendingAccounts.push(resolve))
-					: [ETH_ADDRESS];
+					: [address];
 			throw new Error(`unexpected request ${method}`);
 		},
 		on: () => {},
 		removeListener: () => {},
 	};
 	const unannounce = announceProvider({
-		info: {
-			uuid: "00000000-0000-4000-8000-000000000001",
-			name: "Fake Ethereum",
-			icon: "data:image/svg+xml,",
-			rdns: ETH_RDNS,
-		},
+		info: { uuid, name: `Fake ${rdns}`, icon: "data:image/svg+xml,", rdns },
 		provider: provider as unknown as EIP6963ProviderDetail["provider"],
 	});
-	return {
+	const installed = {
+		walletId,
+		address,
 		holdAccounts: () => {
 			holdAccounts = true;
 		},
-		releaseAccounts: () => {
+		pendingAccountRequests: () => pendingAccounts.length,
+		releaseAccounts: (addresses = [address]) => {
 			const resolve = pendingAccounts.shift();
 			if (!resolve) throw new Error("no pending eth_accounts to release");
-			resolve([ETH_ADDRESS]);
+			resolve(addresses);
 		},
 		uninstall: () => {
 			unannounce();
-			clearCachedObservable(`accounts:${ethWalletId}`);
+			clearCachedObservable(`accounts:${walletId}`);
 		},
 	};
+	installedEthereumProviders.push(installed);
+	return installed;
 };
 
 const ethConfig = {
@@ -192,11 +199,15 @@ const walletIn = (state: KheopskitState | undefined, walletId: WalletId) => {
 	return found;
 };
 
-const ethFramesFrom = (emissions: KheopskitState[], from: number) =>
+const ethFramesFrom = (
+	emissions: KheopskitState[],
+	from: number,
+	walletId = ethWalletId,
+) =>
 	emissions.slice(from).map((state) => ({
-		isConnected: walletIn(state, ethWalletId).isConnected,
+		isConnected: walletIn(state, walletId).isConnected,
 		accounts: state.accounts
-			.filter((a) => a.walletId === ethWalletId)
+			.filter((a) => a.walletId === walletId)
 			.map((a) => a.address),
 	}));
 
@@ -260,6 +271,7 @@ describe("getKheopskit$ connect semantics", () => {
 
 	afterEach(() => {
 		fake.uninstall();
+		for (const eth of installedEthereumProviders.splice(0)) eth.uninstall();
 		vi.useRealTimers();
 		vi.restoreAllMocks();
 	});
@@ -273,13 +285,14 @@ describe("getKheopskit$ connect semantics", () => {
 		await settleMicrotasks();
 		await vi.advanceTimersByTimeAsync(20);
 
+		const settlements: Settlement[] = [];
 		let connecting = wallet().connect();
 		fake.releaseEnable();
-		await connecting;
-		await wallet().disconnect();
+		settlements.push(await settlementOf(connecting));
+		settlements.push(await settlementOf(wallet().disconnect()));
 		connecting = wallet().connect();
 		fake.releaseEnable();
-		await connecting;
+		settlements.push(await settlementOf(connecting));
 
 		const frames = emissions.map((state, index) => ({
 			index,
@@ -299,6 +312,7 @@ describe("getKheopskit$ connect semantics", () => {
 		expect(frames.filter((f) => !f.isConnected).length).toBeGreaterThanOrEqual(
 			2,
 		);
+		expect(settlements).toEqual(["resolved", "resolved", "resolved"]);
 
 		sub.unsubscribe();
 	});
@@ -639,6 +653,7 @@ describe("getKheopskit$ connect semantics", () => {
 		await expect(disconnecting).rejects.toMatchObject({
 			code: "ABORTED",
 			walletId: engineWalletId,
+			message: `[kheopskit] disconnect of wallet ${engineWalletId} was aborted`,
 		});
 		expect(platformDisconnect).not.toHaveBeenCalled();
 		expect(rememberedWalletIds()).toEqual([engineWalletId]);
@@ -648,8 +663,11 @@ describe("getKheopskit$ connect semantics", () => {
 		secondSub.unsubscribe();
 	});
 
-	it("on Ethereum, connect resolves once the wallet shows connected and the accounts follow in a later emission with no stale accounts in between", async () => {
-		const eth = installFakeEthereumProvider();
+	it("on Ethereum, connect resolves once the wallet shows connected, the accounts follow in a later emission, and a previous connection's late eth_accounts answer never shows", async () => {
+		const OLD = "0x2222222222222222222222222222222222222222";
+		const NEW = "0x3333333333333333333333333333333333333333";
+		const eth = installFakeEthereumProvider({ address: NEW });
+		eth.holdAccounts();
 		const emissions: KheopskitState[] = [];
 		const sub = getKheopskit$(ethConfig, {
 			store: createKheopskitStore(),
@@ -657,34 +675,73 @@ describe("getKheopskit$ connect semantics", () => {
 		await settleMicrotasks();
 		await vi.advanceTimersByTimeAsync(20);
 		const wallet = () => walletIn(emissions.at(-1), ethWalletId);
+		const start = emissions.length;
 
 		await wallet().connect();
-		await settleMicrotasks();
-		expect(ethFramesFrom(emissions, emissions.length - 1)).toEqual([
-			{ isConnected: true, accounts: [ETH_ADDRESS] },
-		]);
-
-		const beforeDisconnect = emissions.length;
 		await wallet().disconnect();
-		expect(ethFramesFrom(emissions, beforeDisconnect)).toEqual([
-			{ isConnected: false, accounts: [] },
-		]);
-
-		eth.holdAccounts();
-		const beforeReconnect = emissions.length;
 		await wallet().connect();
-		expect(ethFramesFrom(emissions, beforeReconnect)).toEqual([
+		expect(eth.pendingAccountRequests()).toBe(2);
+		expect(ethFramesFrom(emissions, start)).toEqual([
+			{ isConnected: true, accounts: [] },
+			{ isConnected: false, accounts: [] },
 			{ isConnected: true, accounts: [] },
 		]);
 
-		eth.releaseAccounts();
+		eth.releaseAccounts([OLD]);
 		await settleMicrotasks();
-		expect(ethFramesFrom(emissions, beforeReconnect)).toEqual([
+		eth.releaseAccounts([NEW]);
+		await settleMicrotasks();
+		expect(ethFramesFrom(emissions, start)).toEqual([
 			{ isConnected: true, accounts: [] },
-			{ isConnected: true, accounts: [ETH_ADDRESS] },
+			{ isConnected: false, accounts: [] },
+			{ isConnected: true, accounts: [] },
+			{ isConnected: true, accounts: [NEW] },
 		]);
 
 		sub.unsubscribe();
-		eth.uninstall();
+	});
+
+	it("an emission never lists the accounts of a wallet it shows disconnected, even while another wallet's accounts are being re-read", async () => {
+		const a = installFakeEthereumProvider({
+			rdns: "io.kheopskit.a",
+			uuid: "00000000-0000-4000-8000-00000000000a",
+			address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		});
+		const b = installFakeEthereumProvider({
+			rdns: "io.kheopskit.b",
+			uuid: "00000000-0000-4000-8000-00000000000b",
+			address: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		});
+		const emissions: KheopskitState[] = [];
+		const sub = getKheopskit$(ethConfig, {
+			store: createKheopskitStore(),
+		}).subscribe((state) => emissions.push(state));
+		await settleMicrotasks();
+		await vi.advanceTimersByTimeAsync(20);
+		const addresses = (state: KheopskitState | undefined) =>
+			state?.accounts.map((account) => account.address.toLowerCase()).sort();
+
+		await walletIn(emissions.at(-1), a.walletId).connect();
+		await walletIn(emissions.at(-1), b.walletId).connect();
+		await settleMicrotasks();
+		expect(addresses(emissions.at(-1))).toEqual([a.address, b.address]);
+
+		a.holdAccounts();
+		const beforeDisconnect = emissions.length;
+		await walletIn(emissions.at(-1), b.walletId).disconnect();
+		expect(a.pendingAccountRequests()).toBe(1);
+		expect(ethFramesFrom(emissions, beforeDisconnect, b.walletId)).toEqual([
+			{ isConnected: false, accounts: [] },
+		]);
+		expect(addresses(emissions.at(-1))).toEqual([a.address]);
+
+		a.releaseAccounts();
+		await settleMicrotasks();
+		expect(ethFramesFrom(emissions, beforeDisconnect, b.walletId)).toEqual([
+			{ isConnected: false, accounts: [] },
+		]);
+		expect(addresses(emissions.at(-1))).toEqual([a.address]);
+
+		sub.unsubscribe();
 	});
 });
