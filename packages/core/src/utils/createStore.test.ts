@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createStore } from "./createStore";
 import {
 	cookieStorage,
@@ -122,6 +122,34 @@ describe("createStore", () => {
 			store.set({ x: 2 });
 			expect(values).toEqual([{ x: 0 }, { x: 1 }, { x: 2 }]);
 			sub.unsubscribe();
+		});
+	});
+
+	describe("with default storage when localStorage throws", () => {
+		afterEach(() => {
+			vi.restoreAllMocks();
+		});
+
+		it("keeps every in-memory write, observed or not", async () => {
+			vi.spyOn(window.Storage.prototype, "setItem").mockImplementation(() => {
+				throw new DOMException("denied", "SecurityError");
+			});
+			vi.resetModules();
+			const { createStore: createFreshStore } = await import("./createStore");
+			const store = createFreshStore(TEST_KEY, { items: [] as string[] });
+
+			store.mutate((prev) => ({ items: [...prev.items, "a"] }));
+			store.mutate((prev) => ({ items: [...prev.items, "b"] }));
+			const values: { items: string[] }[] = [];
+			const sub = store.observable.subscribe((v) => values.push(v));
+			store.mutate((prev) => ({ items: [...prev.items, "c"] }));
+			sub.unsubscribe();
+
+			expect(values).toEqual([
+				{ items: ["a", "b"] },
+				{ items: ["a", "b", "c"] },
+			]);
+			expect(store.get()).toEqual({ items: ["a", "b", "c"] });
 		});
 	});
 
