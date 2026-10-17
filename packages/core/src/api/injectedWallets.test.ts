@@ -340,6 +340,75 @@ describe("createInjectedWallets$", () => {
 		sub.unsubscribe();
 	});
 
+	it("a source that leaves while its connect is pending aborts the attempt, releases the late handle and never remembers the wallet", async () => {
+		const grant = createDeferred<string>();
+		const releaseAbandonedHandle = vi.fn();
+		const { sources$, emissions, sub, wallet } = setup({
+			connect: () => grant.promise,
+			releaseAbandonedHandle,
+		});
+		const connecting = wallet().connect();
+		expect(await settlementOf(connecting)).toBe("pending");
+		const before = emissions.length;
+
+		sources$.next([]);
+		expect(await settlementOf(connecting)).toBe("rejected");
+		await expect(connecting).rejects.toMatchObject({
+			code: "ABORTED",
+			walletId,
+		});
+		expect(emissions.slice(before)).toEqual([[]]);
+
+		grant.resolve("handle");
+		await settleMicrotasks();
+		expect(releaseAbandonedHandle).toHaveBeenCalledWith("handle", walletId);
+		expect(rememberedWalletIds()).toEqual([]);
+		expect(emissions.slice(before)).toEqual([[]]);
+
+		sub.unsubscribe();
+	});
+
+	it("connect on a wallet whose source has left rejects ABORTED without asking the platform", async () => {
+		const connect = vi.fn().mockResolvedValue("handle");
+		const { sources$, sub, wallet } = setup({ connect });
+		const stale = wallet();
+
+		sources$.next([]);
+		const connecting = stale.connect();
+		expect(await settlementOf(connecting)).toBe("rejected");
+		await expect(connecting).rejects.toMatchObject({
+			code: "ABORTED",
+			walletId,
+		});
+		expect(connect).not.toHaveBeenCalled();
+		expect(rememberedWalletIds()).toEqual([]);
+
+		sub.unsubscribe();
+	});
+
+	it("a connect queued behind a pending disconnect rejects ABORTED when the source leaves, without asking the platform again", async () => {
+		const platformDisconnect = createDeferred<void>();
+		const connect = vi.fn().mockResolvedValue("handle");
+		const { sources$, sub, wallet } = setup({
+			connect,
+			disconnect: () => platformDisconnect.promise,
+		});
+		await wallet().connect();
+		const disconnecting = wallet().disconnect();
+		const queued = wallet().connect();
+		expect(await settlementOf(queued)).toBe("pending");
+
+		sources$.next([]);
+		platformDisconnect.resolve();
+		expect(await settlementOf(disconnecting)).toBe("resolved");
+		expect(await settlementOf(queued)).toBe("rejected");
+		await expect(queued).rejects.toMatchObject({ code: "ABORTED", walletId });
+		expect(connect).toHaveBeenCalledTimes(1);
+		expect(rememberedWalletIds()).toEqual([]);
+
+		sub.unsubscribe();
+	});
+
 	it("tearing down the stream rejects a pending connect with ABORTED and releases the late handle", async () => {
 		const deferred = createDeferred<string>();
 		const releaseAbandonedHandle = vi.fn();
