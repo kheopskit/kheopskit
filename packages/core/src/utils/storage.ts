@@ -90,9 +90,8 @@ export const safeLocalStorage: SyncableStorage = {
 	setItem: (key: string, value: string) =>
 		getSafeLocalStorage().setItem(key, value),
 	removeItem: (key: string) => getSafeLocalStorage().removeItem(key),
-	subscribe: (key: string, callback: (value: string | null) => void) => {
-		const storage = getSafeLocalStorage();
-		return storage.subscribe?.(key, callback) ?? (() => {});
+	get subscribe() {
+		return getSafeLocalStorage().subscribe;
 	},
 };
 
