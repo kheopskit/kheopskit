@@ -1,12 +1,17 @@
 import { BehaviorSubject, Observable, Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import { createExternalStore } from "./createExternalStore";
+import { createLivePipeline } from "./livePipeline";
 
 const storeOf = <T>(
 	observable$: Observable<T>,
 	initialValue: T,
 	serverValue = initialValue,
-) => createExternalStore(() => ({ observable$, initialValue }), serverValue);
+) =>
+	createExternalStore(
+		() => ({ pipeline: createLivePipeline(observable$), initialValue }),
+		serverValue,
+	);
 
 const countingSubscriptions = <T>(subject: Subject<T>) => {
 	let count = 0;
@@ -23,7 +28,7 @@ describe("createExternalStore (React)", () => {
 	describe("source resolution", () => {
 		it("resolves the source only when a client path reads it", () => {
 			const resolveClientSource = vi.fn(() => ({
-				observable$: new Subject<{ side: string }>(),
+				pipeline: createLivePipeline(new Subject<{ side: string }>()),
 				initialValue: { side: "client" },
 			}));
 			const store = createExternalStore(resolveClientSource, {
@@ -39,7 +44,7 @@ describe("createExternalStore (React)", () => {
 
 		it("resolves the source once across snapshots and subscriptions", () => {
 			const resolveClientSource = vi.fn(() => ({
-				observable$: new BehaviorSubject({ count: 1 }).asObservable(),
+				pipeline: createLivePipeline(new BehaviorSubject({ count: 1 })),
 				initialValue: { count: 0 },
 			}));
 			const store = createExternalStore(resolveClientSource, { count: 0 });
@@ -176,69 +181,29 @@ describe("createExternalStore (React)", () => {
 	});
 
 	describe("whenLive", () => {
-		const outcome = async (promise: Promise<unknown>) => {
-			let settled: unknown = "pending";
-			promise.then((value) => {
-				settled = value;
-			});
-			for (let i = 0; i < 5; i++) await flushMicrotasks();
-			return settled;
-		};
-
-		it("resolves the running source's value", async () => {
+		it("resolves the running pipeline's state", async () => {
 			const store = storeOf(new BehaviorSubject({ value: 1 }), { value: 0 });
 			store.subscribe(() => {});
 
-			expect(await store.whenLive()).toEqual({ value: 1 });
+			expect(await store.whenLive()).toEqual({ state: { value: 1 } });
 		});
 
-		it("waits for a restarted source's first emission instead of serving the stopped run's value", async () => {
-			const subject = new Subject<{ value: number }>();
-			const store = storeOf(subject.asObservable(), { value: 0 });
-			const unsubscribe = store.subscribe(() => {});
-			subject.next({ value: 1 });
-			unsubscribe();
-			await flushMicrotasks();
-			store.subscribe(() => {});
-			const live = store.whenLive();
-			const beforeEmission = await outcome(live);
-			subject.next({ value: 2 });
-
-			expect({ beforeEmission, live: await live }).toEqual({
-				beforeEmission: "pending",
-				live: { value: 2 },
-			});
-		});
-
-		it("resolves undefined when no listener holds the source after a microtask", async () => {
+		it("ends unheld when no listener holds the pipeline after a microtask, without restarting it", async () => {
 			const subject = new BehaviorSubject({ value: 1 });
 			const store = storeOf(subject.asObservable(), { value: 0 });
 			store.subscribe(() => {})();
 
-			expect(await store.whenLive()).toBeUndefined();
+			expect(await store.whenLive()).toEqual({ end: "unheld" });
 			expect(subject.observed).toBe(false);
 		});
 
-		it("resolves undefined when the source is released before its first emission", async () => {
-			const subject = new Subject<{ value: number }>();
+		it("serves a listener that subscribed in this task before deciding", async () => {
+			const subject = new BehaviorSubject({ value: 1 });
 			const store = storeOf(subject.asObservable(), { value: 0 });
-			const unsubscribe = store.subscribe(() => {});
 			const live = store.whenLive();
-			unsubscribe();
-
-			expect(await outcome(live)).toBeUndefined();
-		});
-
-		it("resolves undefined once the signal aborts while waiting", async () => {
-			const subject = new Subject<{ value: number }>();
-			const store = storeOf(subject.asObservable(), { value: 0 });
 			store.subscribe(() => {});
-			const controller = new AbortController();
-			const live = store.whenLive(controller.signal);
-			controller.abort();
-			subject.next({ value: 1 });
 
-			expect(await outcome(live)).toBeUndefined();
+			expect(await live).toEqual({ state: { value: 1 } });
 		});
 	});
 });

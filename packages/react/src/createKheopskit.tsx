@@ -12,6 +12,7 @@ import {
 import { type FC, type PropsWithChildren, useCallback } from "react";
 import { defer, type Observable, shareReplay } from "rxjs";
 import { KheopskitSourceProvider } from "./KheopskitSourceProvider";
+import { createLivePipeline, type LivePipeline } from "./livePipeline";
 import { useAccount } from "./useAccount";
 import { useWallet } from "./useWallet";
 import { useWallets } from "./useWallets";
@@ -46,7 +47,7 @@ const deferredStore = (claim: () => KheopskitStore): KheopskitStore => ({
  * `KheopskitProvider`, hooks already typed to those platforms, and the
  * `kheopskit$` stream and `store` the provider uses, for code outside React.
  * Subscribing `kheopskit$` while the provider is mounted runs no second
- * pipeline.
+ * pipeline, and holds the one pipeline for every hook action of the instance.
  *
  * Without `options.store`, the store is created on first use in the browser:
  * backed by cookies when the provider renders first with `ssrCookies`, by
@@ -79,9 +80,11 @@ export const createKheopskit = <
 		return claimed;
 	};
 
-	const kheopskit$: Observable<KheopskitState<P>> = defer(() =>
+	const shared$: Observable<KheopskitState<P>> = defer(() =>
 		getKheopskit$(config, { store: claimStore() }),
 	).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
+	const pipeline = createLivePipeline(shared$);
+	const kheopskit$ = pipeline.observable$;
 
 	const Provider: FC<PropsWithChildren<{ ssrCookies?: string }>> = ({
 		children,
@@ -91,7 +94,7 @@ export const createKheopskit = <
 		const resolveClientSource = useCallback(
 			() => ({
 				store: claimStore(ssrCookies),
-				kheopskit$: kheopskit$ as unknown as Observable<KheopskitState>,
+				pipeline: pipeline as unknown as LivePipeline<KheopskitState>,
 			}),
 			[ssrCookies],
 		);

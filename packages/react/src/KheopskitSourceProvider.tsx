@@ -14,14 +14,14 @@ import {
 	useLayoutEffect,
 	useMemo,
 } from "react";
-import type { Observable } from "rxjs";
 import { KheopskitContext } from "./context";
 import { createExternalStore } from "./createExternalStore";
 import { withLiveActions } from "./liveActions";
+import type { LivePipeline } from "./livePipeline";
 
 type KheopskitSource = {
 	store: KheopskitStore;
-	kheopskit$: Observable<KheopskitState>;
+	pipeline: LivePipeline<KheopskitState>;
 };
 
 type KheopskitSourceProviderProps = PropsWithChildren<{
@@ -75,9 +75,9 @@ export const KheopskitSourceProvider: FC<KheopskitSourceProviderProps> = ({
 			withLiveActions(
 				createExternalStore(
 					() => {
-						const { store, kheopskit$ } = resolveClientSource(resolvedConfig);
+						const { store, pipeline } = resolveClientSource(resolvedConfig);
 						return {
-							observable$: kheopskit$,
+							pipeline,
 							initialValue: hydrating(
 								resolvedConfig,
 								getHydratedSnapshot(store, resolvedConfig, { icons: true }),

@@ -5,26 +5,33 @@ import {
 	type WalletId,
 } from "@kheopskit/core";
 import type { KheopskitExternalStore } from "./context";
+import type { PipelineEnd } from "./livePipeline";
 
 type Wallet = KheopskitState["wallets"][number];
+
+const didNotRun: Record<PipelineEnd, string> = {
+	aborted: "was aborted",
+	unheld:
+		"was called while nothing holds the pipeline (no KheopskitProvider of this instance is mounted and visible, and nothing subscribes its kheopskit$)",
+	errored: "did not run because the pipeline stopped with an error",
+	completed: "did not run because the pipeline completed",
+};
 
 const abortedError = (
 	walletId: WalletId,
 	operation: "connect" | "disconnect",
-	signal: AbortSignal | undefined,
+	end: PipelineEnd,
 ) =>
 	new KheopskitError(
 		"ABORTED",
-		signal?.aborted
-			? `${operation} of wallet ${walletId} was aborted`
-			: `${operation} of wallet ${walletId} was called while no KheopskitProvider holds the pipeline (unmounted or hidden)`,
+		`${operation} of wallet ${walletId} ${didNotRun[end]}`,
 		{ walletId },
 	);
 
 /**
- * `connect` and `disconnect` for one wallet id that act on the running
+ * `connect` and `disconnect` for one wallet id that act on the instance's
  * pipeline at call time: they wait for the restarted pipeline's first emission
- * after an `<Activity>` reveal and reject `ABORTED` while no provider holds it.
+ * after an `<Activity>` reveal and reject `ABORTED` while nothing holds it.
  */
 export const walletActions = (
 	store: Pick<KheopskitExternalStore, "whenLive">,
@@ -34,9 +41,11 @@ export const walletActions = (
 		operation: "connect" | "disconnect",
 		signal?: AbortSignal,
 	) => {
-		const state = await store.whenLive(signal);
-		if (!state) throw abortedError(walletId, operation, signal);
-		const wallet = state.wallets.find((candidate) => candidate.id === walletId);
+		const liveness = await store.whenLive(signal);
+		if (liveness.end) throw abortedError(walletId, operation, liveness.end);
+		const wallet = liveness.state.wallets.find(
+			(candidate) => candidate.id === walletId,
+		);
 		if (!wallet) throw new Error(`[kheopskit] no wallet ${walletId}`);
 		return wallet;
 	};

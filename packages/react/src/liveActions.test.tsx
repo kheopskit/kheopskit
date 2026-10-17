@@ -2,6 +2,7 @@ import {
 	type ConnectOptions,
 	createKheopskitStore,
 	type KheopskitError,
+	type KheopskitState,
 	type KheopskitStore,
 } from "@kheopskit/core";
 import { polkadot } from "@kheopskit/core/polkadot";
@@ -19,10 +20,18 @@ import {
 	useLayoutEffect,
 } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { firstValueFrom, type Subscription } from "rxjs";
+import {
+	firstValueFrom,
+	config as rxjsConfig,
+	Subject,
+	type Subscription,
+} from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createKheopskit } from "./createKheopskit";
+import { KheopskitSourceProvider } from "./KheopskitSourceProvider";
+import { createLivePipeline } from "./livePipeline";
 import { useConnect } from "./useConnect";
+import { useWallet } from "./useWallet";
 import { useWallets } from "./useWallets";
 
 const ALICE = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
@@ -402,7 +411,7 @@ describe("actions reach the live pipeline after an Activity hide stops it and a 
 			remembered: await t.remembered(),
 		}).toEqual({
 			messages: [
-				"ABORTED: [kheopskit] connect of wallet polkadot:talisman was called while no KheopskitProvider holds the pipeline (unmounted or hidden)",
+				"ABORTED: [kheopskit] connect of wallet polkadot:talisman was called while nothing holds the pipeline (no KheopskitProvider of this instance is mounted and visible, and nothing subscribes its kheopskit$)",
 			],
 			enableCalls: 0,
 			writes: 0,
@@ -767,4 +776,109 @@ describe("actions reach the live pipeline after an Activity hide stops it and a 
 			});
 		});
 	});
+});
+
+describe("an action pending on a pipeline that ends before its first emission", () => {
+	const walletId = "polkadot:talisman" as const;
+	const stateWithWallet = (connect: () => Promise<void>) =>
+		({
+			wallets: [{ id: walletId, status: "disconnected", connect }],
+			accounts: [],
+			isHydrating: false,
+			isDiscovering: false,
+		}) as unknown as KheopskitState;
+
+	const providerConfig = { platforms: [polkadot()] };
+
+	const mountOnSubject = () => {
+		const subject = new Subject<KheopskitState>();
+		const store = createKheopskitStore({ storage: createMemoryStorage() });
+		const resolveClientSource = () => ({
+			store,
+			pipeline: createLivePipeline(subject),
+		});
+		const api: { connect?: () => Promise<void> } = {};
+		const Consumer = () => {
+			api.connect = useWallet(walletId)?.connect;
+			return null;
+		};
+		const app = (mode: Mode) => (
+			<Activity mode={mode}>
+				<KheopskitSourceProvider
+					config={providerConfig}
+					ssrCookies={undefined}
+					resolveClientSource={resolveClientSource}
+				>
+					<Consumer />
+				</KheopskitSourceProvider>
+			</Activity>
+		);
+		const root = createRoot(
+			document.body.appendChild(document.createElement("div")),
+		);
+		return { subject, api, app, root, store };
+	};
+
+	const reported: unknown[] = [];
+	beforeEach(() => {
+		rxjsConfig.onUnhandledError = (error) => reported.push(error);
+	});
+	afterEach(() => {
+		rxjsConfig.onUnhandledError = null;
+		reported.length = 0;
+	});
+
+	it.each([
+		[
+			"errors",
+			(subject: Subject<KheopskitState>) => subject.error(new Error("boom")),
+			"did not run because the pipeline stopped with an error",
+		],
+		[
+			"completes",
+			(subject: Subject<KheopskitState>) => subject.complete(),
+			"did not run because the pipeline completed",
+		],
+	])(
+		"rejects ABORTED when the restarted pipeline %s, and so does a later call",
+		async (ending, finish, reason) => {
+			const { subject, api, app, root, store } = mountOnSubject();
+			const platformConnect = vi.fn(async () => {});
+			act(() => root.render(app("visible")));
+			act(() => subject.next(stateWithWallet(platformConnect)));
+			const { connect } = api;
+			act(() => root.render(app("hidden")));
+			await act(async () => {});
+			act(() => root.render(app("visible")));
+			const messages: string[] = [];
+			const read = (error: KheopskitError) => {
+				messages.push(`${error.code}: ${error.message}`);
+			};
+			connect?.().catch(read);
+			await act(async () => {});
+			const settledBeforeEnd = messages.length;
+			act(() => finish(subject));
+			await act(async () => {});
+			connect?.().catch(read);
+			await act(async () => {});
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			act(() => root.unmount());
+			store.destroy();
+
+			expect({
+				settledBeforeEnd,
+				messages,
+				platformConnectCalls: platformConnect.mock.calls.length,
+				reportedErrors: reported.map((error) => String(error)),
+			}).toEqual({
+				settledBeforeEnd: 0,
+				messages: [
+					`ABORTED: [kheopskit] connect of wallet ${walletId} ${reason}`,
+					`ABORTED: [kheopskit] connect of wallet ${walletId} ${reason}`,
+				],
+				platformConnectCalls: 0,
+				reportedErrors: ending === "errors" ? ["Error: boom"] : [],
+			});
+		},
+	);
 });

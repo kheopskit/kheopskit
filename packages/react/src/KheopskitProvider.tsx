@@ -12,6 +12,7 @@ import {
 	useRef,
 } from "react";
 import { KheopskitSourceProvider } from "./KheopskitSourceProvider";
+import { createLivePipeline } from "./livePipeline";
 
 export type KheopskitProviderProps = PropsWithChildren & {
 	/**
@@ -97,10 +98,9 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 				});
 			return {
 				store: sourceStore,
-				kheopskit$: getKheopskit$(resolvedConfig, {
-					ssrCookies,
-					store: sourceStore,
-				}),
+				pipeline: createLivePipeline(
+					getKheopskit$(resolvedConfig, { ssrCookies, store: sourceStore }),
+				),
 			};
 		},
 		[ssrCookies, store],
