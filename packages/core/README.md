@@ -120,11 +120,9 @@ platform granted the connect changes nothing. A refused prompt rejects with
 platform error as `cause`. `connect()` resolves only after `kheopskit$` has
 emitted the wallet with `isConnected: true`. On platforms that list accounts
 asynchronously (Ethereum `eth_accounts`) the accounts may arrive in a later
-emission. No emission shows a disconnected wallet still listing accounts.
-Until a fix tracked for 6.0.0 lands, an Ethereum wallet that reconnects while
-another connected Ethereum wallet's `eth_accounts` request is pending may show
-the accounts of its previous connection for as long as that request goes
-unanswered, and `connect()` may resolve on that emission. `disconnect()`
+emission. No emission shows a disconnected wallet still listing accounts, or a
+connected wallet listing the accounts of a previous connection. Another
+wallet's pending `eth_accounts` request never delays them. `disconnect()`
 resolves once it has emitted `isConnected: false`, or once a later `connect()`
 or the end of the subscription makes that emission impossible. After the last
 subscriber has unsubscribed, `connect()` and `disconnect()` on a wallet object

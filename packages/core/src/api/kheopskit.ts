@@ -195,13 +195,8 @@ export const getKheopskit$ = <
 
 		// Get live wallets and accounts
 		const liveWallets$ = getWallets$(kc, store);
-		const liveAccounts$ = combineLatest([
-			liveWallets$,
-			getAccounts$(kc, liveWallets$),
-		]).pipe(
-			map(([wallets, accounts]) =>
-				accountsOfConnected(wallets, accounts).map(asLive),
-			),
+		const liveAccounts$ = getAccounts$(kc, liveWallets$).pipe(
+			map((accounts) => accounts.map(asLive)),
 		);
 
 		// Apply hydration buffer to wallets
@@ -411,16 +406,6 @@ const asLive = <T extends object>(item: T): T & { isPlaceholder: false } => {
 	const live = { ...item, isPlaceholder: false as const };
 	flagged.set(item, live);
 	return live;
-};
-
-const accountsOfConnected = (
-	wallets: (BaseWallet | WalletConnectWallet)[],
-	accounts: BaseWalletAccount[],
-): BaseWalletAccount[] => {
-	const connected = new Set(
-		wallets.filter((w) => w.isConnected).map((w) => w.id),
-	);
-	return accounts.filter((account) => connected.has(account.walletId));
 };
 
 const arraysEqual = (a: string[], b: string[]) =>
