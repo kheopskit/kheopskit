@@ -131,7 +131,43 @@ frame until the extension answers. A reconnect never prompts while the site
 stays authorised in the extension. When the authorisation was revoked the
 extension prompts once; a refusal forgets the wallet and the next load stays
 silent. Any other failure sets `error`, keeps the wallet remembered and is
-retried up to three times when discovery changes.
+retried up to three times when discovery changes. A manual `connect()` or
+`disconnect()` on a remembered wallet ends its automatic reconnect for the
+session, so a disconnect the user makes is never undone.
+
+`autoReconnect` governs injected wallets and is `true` by default. Pass `false`
+to reconnect none of them, or a
+synchronous, pure function to choose per wallet (it runs on the server and on
+the client against the cached placeholder, so key on `wallet.id`):
+
+```ts
+getKheopskit$({
+  platforms: [polkadot()],
+  autoReconnect: (wallet) => wallet.id === "polkadot:talisman",
+});
+```
+
+A wallet the function rejects shows `disconnected` from the first frame, without
+its cached accounts. Every successful connect is remembered whatever this option
+says, so an app can turn reconnect on later. The WalletConnect row follows
+AppKit's own session restore and hydrates `connecting` while AppKit restores.
+- `cachedWallets` and `cachedAccounts` are written 1 second after the live state
+  settles (the write is debounced), and only when a persisted field changed.
+  Only accounts of connected wallets are cached.
+
+With `ssrCookies`, the same data goes to a `kheopskit` cookie in a compact form,
+to stay under the cookie size limit:
+
+```json
+{ "v": 1, "r": ["polkadot:talisman"], "w": [["polkadot:talisman", "Talisman", 1, 0]], "a": [["polkadot:talisman", "5Grw…", "Alice", null, 0, 0]] }
+```
+
+`r` is `remembered`, `w` holds `[id, name, isConnected, type]` per wallet and
+`a` holds `[walletId, address, name, chainId, polkadotType, platform]` per
+account.
+
+Data written before v6 stored `remembered` as `autoReconnect`. The store reads
+that field as `remembered` and drops it on the next write.
 
 ### Hydration end
 
@@ -150,38 +186,6 @@ The cache is written after hydration ends, one second after the state
 stabilises. A wallet still `connecting` at that time keeps its previous cached
 entry and accounts, so a slow reconnect never writes an empty cache, while
 every other wallet is written as it is.
-
-`autoReconnect` is `true` by default. Pass `false` to reconnect nothing, or a
-synchronous, pure function to choose per wallet (it runs on the server and on
-the client against the cached placeholder, so key on `wallet.id`):
-
-```ts
-getKheopskit$({
-  platforms: [polkadot()],
-  autoReconnect: (wallet) => wallet.id === "polkadot:talisman",
-});
-```
-
-A wallet the function rejects shows `disconnected` from the first frame, without
-its cached accounts. Every successful connect is remembered whatever this option
-says, so an app can turn reconnect on later.
-- `cachedWallets` and `cachedAccounts` are written 1 second after the live state
-  settles (the write is debounced), and only when a persisted field changed.
-  Only accounts of connected wallets are cached.
-
-With `ssrCookies`, the same data goes to a `kheopskit` cookie in a compact form,
-to stay under the cookie size limit:
-
-```json
-{ "v": 1, "r": ["polkadot:talisman"], "w": [["polkadot:talisman", "Talisman", 1, 0]], "a": [["polkadot:talisman", "5Grw…", "Alice", null, 0, 0]] }
-```
-
-`r` is `remembered`, `w` holds `[id, name, isConnected, type]` per wallet and
-`a` holds `[walletId, address, name, chainId, polkadotType, platform]` per
-account.
-
-Data written before v6 stored `remembered` as `autoReconnect`. The store reads
-that field as `remembered` and drops it on the next write.
 
 ### Custom storage
 

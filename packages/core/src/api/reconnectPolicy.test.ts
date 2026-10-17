@@ -69,13 +69,13 @@ describe("createReconnectPolicy", () => {
 	});
 });
 
-describe("createReconnectPolicy refusal", () => {
-	it("never attempts a refused wallet again, even with attempts left", async () => {
+describe("createReconnectPolicy settlement", () => {
+	it("never attempts a settled wallet again, even with attempts left", async () => {
 		const policy = createReconnectPolicy({ maxAttempts: 3 });
 		const connect = vi.fn().mockRejectedValue(new Error("refused"));
 
 		await expect(policy.attempt("w1", connect)).rejects.toThrow("refused");
-		policy.refuse("w1");
+		policy.settle("w1");
 
 		expect(policy.shouldAttempt("w1")).toBe(false);
 		await expect(policy.attempt("w1", connect)).resolves.toBe(false);

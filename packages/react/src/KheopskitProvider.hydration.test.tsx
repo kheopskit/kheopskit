@@ -2,7 +2,9 @@
 import { ethereum } from "@kheopskit/core/ethereum";
 import { polkadot } from "@kheopskit/core/polkadot";
 import { solana } from "@kheopskit/core/solana";
-import { act, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
+import { act } from "react";
+import { hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -376,6 +378,42 @@ describe("KheopskitProvider snapshots under an autoReconnect predicate", () => {
 		expect(screen.getByTestId("account-order")).toHaveTextContent(
 			expectedAccounts,
 		);
+	});
+
+	it("hydrating the server markup on the client raises no hydration warning and keeps the connecting status", async () => {
+		const ssrCookies = `kheopskit=${encodeURIComponent(JSON.stringify(cachedState))}`;
+		// biome-ignore lint/suspicious/noDocumentCookie: necessary for test setup
+		document.cookie = ssrCookies;
+		const tree = (
+			<KheopskitProvider config={config} ssrCookies={ssrCookies}>
+				<WalletsConsumer />
+			</KheopskitProvider>
+		);
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		const recoverable: unknown[] = [];
+		const container = document.createElement("div");
+		container.innerHTML = renderToString(tree);
+		document.body.appendChild(container);
+		const textOf = (testId: string) =>
+			container.querySelector(`[data-testid="${testId}"]`)?.textContent;
+		expect(textOf("wallet-status")).toBe(expectedStatuses);
+
+		let root: Root | undefined;
+		await act(async () => {
+			root = hydrateRoot(container, tree, {
+				onRecoverableError: (error) => recoverable.push(error),
+			});
+		});
+
+		expect(textOf("wallet-status")).toBe(expectedStatuses);
+		expect(textOf("account-order")).toBe(expectedAccounts);
+		expect(recoverable).toEqual([]);
+		expect(consoleError).not.toHaveBeenCalled();
+
+		await act(async () => root?.unmount());
+		container.remove();
 	});
 
 	it("without ssrCookies the server renders no wallets and the client applies the predicate to its cache", () => {

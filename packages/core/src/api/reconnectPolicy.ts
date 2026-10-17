@@ -10,7 +10,7 @@ export type ReconnectPolicyOptions = {
 type ReconnectAttemptState =
 	| { kind: "pending" }
 	| { kind: "reconnected" }
-	| { kind: "refused" }
+	| { kind: "settled" }
 	| { kind: "failed"; attempts: number };
 
 export const createReconnectPolicy = ({
@@ -43,11 +43,11 @@ export const createReconnectPolicy = ({
 		}
 	};
 
-	const refuse = (walletId: string) => {
-		states.set(walletId, { kind: "refused" });
+	const settle = (walletId: string) => {
+		states.set(walletId, { kind: "settled" });
 	};
 
-	return { shouldAttempt, attempt, refuse };
+	return { shouldAttempt, attempt, settle };
 };
 
 // Shared by the first-frame snapshot and the live attempt: both must evaluate

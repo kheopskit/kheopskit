@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { setCachedIcons } from "../utils/iconCache";
-import type { WalletId } from "../utils/WalletId";
+import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../utils/WalletId";
 import { getHydratedSnapshot } from "./hydration";
 import { polkadot } from "./polkadot/plugin";
 import { createKheopskitStore } from "./store";
@@ -123,7 +123,7 @@ describe("getHydratedSnapshot", () => {
 		expect(accounts).toEqual([]);
 	});
 
-	it("with autoReconnect false every cached connected wallet hydrates as disconnected", () => {
+	it("with autoReconnect false every cached connected injected wallet hydrates as disconnected", () => {
 		const store = makeStore();
 		const { wallets, accounts } = getHydratedSnapshot(store, config(false));
 
@@ -132,6 +132,24 @@ describe("getHydratedSnapshot", () => {
 			[ethereumWalletId, "disconnected", false],
 		]);
 		expect(accounts).toEqual([]);
+	});
+
+	it("a cached connected WalletConnect connector hydrates as connecting under autoReconnect false, since AppKit restores its own session", () => {
+		const store = makeStore([
+			cachedTalisman,
+			{
+				id: WALLET_CONNECT_WALLET_ID,
+				type: "walletconnect",
+				name: "WalletConnect",
+				isConnected: true,
+			},
+		]);
+		const { wallets } = getHydratedSnapshot(store, config(false));
+
+		expect(wallets.map((w) => [w.id, w.status, w.isConnected])).toEqual([
+			[polkadotWalletId, "disconnected", false],
+			[WALLET_CONNECT_WALLET_ID, "connecting", false],
+		]);
 	});
 
 	it("a cached disconnected wallet hydrates as disconnected whatever the predicate says", () => {
