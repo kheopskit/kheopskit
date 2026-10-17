@@ -118,18 +118,30 @@ const installFakeEthereumProvider = ({
 	const walletId = `ethereum:${rdns}` as WalletId;
 	const pendingAccounts: Array<(addresses: string[]) => void> = [];
 	let holdAccounts = false;
+	let accountRequests = 0;
+	let currentAddress = address;
+	type Listener = (...args: unknown[]) => void;
+	const listeners = new Map<string, Set<Listener>>();
 	const provider = {
 		request: async ({ method }: { method: string }) => {
-			if (method === "eth_requestAccounts") return [address];
+			if (method === "eth_requestAccounts") return [currentAddress];
 			if (method === "eth_chainId") return "0x1";
-			if (method === "eth_accounts")
+			if (method === "eth_accounts") {
+				accountRequests++;
 				return holdAccounts
 					? new Promise<string[]>((resolve) => pendingAccounts.push(resolve))
-					: [address];
+					: [currentAddress];
+			}
 			throw new Error(`unexpected request ${method}`);
 		},
-		on: () => {},
-		removeListener: () => {},
+		on: (event: string, listener: Listener) => {
+			const set = listeners.get(event) ?? new Set<Listener>();
+			set.add(listener);
+			listeners.set(event, set);
+		},
+		removeListener: (event: string, listener: Listener) => {
+			listeners.get(event)?.delete(listener);
+		},
 	};
 	const unannounce = announceProvider({
 		info: { uuid, name: `Fake ${rdns}`, icon: "data:image/svg+xml,", rdns },
@@ -141,6 +153,16 @@ const installFakeEthereumProvider = ({
 		holdAccounts: () => {
 			holdAccounts = true;
 		},
+		changeAddress: (next: string) => {
+			currentAddress = next;
+		},
+		emitAccountsChanged: (addresses: string[]) => {
+			for (const listener of listeners.get("accountsChanged") ?? [])
+				listener(addresses);
+		},
+		listenerCount: () =>
+			[...listeners.values()].reduce((n, set) => n + set.size, 0),
+		accountRequests: () => accountRequests,
 		pendingAccountRequests: () => pendingAccounts.length,
 		releaseAccounts: (addresses = [address]) => {
 			const resolve = pendingAccounts.shift();
@@ -1127,26 +1149,294 @@ describe("getKheopskit$ connect semantics", () => {
 		const addresses = (state: KheopskitState | undefined) =>
 			state?.accounts.map((account) => account.address.toLowerCase()).sort();
 
+		a.holdAccounts();
 		await walletIn(emissions.at(-1), a.walletId).connect();
 		await walletIn(emissions.at(-1), b.walletId).connect();
 		await settleMicrotasks();
-		expect(addresses(emissions.at(-1))).toEqual([a.address, b.address]);
+		expect(addresses(emissions.at(-1))).toEqual([b.address]);
 
-		a.holdAccounts();
 		const beforeDisconnect = emissions.length;
 		await walletIn(emissions.at(-1), b.walletId).disconnect();
 		expect(a.pendingAccountRequests()).toBe(1);
 		expect(ethFramesFrom(emissions, beforeDisconnect, b.walletId)).toEqual([
 			{ status: "disconnected", isConnected: false, accounts: [] },
 		]);
-		expect(addresses(emissions.at(-1))).toEqual([a.address]);
+		expect(addresses(emissions.at(-1))).toEqual([]);
 
 		a.releaseAccounts();
 		await settleMicrotasks();
 		expect(ethFramesFrom(emissions, beforeDisconnect, b.walletId)).toEqual([
 			{ status: "disconnected", isConnected: false, accounts: [] },
+			{ status: "disconnected", isConnected: false, accounts: [] },
 		]);
 		expect(addresses(emissions.at(-1))).toEqual([a.address]);
+
+		sub.unsubscribe();
+	});
+
+	const installTwoEthereumProviders = (addressOfB: string) => ({
+		a: installFakeEthereumProvider({
+			rdns: "io.kheopskit.a",
+			uuid: "00000000-0000-4000-8000-00000000000a",
+			address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		}),
+		b: installFakeEthereumProvider({
+			rdns: "io.kheopskit.b",
+			uuid: "00000000-0000-4000-8000-00000000000b",
+			address: addressOfB,
+		}),
+	});
+
+	const addressesIn = (state: KheopskitState | undefined) =>
+		state?.accounts.map((account) => account.address.toLowerCase()).sort();
+
+	const subscribeEthereum = async () => {
+		const emissions: KheopskitState[] = [];
+		const sub = getKheopskit$(ethConfig, {
+			store: createKheopskitStore(),
+		}).subscribe((state) => emissions.push(state));
+		await settleMicrotasks();
+		await vi.advanceTimersByTimeAsync(20);
+		return { emissions, sub };
+	};
+
+	it("a wallet that reconnects with a new address never shows its previous connection's accounts, and its reconnect does not make a sibling re-read eth_accounts", async () => {
+		const OLD = "0x2222222222222222222222222222222222222222";
+		const NEW = "0x3333333333333333333333333333333333333333";
+		const { a, b } = installTwoEthereumProviders(OLD);
+		const { emissions, sub } = await subscribeEthereum();
+
+		await walletIn(emissions.at(-1), a.walletId).connect();
+		await walletIn(emissions.at(-1), b.walletId).connect();
+		await settleMicrotasks();
+		expect(addressesIn(emissions.at(-1))).toEqual([a.address, OLD].sort());
+
+		a.holdAccounts();
+		const requestsOfA = a.accountRequests();
+		const from = emissions.length;
+		await walletIn(emissions.at(-1), b.walletId).disconnect();
+		expect(b.listenerCount()).toBe(0);
+		b.changeAddress(NEW);
+		await walletIn(emissions.at(-1), b.walletId).connect();
+		expect(
+			ethFramesFrom(emissions, from, b.walletId).map((frame) => frame.accounts),
+		).not.toContainEqual([OLD]);
+
+		await settleMicrotasks();
+		expect(ethFramesFrom(emissions, from, b.walletId)).toEqual([
+			{ status: "disconnected", isConnected: false, accounts: [] },
+			{ status: "connecting", isConnected: false, accounts: [] },
+			{ status: "connected", isConnected: true, accounts: [] },
+			{ status: "connected", isConnected: true, accounts: [NEW] },
+		]);
+		expect(addressesIn(emissions.at(-1))).toEqual([a.address, NEW].sort());
+		expect(a.accountRequests()).toBe(requestsOfA);
+		expect(a.pendingAccountRequests()).toBe(0);
+
+		sub.unsubscribe();
+	});
+
+	it("a wallet whose eth_accounts is pending neither delays another wallet's accounts nor its account changes", async () => {
+		const B = "0x1111111111111111111111111111111111111111";
+		const NEW = "0x3333333333333333333333333333333333333333";
+		const { a, b } = installTwoEthereumProviders(B);
+		a.holdAccounts();
+		const { emissions, sub } = await subscribeEthereum();
+
+		await walletIn(emissions.at(-1), a.walletId).connect();
+		expect(a.pendingAccountRequests()).toBe(1);
+		const from = emissions.length;
+		await walletIn(emissions.at(-1), b.walletId).connect();
+		await settleMicrotasks();
+		expect(ethFramesFrom(emissions, from, b.walletId)).toEqual([
+			{ status: "connecting", isConnected: false, accounts: [] },
+			{ status: "connected", isConnected: true, accounts: [] },
+			{ status: "connected", isConnected: true, accounts: [B] },
+		]);
+
+		b.emitAccountsChanged([NEW]);
+		await settleMicrotasks();
+		expect(addressesIn(emissions.at(-1))).toEqual([NEW]);
+		expect(a.pendingAccountRequests()).toBe(1);
+
+		a.releaseAccounts();
+		await settleMicrotasks();
+		expect(addressesIn(emissions.at(-1))).toEqual([a.address, NEW].sort());
+
+		sub.unsubscribe();
+	});
+
+	it("a wallet that reconnects with a new address while a sibling's eth_accounts is pending shows only the new address, and the sibling stays pending", async () => {
+		const OLD = "0x2222222222222222222222222222222222222222";
+		const NEW = "0x3333333333333333333333333333333333333333";
+		const { a, b } = installTwoEthereumProviders(OLD);
+		a.holdAccounts();
+		const { emissions, sub } = await subscribeEthereum();
+
+		await walletIn(emissions.at(-1), b.walletId).connect();
+		await walletIn(emissions.at(-1), a.walletId).connect();
+		await settleMicrotasks();
+		expect(addressesIn(emissions.at(-1))).toEqual([OLD]);
+		expect(a.pendingAccountRequests()).toBe(1);
+
+		const from = emissions.length;
+		await walletIn(emissions.at(-1), b.walletId).disconnect();
+		b.changeAddress(NEW);
+		await walletIn(emissions.at(-1), b.walletId).connect();
+		expect(
+			ethFramesFrom(emissions, from, b.walletId).map((frame) => frame.accounts),
+		).not.toContainEqual([OLD]);
+
+		await settleMicrotasks();
+		expect(ethFramesFrom(emissions, from, b.walletId)).toEqual([
+			{ status: "disconnected", isConnected: false, accounts: [] },
+			{ status: "connecting", isConnected: false, accounts: [] },
+			{ status: "connected", isConnected: true, accounts: [] },
+			{ status: "connected", isConnected: true, accounts: [NEW] },
+		]);
+		expect(addressesIn(emissions.at(-1))).toEqual([NEW]);
+		expect(a.accountRequests()).toBe(1);
+		expect(a.pendingAccountRequests()).toBe(1);
+
+		a.releaseAccounts();
+		await settleMicrotasks();
+		expect(addressesIn(emissions.at(-1))).toEqual([a.address, NEW].sort());
+
+		sub.unsubscribe();
+	});
+
+	it("a Polkadot wallet disconnecting and reconnecting does not make a connected Ethereum wallet re-read eth_accounts", async () => {
+		const eth = installFakeEthereumProvider();
+		const emissions: KheopskitState[] = [];
+		const sub = getKheopskit$(
+			{ ...config(0), platforms: [...config(0).platforms, ethereum()] },
+			{ store: createKheopskitStore() },
+		).subscribe((state) => emissions.push(state));
+		await settleMicrotasks();
+		await vi.advanceTimersByTimeAsync(20);
+		const polkadotWallet = () => walletIn(emissions.at(-1), fakeWalletId);
+
+		const connecting = polkadotWallet().connect();
+		fake.releaseEnable();
+		await connecting;
+		await walletIn(emissions.at(-1), ethWalletId).connect();
+		await settleMicrotasks();
+		expect(eth.accountRequests()).toBe(1);
+		expect(addressesIn(emissions.at(-1))).toEqual(
+			[ALICE, BOB, ETH_ADDRESS].map((address) => address.toLowerCase()).sort(),
+		);
+
+		await polkadotWallet().disconnect();
+		const reconnecting = polkadotWallet().connect();
+		fake.releaseEnable();
+		await reconnecting;
+		await settleMicrotasks();
+		expect(eth.accountRequests()).toBe(1);
+		expect(addressesIn(emissions.at(-1))).toEqual(
+			[ALICE, BOB, ETH_ADDRESS].map((address) => address.toLowerCase()).sort(),
+		);
+
+		sub.unsubscribe();
+	});
+
+	const SIBLING = "sibling-extension";
+	const siblingWalletId = `polkadot:${SIBLING}` as WalletId;
+	const CHARLIE = "5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y";
+
+	const installSiblingExtension = ({ resolveGet = true } = {}) => {
+		const accounts = [{ address: CHARLIE, name: "Charlie", type: "sr25519" }];
+		const unsubscribe = vi.fn();
+		let onAccountsChanged: ((next: typeof accounts) => void) | undefined;
+		const subscribe = vi.fn((listener: (next: typeof accounts) => void) => {
+			onAccountsChanged = listener;
+			return unsubscribe;
+		});
+		const injected = {
+			accounts: {
+				get: () =>
+					resolveGet ? Promise.resolve(accounts) : new Promise(() => {}),
+				subscribe,
+			},
+			signer: {
+				signRaw: async () => ({ id: 1, signature: "0x" }),
+				signPayload: async () => ({ id: 1, signature: "0x" }),
+			},
+		};
+		(
+			window as unknown as { injectedWeb3: Record<string, unknown> }
+		).injectedWeb3[SIBLING] = {
+			version: "1.0.0",
+			enable: async () => injected,
+		};
+		return {
+			subscribe,
+			unsubscribe,
+			changeAccounts: (next: typeof accounts) => {
+				if (!onAccountsChanged) throw new Error("no accounts subscription");
+				onAccountsChanged(next);
+			},
+		};
+	};
+
+	const subscribePolkadot = async () => {
+		const emissions: KheopskitState[] = [];
+		const sub = getKheopskit$(config(0), {
+			store: createKheopskitStore(),
+		}).subscribe((state) => emissions.push(state));
+		await settleMicrotasks();
+		await vi.advanceTimersByTimeAsync(20);
+		return { emissions, sub };
+	};
+
+	it("a Polkadot extension's account subscription runs once per connection, untouched by a sibling connecting or disconnecting, and ends on its own disconnect", async () => {
+		const sibling = installSiblingExtension();
+		const { emissions, sub } = await subscribePolkadot();
+		const wallet = () => walletIn(emissions.at(-1), fakeWalletId);
+
+		const connecting = wallet().connect();
+		fake.releaseEnable();
+		await connecting;
+		expect(fake.subscribe).toHaveBeenCalledTimes(1);
+
+		await walletIn(emissions.at(-1), siblingWalletId).connect();
+		await walletIn(emissions.at(-1), siblingWalletId).disconnect();
+		await walletIn(emissions.at(-1), siblingWalletId).connect();
+		await settleMicrotasks();
+		expect(fake.subscribe).toHaveBeenCalledTimes(1);
+		expect(fake.unsubscribe).toHaveBeenCalledTimes(0);
+		expect(sibling.subscribe).toHaveBeenCalledTimes(2);
+		expect(sibling.unsubscribe).toHaveBeenCalledTimes(1);
+		expect(addressesIn(emissions.at(-1))).toEqual(
+			[ALICE, BOB, CHARLIE].map((address) => address.toLowerCase()).sort(),
+		);
+
+		await wallet().disconnect();
+		expect(fake.unsubscribe).toHaveBeenCalledTimes(1);
+		expect(addressesIn(emissions.at(-1))).toEqual([CHARLIE.toLowerCase()]);
+
+		sub.unsubscribe();
+		expect(sibling.unsubscribe).toHaveBeenCalledTimes(2);
+	});
+
+	it("a Polkadot extension whose accounts.get() never resolves does not block another extension's account updates", async () => {
+		const sibling = installSiblingExtension({ resolveGet: false });
+		const { emissions, sub } = await subscribePolkadot();
+		const wallet = () => walletIn(emissions.at(-1), fakeWalletId);
+
+		const stuck = walletIn(emissions.at(-1), siblingWalletId).connect();
+		const connecting = wallet().connect();
+		fake.releaseEnable();
+		await connecting;
+		expect(await settlementOf(stuck)).toBe("pending");
+		expect(addressesIn(emissions.at(-1))).toEqual(
+			[ALICE, BOB].map((address) => address.toLowerCase()).sort(),
+		);
+
+		fake.changeAccounts([{ address: ALICE, name: "Alice", type: "sr25519" }]);
+		await settleMicrotasks();
+		expect(addressesIn(emissions.at(-1))).toEqual([ALICE.toLowerCase()]);
+		expect(walletIn(emissions.at(-1), siblingWalletId).isConnected).toBe(false);
+		expect(sibling.subscribe).toHaveBeenCalledTimes(0);
 
 		sub.unsubscribe();
 	});
