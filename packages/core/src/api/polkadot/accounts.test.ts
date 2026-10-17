@@ -154,7 +154,7 @@ describe("getPolkadotAccounts$", () => {
 	it("builds the signer with the detected factory and passes ecdsa for ethereum accounts", async () => {
 		const factory = vi.mocked(pjs.getTxCreatorFromPjs);
 		factory.mockClear();
-		const listed = [
+		const listed: PolkadotInjectedAccount[] = [
 			alice,
 			{ address: ETH, name: "Eth Key", type: "ethereum", genesisHash: null },
 		];
