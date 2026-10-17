@@ -134,6 +134,82 @@ export const App = () => (
 
 > **Reading a wallet's SDK handle?** `state.wallets` mixes injected wallets with the single, platform-less WalletConnect connector. Narrow with `isInjectedWallet(wallet)` (the complement of `isWalletConnectWallet`) to recover `wallet.platform`, `wallet.sourceId`, and the injected SDK handle (`provider` on Ethereum, `extension` on Polkadot, `wallet` on Solana).
 
+#### Hooks for one wallet or account
+
+`useWallet(walletId)` and `useAccount(accountId)` return one item, or
+`undefined`, and re-render only when that item changes. `useConnect(walletId)`
+returns `{ connect, disconnect, status, error }`. It aborts a pending
+`connect()` when the component unmounts. `useWallets()` and `useAccounts()`
+re-render on every state change.
+
+```tsx
+import type { WalletId } from "@kheopskit/core";
+import { useConnect } from "@kheopskit/react";
+
+const ConnectButton = ({ walletId }: { walletId: WalletId }) => {
+  const { connect, disconnect, status, error } = useConnect(walletId);
+  if (status === "connected") return <button onClick={disconnect}>Disconnect</button>;
+  return (
+    <>
+      <button disabled={status === "connecting"} onClick={connect}>
+        Connect
+      </button>
+      {error?.code === "USER_REJECTED" && <p>You refused the connection.</p>}
+    </>
+  );
+};
+```
+
+#### One instance for React and RxJS code
+
+`createKheopskit` also returns `kheopskit$`, the stream its provider subscribes
+to, and its `store`. Subscribe to `kheopskit$` from RxJS code instead of calling
+`getKheopskit$` again. The provider and your code then share one wallet
+discovery, one reconnect attempt and one extension prompt.
+
+```ts
+// kheopskit.ts
+export const { KheopskitProvider, useWallet, kheopskit$, store } = createKheopskit({
+  platforms: [polkadot()],
+});
+
+// session.ts
+import { map } from "rxjs";
+import { kheopskit$ } from "./kheopskit";
+
+export const connectedWalletIds$ = kheopskit$.pipe(
+  map(({ wallets }) => wallets.filter((wallet) => wallet.isConnected).map((wallet) => wallet.id)),
+);
+```
+
+In an SSR app, pass `createKheopskit(config, { store })` when code reads `store`
+or subscribes to `kheopskit$` before the provider renders. The
+[React README](packages/react/README.md#one-instance-for-react-and-rxjs-code)
+explains which store `createKheopskit` creates otherwise.
+
+#### Testing React components
+
+Render the real provider with a store backed by memory and a fake extension:
+
+```tsx
+const store = createKheopskitStore({ storage: createMemoryStorage() });
+const talisman = createFakePolkadotExtension({ name: "talisman" });
+const { KheopskitProvider } = createKheopskit({ platforms: [polkadot()] }, { store });
+
+render(
+  <KheopskitProvider>
+    <ConnectButton walletId={talisman.walletId} />
+  </KheopskitProvider>,
+);
+
+// teardown
+cleanup();
+talisman.uninstall();
+store.destroy();
+```
+
+The [React README](packages/react/README.md#testing) has the complete test.
+
 ### With Vanilla JavaScript and RxJS
 
 1. Instantiate a Kheopskit observable with `getKheopskit$(config)`.

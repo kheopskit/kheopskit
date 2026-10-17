@@ -585,3 +585,43 @@ has no live stream behind it, `connect()` rejects `WALLET_PENDING`.
 - A `hasAccountsFrom`-style check that counts cached accounts as usable.
   Filter on `!account.isPlaceholder`.
 - `try`/`catch` around a placeholder's `connect()` for `PendingWalletError`.
+
+---
+
+## 8. `@kheopskit/react`: one shared instance and wallet hooks
+
+Nothing to change in an app that uses `useWallets`, `useAccounts` and
+`KheopskitProvider`. Their signatures and results stay the same.
+
+### Context shape (internal)
+
+The provider's context now carries an external store (`subscribe`,
+`getSnapshot`, `getServerSnapshot`) instead of `{ state }`. Only code that read
+`KheopskitContext` directly sees the change. The package does not export it.
+
+### Unmounting the provider stops kheopskit
+
+In v5, unmounting `KheopskitProvider` left its `kheopskit$` subscription open,
+so the pipeline kept running and persisting state changes. In v6 the provider subscribes while
+it is mounted and unsubscribes on unmount, and the pipeline stops once no
+subscriber is left.
+
+### Additions
+
+| Addition | What it does |
+|----------|--------------|
+| `createKheopskit(config, { store? })` returns `kheopskit$` and `store` | the stream its provider subscribes to and the store that stream persists into; code outside React subscribes to the same pipeline |
+| `useWallet(walletId)`, `useAccount(accountId)` | one item or `undefined`; re-render only when that item changes; also returned by `createKheopskit`, typed to its platforms |
+| `useConnect(walletId)` | `{ connect, disconnect, status, error }`; aborts a pending `connect()` on unmount or when `walletId` changes |
+| `store` prop on `KheopskitProvider` | the store the provider persists into, such as a memory store in tests |
+
+See the [React README](../react/README.md#one-instance-for-react-and-rxjs-code).
+
+### What downstream apps delete
+
+- A second `getKheopskit$` call next to the provider for RxJS code. Subscribe
+  to the `kheopskit$` returned by `createKheopskit`.
+- Components that read `useWallets()` only to find one wallet or account. Use
+  `useWallet` or `useAccount`.
+- An `AbortController` kept in a ref to cancel `connect()` on unmount. Use
+  `useConnect`.
