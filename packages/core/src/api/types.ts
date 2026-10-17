@@ -75,10 +75,15 @@ export type ConnectOptions = {
  * (the injected provider/extension/standard-wallet handle).
  */
 export type BaseWallet = {
+	/** `<platform>:<identifier>`, e.g. `polkadot:talisman`. Stable across reloads. */
 	id: WalletId;
+	/** The platform whose registry listed the wallet. */
 	platform: WalletPlatform;
+	/** `"injected"` for a browser extension or Wallet Standard wallet. */
 	type: WalletType;
+	/** Display name, e.g. `Talisman`. */
 	name: string;
+	/** Icon URL or data URI. `""` when the wallet exposes none. */
 	icon: string;
 	/**
 	 * `true` for a wallet restored from the cache that kheopskit has not
@@ -167,6 +172,7 @@ export type BaseWallet = {
  * packages extend this with their SDK-typed signer/client.
  */
 export type BaseWalletAccount = {
+	/** `<walletId>::<address>`, e.g. `polkadot:talisman::5Grw…`. */
 	id: WalletAccountId;
 	/**
 	 * `true` for an account restored from the cache that the live wallet has
@@ -174,18 +180,24 @@ export type BaseWalletAccount = {
 	 * `kheopskit$` and of the hydrated snapshot; plugins leave it unset.
 	 */
 	isPlaceholder?: boolean;
+	/** The platform of the wallet that lists the account. */
 	platform: WalletPlatform;
 	/** Base58 (Solana), SS58 (Polkadot) or 0x-hex (Ethereum) address. */
 	address: string;
 	/** Friendly account name, when the wallet exposes one (e.g. Polkadot). */
 	name?: string;
+	/** `name` of the wallet that lists the account. */
 	walletName: string;
+	/** `id` of the wallet that lists the account. */
 	walletId: WalletId;
 };
 
 type LiveWalletConnectWallet = {
+	/** `false` on the live connector. See {@link BaseWallet.isPlaceholder}. */
 	isPlaceholder?: false;
+	/** Always `"walletconnect"`: there is one connector, shared by every platform. */
 	id: WalletId;
+	/** Always `"walletconnect"`. Narrow with {@link isWalletConnectWallet}. */
 	type: "walletconnect";
 	/**
 	 * Platforms (namespaces) the live session currently carries. Empty until
@@ -199,7 +211,9 @@ type LiveWalletConnectWallet = {
 	 * use `connect`/`disconnect` and the derived accounts instead.
 	 */
 	appKit: AppKitInstance;
+	/** The name AppKit reports for the paired wallet, `"WalletConnect"` when it reports none. */
 	name: string;
+	/** The icon AppKit reports for the paired wallet, the WalletConnect logo when it reports none. */
 	icon: string;
 	/**
 	 * `connecting` while `connect()` opens the modal, `connected` while a
@@ -245,6 +259,7 @@ export type WalletConnectWallet =
  * before reading a field of `K`.
  */
 export type Placeholder<T, K extends keyof T> = Omit<T, K | "isPlaceholder"> & {
+	/** `true`: restored from the cache, not yet replaced by the live item. */
 	isPlaceholder: true;
 } & { [P in K]?: undefined };
 
@@ -408,6 +423,12 @@ export type KheopskitConfig<
 	 * @default walletConnect.metadata.name, then window.location.hostname
 	 */
 	appName?: string;
+	/**
+	 * Logs the resolved config, every state emission and the hydration and
+	 * persistence steps with `console.debug`.
+	 *
+	 * @default false
+	 */
 	debug: boolean;
 	/**
 	 * Custom storage key for persisting wallet connection state.
@@ -495,8 +516,20 @@ export type KheopskitConfig<
 export type KheopskitState<
 	P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],
 > = {
+	/**
+	 * Every discovered wallet, connected or not, then the WalletConnect
+	 * connector when `config.walletConnect` is set. Sorted by platform
+	 * (Polkadot, Ethereum, Solana, WalletConnect), then Talisman first, then by
+	 * name.
+	 */
 	wallets: (WalletOf<P[number]> | WalletConnectWallet)[];
+	/**
+	 * The accounts of every connected wallet. Grouped by platform, then by
+	 * wallet (Talisman first, then by wallet name); inside a wallet, in the
+	 * order the wallet lists them.
+	 */
 	accounts: AccountOf<P[number]>[];
+	/** The resolved config: what was passed, with every default filled in. */
 	config: KheopskitConfig<P>;
 	/**
 	 * Whether the state is still being hydrated from cache.

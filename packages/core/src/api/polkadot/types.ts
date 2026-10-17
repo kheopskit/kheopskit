@@ -61,9 +61,13 @@ export type PolkadotInjected = {
 };
 
 type LivePolkadotInjectedWallet = {
+	/** `false` on a live wallet. See {@link BaseWallet.isPlaceholder}. */
 	isPlaceholder?: false;
+	/** `polkadot:<extension id>`, e.g. `polkadot:talisman`. */
 	id: WalletId;
+	/** Always `"polkadot"`. */
 	platform: "polkadot";
+	/** Always `"injected"`. */
 	type: "injected";
 	/**
 	 * Stable identifier of the underlying wallet source. For Polkadot this is the
@@ -73,16 +77,23 @@ type LivePolkadotInjectedWallet = {
 	sourceId: string;
 	/**
 	 * The raw object `enable(appName)` returned. Use it for extension calls
-	 * kheopskit does not wrap. `undefined` while the wallet is disconnected; a
-	 * placeholder has none.
+	 * kheopskit does not wrap. `undefined` until `status` is `"connected"`,
+	 * so also while connecting; a placeholder has none.
 	 */
 	extension: PolkadotInjected | undefined;
+	/** The extension's display name, e.g. `Talisman`; the extension id for an unknown extension. */
 	name: string;
+	/** The extension's logo as a data URI; `""` for an unknown extension. */
 	icon: string;
+	/** See {@link BaseWallet.status}. */
 	status: BaseWallet["status"];
+	/** See {@link BaseWallet.error}. */
 	error?: BaseWallet["error"];
+	/** `status === "connected"`. */
 	isConnected: boolean;
+	/** See {@link BaseWallet.connect}. Calls `enable(appName)`, then `accounts.get()`. */
 	connect: BaseWallet["connect"];
+	/** See {@link BaseWallet.disconnect}. Polkadot extensions have no disconnect call; kheopskit drops the handle. */
 	disconnect: BaseWallet["disconnect"];
 };
 
@@ -94,7 +105,10 @@ export type PolkadotWallet = PolkadotInjectedWallet;
 
 /**
  * A Polkadot account. Inherits the fields of polkadot-api's
- * `InjectedPolkadotAccount` and narrows `type` to {@link PolkadotAccountType}.
+ * `InjectedPolkadotAccount` and narrows `type` to {@link PolkadotAccountType}:
+ * `address` (SS58, as the extension lists it), `name` (the account name in the
+ * extension, when it has one) and `genesisHash` (the chain the account is
+ * restricted to, `null` or absent when it is not).
  *
  * The signing surface follows the installed polkadot-api version:
  * **`txCreator`** (a `TxCreator`) on v3+, **`polkadotSigner`** (a
@@ -118,11 +132,17 @@ type PolkadotSigningKey =
 	| "signRaw";
 
 type LivePolkadotAccount = Omit<InjectedPolkadotAccount, "type"> & {
+	/** `false` on a live account. See {@link BaseWalletAccount.isPlaceholder}. */
 	isPlaceholder?: false;
+	/** Key type the extension reported; `sr25519` when it reported none. */
 	type: PolkadotAccountType;
+	/** `<walletId>::<address>`. */
 	id: WalletAccountId;
+	/** Always `"polkadot"`. */
 	platform: "polkadot";
+	/** `name` of the wallet that lists the account. */
 	walletName: string;
+	/** `id` of the wallet that lists the account. */
 	walletId: WalletId;
 	/** See {@link PolkadotInjectedAccount.readonly}. */
 	readonly?: boolean;
