@@ -15,21 +15,6 @@ type HydrationBufferResult<T> = {
 	isHydrating: boolean;
 };
 
-/**
- * Core hydration buffer logic shared between wallets and accounts.
- *
- * While hydrating, cached items are emitted at once and merged with live items
- * as they arrive. Hydration ends once the grace period elapsed and `settled$`
- * reads true, or at `timeoutMs`, whichever comes first; without `settled$` it
- * ends at the grace period. After that only live items are returned.
- *
- * @param cachedItems - Initial cached items from storage
- * @param liveItems$ - Observable of live items as they become available
- * @param gracePeriodMs - Minimum time in ms the cached items are shown
- * @param timeoutMs - Upper bound in ms on hydration
- * @param mergeFn - Function to merge live and cached items during hydration
- * @param settled$ - Whether the live state has caught up with the cache
- */
 const createBufferCore = <T>(
 	cachedItems: T[],
 	liveItems$: Observable<T[]>,

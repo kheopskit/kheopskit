@@ -374,12 +374,9 @@ const sessionRestoring = (
 	cached.status === "connecting";
 
 /**
- * A cached connected wallet is settled once its reconnect reached a resting
- * state: absent from the discovered wallets, connected with its accounts read,
- * failed with an error, or disconnected with no attempt due because it is no
- * longer remembered. A remembered wallet that reads disconnected without an
- * error is still waiting for its attempt (the engine reports the attempt in a
- * later emission), so it is not settled.
+ * A remembered wallet that reads disconnected without an error is still
+ * waiting for its reconnect: getWallets$ emits the wallet list before its
+ * connect() flips the status to connecting.
  */
 const reconnectSettled = (
 	cached: BaseWallet | WalletConnectWallet,
@@ -405,9 +402,10 @@ const reconnectSettled = (
 };
 
 /**
- * What goes to the cache: live data for every wallet, except that a wallet
- * still connecting keeps its previous entry and accounts, so a slow reconnect
- * never overwrites a connected cache with an empty one.
+ * A wallet still connecting keeps its previous cache entry and accounts:
+ * written live it would read isConnected: false with no accounts, and the
+ * next load would hydrate it as disconnected without placeholders while its
+ * reconnect runs.
  */
 const persistedSnapshot = (
 	wallets: (BaseWallet | WalletConnectWallet)[],

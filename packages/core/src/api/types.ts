@@ -381,8 +381,9 @@ export type KheopskitConfig<
 	/**
 	 * Minimum time in milliseconds the cached placeholders are shown after a
 	 * reload, so the wallet list does not flash while extensions inject and
-	 * remembered wallets reconnect. Hydration goes on past it until every
-	 * input of {@link KheopskitConfig.hydrationTimeout} settled.
+	 * remembered wallets reconnect. Hydration goes on past it until discovery
+	 * and the remembered reconnects settled, and never past
+	 * {@link KheopskitConfig.hydrationTimeout}, which wins when it is shorter.
 	 *
 	 * `0` disables placeholders: `isHydrating` is `false` from the first
 	 * emission.
