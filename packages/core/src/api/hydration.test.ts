@@ -60,8 +60,7 @@ describe("getHydratedSnapshot", () => {
 			polkadotWalletId,
 			ethereumWalletId,
 		]);
-		// Placeholders: connect/disconnect throw until the live wallet replaces them
-		expect(() => wallets[0]?.connect()).toThrow(/still loading/);
+		expect(wallets.map((w) => w.isPlaceholder)).toEqual([true, true]);
 	});
 
 	it("filters cached accounts through the plugin's acceptsCachedAccount hook", () => {
@@ -79,6 +78,7 @@ describe("getHydratedSnapshot", () => {
 		);
 		expect(accepted.accounts).toHaveLength(1);
 		expect(accepted.accounts[0]?.walletId).toBe(polkadotWalletId);
+		expect(accepted.accounts[0]?.isPlaceholder).toBe(true);
 	});
 
 	it("only enriches icons from the localStorage cache when icons: true", () => {

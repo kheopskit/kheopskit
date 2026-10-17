@@ -27,7 +27,9 @@ const createMockExtension = (accounts: ExtensionAccount[]) => {
 
 const createMockInjectedWallet = (
 	accounts: ExtensionAccount[],
-	overrides: Partial<PolkadotInjectedWallet> = {},
+	overrides: Partial<
+		Exclude<PolkadotInjectedWallet, { isPlaceholder: true }>
+	> = {},
 ): PolkadotInjectedWallet => ({
 	id: "polkadot:test-wallet" as WalletId,
 	platform: "polkadot",

@@ -45,13 +45,17 @@ const createMockProvider = () => {
 
 const createMockInjectedWallet = (
 	provider: ReturnType<typeof createMockProvider>,
-	overrides: Partial<EthereumInjectedWallet> = {},
+	overrides: Partial<
+		Exclude<EthereumInjectedWallet, { isPlaceholder: true }>
+	> = {},
 ): EthereumInjectedWallet => ({
 	platform: "ethereum",
 	type: "injected",
 	id: "ethereum:mock-wallet" as WalletId,
 	sourceId: "mock-wallet",
-	provider: provider as unknown as EthereumInjectedWallet["provider"],
+	provider: provider as unknown as NonNullable<
+		EthereumInjectedWallet["provider"]
+	>,
 	name: "Mock Wallet",
 	icon: "data:image/svg+xml,...",
 	status: "connected",
