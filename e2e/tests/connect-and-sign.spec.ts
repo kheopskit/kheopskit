@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { BUTTON_RECORDER, buttonSequence } from "../buttonRecorder";
 import { expect, test } from "../fixtures";
 
 // The Wallets and Accounts tables both contain the wallet name, so rows must
@@ -132,7 +133,10 @@ test.describe("polkadot mock wallet", () => {
 		);
 	});
 
-	test("clicking Connect twice quickly calls enable once", async ({ page }) => {
+	test("clicking Connect shows Connecting… and disables the button until enable answers", async ({
+		page,
+	}) => {
+		await page.addInitScript(BUTTON_RECORDER);
 		await page.goto("/");
 		await page.evaluate(() => {
 			(window as { __dotEnableDelayMs?: number }).__dotEnableDelayMs = 1000;
@@ -141,13 +145,14 @@ test.describe("polkadot mock wallet", () => {
 		const walletRow = getWalletsTable(page).getByRole("row", {
 			name: /mock-polkadot-wallet/,
 		});
-		const connect = walletRow.getByRole("button", { name: "Connect" });
-		await connect.click();
-		await connect.click();
-
+		await walletRow.getByRole("button", { name: "Connect" }).click();
 		await expect(
 			walletRow.getByRole("button", { name: "Disconnect" }),
 		).toBeVisible();
+
+		await expect
+			.poll(() => buttonSequence(page))
+			.toEqual(["Connect", "Connecting… (disabled)", "Disconnect"]);
 		expect(
 			await page.evaluate(
 				() => (window as { __dotEnableCalls?: number }).__dotEnableCalls,

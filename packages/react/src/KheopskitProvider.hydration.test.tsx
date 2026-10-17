@@ -3,6 +3,8 @@ import { ethereum } from "@kheopskit/core/ethereum";
 import { polkadot } from "@kheopskit/core/polkadot";
 import { solana } from "@kheopskit/core/solana";
 import { render, screen } from "@testing-library/react";
+import { act } from "react";
+import { hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -34,6 +36,9 @@ const WalletsConsumer = () => {
 			<span data-testid="accounts-count">{accounts.length}</span>
 			<span data-testid="wallet-names">
 				{wallets.map((w) => w.name).join(",")}
+			</span>
+			<span data-testid="wallet-status">
+				{wallets.map((w) => `${w.id}:${w.status}:${w.isConnected}`).join(",")}
 			</span>
 			<span data-testid="account-order">
 				{accounts.map((a) => `${a.platform}:${a.walletName}`).join(",")}
@@ -286,5 +291,171 @@ describe.each([
 	it("reports isDiscovering on the client initial snapshot", () => {
 		render(tree);
 		expect(screen.getByTestId("is-discovering")).toHaveTextContent("true");
+	});
+});
+
+describe("KheopskitProvider snapshots under an autoReconnect predicate", () => {
+	const cachedState = {
+		cachedWallets: [
+			{
+				id: "polkadot:talisman",
+				platform: "polkadot",
+				type: "injected",
+				name: "Talisman",
+				isConnected: true,
+			},
+			{
+				id: "polkadot:subwallet-js",
+				platform: "polkadot",
+				type: "injected",
+				name: "SubWallet",
+				isConnected: true,
+			},
+		],
+		cachedAccounts: [
+			{
+				id: "polkadot:talisman::5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+				platform: "polkadot",
+				address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+				polkadotAccountType: "sr25519",
+				walletId: "polkadot:talisman",
+				walletName: "Talisman",
+			},
+			{
+				id: "polkadot:subwallet-js::5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+				platform: "polkadot",
+				address: "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+				polkadotAccountType: "sr25519",
+				walletId: "polkadot:subwallet-js",
+				walletName: "SubWallet",
+			},
+		],
+	};
+	const config = {
+		platforms: [polkadot()],
+		autoReconnect: (wallet: { id: string }) =>
+			wallet.id === "polkadot:talisman",
+	};
+	const expectedStatuses =
+		"polkadot:talisman:connecting:false,polkadot:subwallet-js:disconnected:false";
+	const expectedAccounts = "polkadot:Talisman";
+
+	beforeEach(() => {
+		localStorage.clear();
+	});
+
+	afterEach(() => {
+		// biome-ignore lint/suspicious/noDocumentCookie: necessary for test cleanup
+		document.cookie = "kheopskit=; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+	});
+
+	it("server and client snapshots agree with ssrCookies", () => {
+		const ssrCookies = `kheopskit=${encodeURIComponent(JSON.stringify(cachedState))}`;
+		// biome-ignore lint/suspicious/noDocumentCookie: necessary for test setup
+		document.cookie = ssrCookies;
+		const tree = (
+			<KheopskitProvider config={config} ssrCookies={ssrCookies}>
+				<WalletsConsumer />
+			</KheopskitProvider>
+		);
+
+		const html = renderToString(tree);
+		expect(html).toContain(
+			`data-testid="wallet-status">${expectedStatuses}</span>`,
+		);
+		expect(html).toContain(
+			`data-testid="account-order">${expectedAccounts}</span>`,
+		);
+
+		render(tree);
+		expect(screen.getByTestId("wallet-status")).toHaveTextContent(
+			expectedStatuses,
+		);
+		expect(screen.getByTestId("account-order")).toHaveTextContent(
+			expectedAccounts,
+		);
+	});
+
+	it("hydrating the server markup on the client raises no hydration warning and keeps the connecting status", async () => {
+		const ssrCookies = `kheopskit=${encodeURIComponent(JSON.stringify(cachedState))}`;
+		// biome-ignore lint/suspicious/noDocumentCookie: necessary for test setup
+		document.cookie = ssrCookies;
+		const tree = (
+			<KheopskitProvider config={config} ssrCookies={ssrCookies}>
+				<WalletsConsumer />
+			</KheopskitProvider>
+		);
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		const recoverable: unknown[] = [];
+		const container = document.createElement("div");
+		container.innerHTML = renderToString(tree);
+		document.body.appendChild(container);
+		const textOf = (testId: string) =>
+			container.querySelector(`[data-testid="${testId}"]`)?.textContent;
+		expect(textOf("wallet-status")).toBe(expectedStatuses);
+
+		let root: Root | undefined;
+		await act(async () => {
+			root = hydrateRoot(container, tree, {
+				onRecoverableError: (error) => recoverable.push(error),
+			});
+		});
+
+		expect(textOf("wallet-status")).toBe(expectedStatuses);
+		expect(textOf("account-order")).toBe(expectedAccounts);
+		expect(recoverable).toEqual([]);
+		expect(consoleError).not.toHaveBeenCalled();
+
+		await act(async () => root?.unmount());
+		container.remove();
+	});
+
+	it("without ssrCookies, hydrating the empty server markup raises no warning and then shows the client cache under the predicate", async () => {
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(cachedState));
+		const tree = (
+			<KheopskitProvider config={config}>
+				<WalletsConsumer />
+			</KheopskitProvider>
+		);
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		const recoverable: unknown[] = [];
+		const container = document.createElement("div");
+		container.innerHTML = renderToString(tree);
+		document.body.appendChild(container);
+		const textOf = (testId: string) =>
+			container.querySelector(`[data-testid="${testId}"]`)?.textContent;
+		const server = {
+			status: textOf("wallet-status"),
+			accounts: textOf("account-order"),
+		};
+
+		let root: Root | undefined;
+		await act(async () => {
+			root = hydrateRoot(container, tree, {
+				onRecoverableError: (error) => recoverable.push(error),
+			});
+		});
+
+		expect({
+			server,
+			client: {
+				status: textOf("wallet-status"),
+				accounts: textOf("account-order"),
+			},
+			recoverable,
+			consoleErrors: consoleError.mock.calls,
+		}).toEqual({
+			server: { status: "", accounts: "" },
+			client: { status: expectedStatuses, accounts: expectedAccounts },
+			recoverable: [],
+			consoleErrors: [],
+		});
+
+		await act(async () => root?.unmount());
+		container.remove();
 	});
 });

@@ -1,4 +1,4 @@
-import { isWalletConnectWallet } from "@kheopskit/core";
+import { type BaseWallet, isWalletConnectWallet } from "@kheopskit/core";
 import { Button } from "@/components/ui/button";
 import {
 	Table,
@@ -10,6 +10,30 @@ import {
 } from "@/components/ui/table";
 import { useWallets } from "@/lib/config/playgroundConfig";
 import { AppBlock } from "./AppBlock";
+
+const WalletButton = ({
+	wallet,
+}: {
+	wallet: Pick<BaseWallet, "status" | "connect" | "disconnect">;
+}) => {
+	if (wallet.status === "connected")
+		return (
+			<Button className="w-28" onClick={() => wallet.disconnect()}>
+				Disconnect
+			</Button>
+		);
+	if (wallet.status === "connecting")
+		return (
+			<Button className="w-28" disabled>
+				Connecting…
+			</Button>
+		);
+	return (
+		<Button className="w-28" onClick={() => wallet.connect()}>
+			Connect
+		</Button>
+	);
+};
 
 export const Wallets = () => {
 	const { wallets, accounts, isDiscovering } = useWallets();
@@ -51,20 +75,17 @@ export const Wallets = () => {
 									<div className="w-6 h-6 mr-2 inline-block shrink-0"></div>
 								)}
 								{wallet.name}
+								{wallet.error && (
+									<div className="text-xs text-destructive">
+										{wallet.error.message}
+									</div>
+								)}
 							</TableCell>
 							<TableCell className="text-right">
 								{accounts.filter((a) => a.walletId === wallet.id).length}
 							</TableCell>
 							<TableCell className="text-right">
-								{wallet.isConnected ? (
-									<Button className="w-28" onClick={() => wallet.disconnect()}>
-										Disconnect
-									</Button>
-								) : (
-									<Button className="w-28" onClick={() => wallet.connect()}>
-										Connect
-									</Button>
-								)}
+								<WalletButton wallet={wallet} />
 							</TableCell>
 						</TableRow>
 					))}

@@ -102,7 +102,7 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 			};
 		}
 		return {
-			...getHydratedSnapshot(kheopskitStore, resolvedConfig.platforms),
+			...getHydratedSnapshot(kheopskitStore, resolvedConfig),
 			config: resolvedConfig,
 			isHydrating: true,
 			isDiscovering: true,
@@ -122,7 +122,7 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 	// on the server, making the icon enrichment a no-op there.
 	const initialValue = useMemo<KheopskitState>(() => {
 		return {
-			...getHydratedSnapshot(kheopskitStore, resolvedConfig.platforms, {
+			...getHydratedSnapshot(kheopskitStore, resolvedConfig, {
 				icons: true,
 			}),
 			config: resolvedConfig,

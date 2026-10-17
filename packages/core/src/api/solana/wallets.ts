@@ -98,6 +98,8 @@ export const getSolanaWallets$ = (store: KheopskitStore) =>
 		buildWallet: ({
 			source: wallet,
 			walletId,
+			status,
+			error,
 			isConnected,
 			connect,
 			disconnect,
@@ -110,6 +112,8 @@ export const getSolanaWallets$ = (store: KheopskitStore) =>
 			chains: getSolanaChains(wallet),
 			name: wallet.name,
 			icon: wallet.icon,
+			status,
+			error,
 			isConnected,
 			connect,
 			disconnect,
