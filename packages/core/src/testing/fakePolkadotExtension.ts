@@ -1,7 +1,7 @@
 import type { PolkadotInjected } from "../api/polkadot/types";
 import type { PolkadotAccountType } from "../api/types";
 
-/** An account as the extension lists it; the shape of `PolkadotInjectedAccount`. */
+/** `PolkadotInjectedAccount`, restated so these declarations import nothing from polkadot-api. */
 export type FakePolkadotAccount = {
 	address: string;
 	genesisHash?: string | null;
@@ -37,12 +37,13 @@ export type FakePolkadotExtension = {
 	walletId: `polkadot:${string}`;
 	/** Replaces the account list and pushes it to every `accounts.subscribe` listener. */
 	setAccounts: (accounts: FakePolkadotAccount[]) => void;
-	/** Settles every held `enable()` call with the extension. */
+	/** Resolves every held `enable()` call with the injected extension. */
 	resolveEnable: () => void;
 	/** Rejects every held `enable()` call, with `new Error("Rejected")` by default. */
 	rejectEnable: (error?: Error) => void;
 	/** The app name of each `enable()` call, in call order. */
 	enableCalls: () => string[];
+	/** What each `signRaw` call received. `signPayload` calls are not recorded. */
 	signRawCalls: () => FakeSignRawCall[];
 	/** Removes the extension from `window.injectedWeb3`. Calling it again does nothing. */
 	uninstall: () => void;
@@ -62,10 +63,7 @@ export const FAKE_SIGNATURE: `0x${string}` = `0x${"01".repeat(64)}`;
 
 const rejected = () => new Error("Rejected");
 
-/**
- * Installs a Polkadot extension on `window.injectedWeb3[name]` that answers
- * `enable(appName)` the way kheopskit expects.
- */
+/** Installs a fake Polkadot extension at `window.injectedWeb3[name]` until `uninstall()`. */
 export const createFakePolkadotExtension = ({
 	name = "fake-extension",
 	accounts: initialAccounts = [],

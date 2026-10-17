@@ -3,9 +3,9 @@ import type { SyncableStorage } from "../utils/storage";
 type Listener = (value: string | null) => void;
 
 /**
- * A `SyncableStorage` held in memory. Every store created on the same instance
- * hears the others' writes through `subscribe`, the way tabs share
- * localStorage.
+ * A `SyncableStorage` held in memory. `subscribe` listeners hear every write to
+ * their key, their own store's included, so stores sharing one instance stay in
+ * sync.
  */
 export const createMemoryStorage = (): Required<SyncableStorage> => {
 	const items = new Map<string, string>();

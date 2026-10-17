@@ -175,7 +175,7 @@ extension. It has no test-runner dependency, so it works with vitest and jest.
   `FAKE_SIGNATURE`, and `signRawCalls()` lists what `signRaw` received.
 - `createMemoryStorage()` returns a `SyncableStorage` held in memory, for
   `createKheopskitStore({ storage })`. Stores created on the same instance see
-  each other's writes, the way tabs share `localStorage`.
+  each other's writes.
 - `cachedWalletOf(walletId, name)` and `cachedAccountOf(wallet, address,
   name?)` build the entries `store.setCachedState(wallets, accounts)` takes, so
   a test seeds a previous session without writing the persisted shape.
