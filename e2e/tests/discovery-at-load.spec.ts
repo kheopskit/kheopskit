@@ -3,7 +3,7 @@ import { expect, type Page, test } from "@playwright/test";
 
 const MOCKS_DIR = path.join(__dirname, "..", "mocks");
 const MAX_LOAD_TO_ROW_MS = 300;
-const POLL_TAIL_MS = 1100;
+const POLL_TAIL_READS = 5;
 
 type DiscoveryMarks = {
 	registryReads: number[];
@@ -68,9 +68,10 @@ test("a wallet injected after the poll tail but before load is listed at load", 
 		`[${testInfo.project.name}] load-to-row ${loadToRowMs.toFixed(1)} ms; subscribe ${subscribedAt.toFixed(1)}, injected ${marks.injected.toFixed(1)}, load ${marks.load.toFixed(1)}, row ${marks.lateRowFirstSeen?.toFixed(1)}`,
 	);
 
-	expect(marks.injected, "injected after the poll tail").toBeGreaterThan(
-		subscribedAt + POLL_TAIL_MS,
-	);
+	expect(
+		marks.registryReads[POLL_TAIL_READS - 1],
+		"poll tail finished before the injection",
+	).toBeLessThan(marks.injected);
 	expect(marks.injected, "injected before load").toBeLessThan(marks.load);
 	expect(marks.discoveringAtLoad, "status shown until load").toBe(true);
 	expect(marks.discoveringGone, "status hidden after load").toBeGreaterThan(
