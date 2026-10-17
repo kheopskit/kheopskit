@@ -16,7 +16,12 @@
  * these catch a symbol collapsing whole, which is how 5.1.1 failed.
  */
 
-import type { KheopskitPlatform } from "@kheopskit/core";
+import type {
+	createKheopskitStore,
+	KheopskitPlatform,
+	SyncableStorage,
+	WalletId,
+} from "@kheopskit/core";
 import type {
 	EthereumAccount,
 	EthereumWallet,
@@ -38,6 +43,12 @@ import type {
 	SolanaWallet,
 	solana,
 } from "@kheopskit/core/solana";
+import type {
+	cachedAccountOf,
+	cachedWalletOf,
+	createFakePolkadotExtension,
+	createMemoryStorage,
+} from "@kheopskit/core/testing";
 import type {
 	createKheopskit,
 	useAccounts,
@@ -111,3 +122,30 @@ export type ReadonlyIsOptionalBoolean = Expect<
 export type SignRawReturnsHex = Expect<
 	Equal<ReturnType<PolkadotAccount["signRaw"]>, Promise<`0x${string}`>>
 >;
+
+export type TestingIsTyped = Expect<
+	NoneAny<
+		[
+			ReturnType<typeof createFakePolkadotExtension>,
+			ReturnType<typeof createMemoryStorage>,
+			ReturnType<typeof cachedWalletOf>,
+			ReturnType<typeof cachedAccountOf>,
+		]
+	>
+>;
+
+declare const createStore: typeof createKheopskitStore;
+declare const memoryStorage: typeof createMemoryStorage;
+declare const fakeExtension: typeof createFakePolkadotExtension;
+declare const walletOf: typeof cachedWalletOf;
+declare const accountOf: typeof cachedAccountOf;
+const storage: SyncableStorage = memoryStorage();
+const seeded = createStore({ storage });
+const fake = fakeExtension({ name: "talisman", enable: "hold" });
+const fakeWalletId: WalletId = fake.walletId;
+const talisman = walletOf(fake.walletId, "Talisman");
+seeded.rememberWallet(fakeWalletId);
+export const seededState = seeded.setCachedState(
+	[talisman],
+	[accountOf(talisman, "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY")],
+);

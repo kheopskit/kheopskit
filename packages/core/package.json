@@ -63,6 +63,16 @@
 				"default": "./dist/internal.js"
 			}
 		},
+		"./testing": {
+			"import": {
+				"types": "./dist/testing.d.mts",
+				"default": "./dist/testing.mjs"
+			},
+			"require": {
+				"types": "./dist/testing.d.ts",
+				"default": "./dist/testing.js"
+			}
+		},
 		"./package.json": "./package.json"
 	},
 	"publishConfig": {
@@ -139,7 +149,8 @@
 			"src/polkadot.ts",
 			"src/ethereum.ts",
 			"src/solana.ts",
-			"src/internal.ts"
+			"src/internal.ts",
+			"src/testing.ts"
 		],
 		"tsconfig": "tsconfig.build.json",
 		"fixedExtension": false,
