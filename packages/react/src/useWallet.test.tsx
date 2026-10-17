@@ -1,5 +1,6 @@
 import {
 	createKheopskitStore,
+	type KheopskitError,
 	type KheopskitState,
 	type KheopskitStore,
 } from "@kheopskit/core";
@@ -9,7 +10,9 @@ import {
 	createMemoryStorage,
 	type FakePolkadotExtension,
 } from "@kheopskit/core/testing";
-import { act, render } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
+import { Activity } from "react";
+import { firstValueFrom } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createKheopskit } from "./createKheopskit";
 
@@ -168,6 +171,90 @@ describe("useWallet and useAccount", () => {
 			"a:connected,b:connected",
 			"a:connected,b:connected",
 			"a:connected,b:connected",
+		]);
+	});
+});
+
+describe("after an Activity hide stops the pipeline and a reveal restarts it", () => {
+	let fake: FakePolkadotExtension;
+	let store: KheopskitStore;
+
+	beforeEach(() => {
+		vi.useFakeTimers();
+		fake = createFakePolkadotExtension({
+			name: "talisman",
+			accounts: [{ address: ALICE, name: "Alice" }],
+		});
+		store = createKheopskitStore({ storage: createMemoryStorage() });
+	});
+
+	afterEach(() => {
+		fake.uninstall();
+		store.destroy();
+		vi.useRealTimers();
+	});
+
+	const setup = () => {
+		const instance = createKheopskit({ platforms: [polkadot()] }, { store });
+		const rendered: {
+			wallet?: ReturnType<typeof instance.useWallet>;
+			account?: ReturnType<typeof instance.useAccount>;
+		} = {};
+		const Consumer = () => {
+			rendered.wallet = instance.useWallet(fake.walletId);
+			rendered.account = instance.useAccount(`${fake.walletId}::${ALICE}`);
+			return <span data-testid="status">{rendered.wallet?.status}</span>;
+		};
+		const app = (mode: "visible" | "hidden") => (
+			<Activity mode={mode}>
+				<instance.KheopskitProvider>
+					<Consumer />
+				</instance.KheopskitProvider>
+			</Activity>
+		);
+		const view = render(app("visible"));
+		const settle = () => act(() => vi.advanceTimersByTimeAsync(5000));
+		const hideThenReveal = async () => {
+			view.rerender(app("hidden"));
+			await settle();
+			view.rerender(app("visible"));
+			await settle();
+		};
+		const remembered = async () =>
+			(await firstValueFrom(store.observable)).remembered ?? [];
+		return { rendered, settle, hideThenReveal, remembered };
+	};
+
+	it("useWallet's connect connects the wallet", async () => {
+		const { rendered, settle, hideThenReveal, remembered } = setup();
+		await settle();
+		await hideThenReveal();
+		const outcomes: string[] = [];
+		await act(() =>
+			rendered.wallet?.connect().then(
+				() => outcomes.push("resolved"),
+				(error: KheopskitError) => outcomes.push(`rejected:${error.code}`),
+			),
+		);
+		await settle();
+
+		expect(outcomes).toEqual(["resolved"]);
+		expect(screen.getByTestId("status").textContent).toBe("connected");
+		expect(await remembered()).toEqual([fake.walletId]);
+	});
+
+	it("useAccount's signRaw signs with the live extension handle", async () => {
+		const { rendered, settle, hideThenReveal } = setup();
+		await settle();
+		await act(() => rendered.wallet?.connect());
+		await settle();
+		await hideThenReveal();
+		const { account } = rendered;
+		if (!account || account.isPlaceholder) throw new Error("no live account");
+		await act(() => account.signRaw("hello"));
+
+		expect(fake.signRawCalls()).toEqual([
+			{ address: ALICE, data: "hello", type: "payload" },
 		]);
 	});
 });

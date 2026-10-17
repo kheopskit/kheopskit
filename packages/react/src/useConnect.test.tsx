@@ -15,6 +15,7 @@ import {
 } from "@kheopskit/core/testing";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import {
+	Activity,
 	type FC,
 	Fragment,
 	lazy,
@@ -22,10 +23,12 @@ import {
 	type ReactNode,
 	StrictMode,
 	Suspense,
+	startTransition,
 	useEffect,
 	useLayoutEffect,
 	useRef,
 } from "react";
+import { createRoot } from "react-dom/client";
 import { firstValueFrom, type Subscription } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createKheopskit } from "./createKheopskit";
@@ -464,6 +467,63 @@ describe("useConnect", () => {
 			otherStatus: "disconnected",
 			remembered: [],
 		});
+	});
+
+	it("connects from a child's layout effect when an Activity reveals it in a transition outside act", async () => {
+		const { remembered } = await setup("resolve");
+		const instance = createKheopskit({ platforms: [polkadot()] }, { store });
+		let latest: KheopskitState | undefined;
+		const revealed = instance.kheopskit$.subscribe((state) => {
+			latest = state;
+		});
+		const outcomes: string[] = [];
+		const armed = { current: false };
+		const Child = ({ connect }: { connect: () => Promise<void> }) => {
+			useLayoutEffect(() => {
+				if (armed.current) record(outcomes)(connect());
+			}, [connect]);
+			return null;
+		};
+		const Parent = () => {
+			const { connect } = useConnect(fake.walletId);
+			return <Child connect={connect} />;
+		};
+		const app = (mode: "visible" | "hidden") => (
+			<instance.KheopskitProvider>
+				<Activity mode={mode}>
+					<Parent />
+				</Activity>
+			</instance.KheopskitProvider>
+		);
+		const container = document.body.appendChild(document.createElement("div"));
+		const root = createRoot(container);
+		act(() => root.render(app("visible")));
+		await act(() => vi.advanceTimersByTimeAsync(5000));
+		act(() => root.render(app("hidden")));
+		await act(() => vi.advanceTimersByTimeAsync(5000));
+		vi.useRealTimers();
+		const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+		const actEnvironment = env.IS_REACT_ACT_ENVIRONMENT;
+		env.IS_REACT_ACT_ENVIRONMENT = false;
+		armed.current = true;
+		startTransition(() => root.render(app("visible")));
+		for (let i = 0; i < 10; i++)
+			await new Promise((resolve) => setTimeout(resolve, 30));
+		env.IS_REACT_ACT_ENVIRONMENT = actEnvironment;
+
+		expect({
+			outcomes,
+			status: latest?.wallets.find((wallet) => wallet.id === fake.walletId)
+				?.status,
+			remembered: await remembered(),
+		}).toEqual({
+			outcomes: ["resolved"],
+			status: "connected",
+			remembered: [fake.walletId],
+		});
+		act(() => root.unmount());
+		container.remove();
+		revealed.unsubscribe();
 	});
 
 	it("rejects with an error naming an unknown wallet id", async () => {
