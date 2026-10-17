@@ -15,7 +15,7 @@ https://github.com/kheopskit/kheopskit.
 > [MIGRATING_TO_V4.md](./MIGRATING_TO_V4.md).
 
 > **Upgrading from v5?** v6 makes `connect()` shared, idempotent and
-> abortable, types every rejection, adds `status`, `isDiscovering`,
+> abortable, types its rejections, adds `status`, `isDiscovering`,
 > `isPlaceholder` and `signRaw`, and moves WalletConnect to a plugin. See
 > [MIGRATING_TO_V6.md](./MIGRATING_TO_V6.md).
 
@@ -178,9 +178,11 @@ discover the live wallet with the same id and connects that one. It rejects
 with `WALLET_PENDING` if hydration ends first, and with `ABORTED` if its
 `signal` fires or the last subscriber unsubscribes while it waits. Its
 `disconnect()` resolves at once. A cached wallet that kheopskit has already
-discovered is no longer a placeholder. It carries its live handle and shows
-`status: "connecting"` while its reconnect runs, and its `connect()` joins
-that reconnect. No item is a placeholder once `isHydrating` is `false`.
+discovered is no longer a placeholder. It carries its live `connect()` and
+`disconnect()` and shows `status: "connecting"` while its reconnect runs, and
+its `connect()` joins that reconnect. A Polkadot wallet's `extension` stays
+`undefined` until that reconnect succeeds. No item is a placeholder once
+`isHydrating` is `false`.
 
 `isHydrating` turns `false` once all three hold:
 
@@ -234,11 +236,11 @@ Source: [`api/wallets.ts`](https://github.com/kheopskit/kheopskit/blob/main/pack
 [`api/reconnectPolicy.ts`](https://github.com/kheopskit/kheopskit/blob/main/packages/core/src/api/reconnectPolicy.ts),
 [`api/injectedWallets.ts`](https://github.com/kheopskit/kheopskit/blob/main/packages/core/src/api/injectedWallets.ts).
 
-Kheopskit adds a wallet to the store's `remembered` list on every successful
-`connect()` and removes it when `disconnect()` starts on a connected wallet,
-whatever `autoReconnect` says, so
-an app can turn reconnect on later. On the next load it reconnects the
-remembered injected wallets that `autoReconnect` accepts:
+Kheopskit adds an injected wallet to the store's `remembered` list on every
+successful `connect()` and removes it when `disconnect()` starts on a
+connected wallet, whatever `autoReconnect` says, so an app can turn reconnect
+on later. On the next load it reconnects the remembered injected wallets that
+`autoReconnect` accepts:
 
 - `true` (the default) reconnects every remembered injected wallet, and
   `false` none.
@@ -255,22 +257,23 @@ getKheopskit$({
 });
 ```
 
-A wallet the function accepts shows `status: "connecting"` from the first frame
-until its attempt settles. A wallet it rejects shows `disconnected` from the
-first frame, without its cached accounts, so nothing flashes from connected to
-disconnected.
+A cached connected wallet the function accepts shows `status: "connecting"`
+from the first frame until its attempt settles. A wallet it rejects shows
+`disconnected` from the first frame, without its cached accounts, so nothing
+flashes from connected to disconnected. The cache records a connect 1 s after
+the state settles. After a quicker reload, the first frame shows the wallet as
+the previous cache had it, until its reconnect starts.
 
-A reconnect never prompts while the site stays authorised in the extension.
-When the authorisation was revoked, the extension prompts once. A refusal
-(`USER_REJECTED`) forgets the wallet, so the next load stays silent. Any other
-failure sets `wallet.error` and keeps the wallet remembered. Kheopskit retries
-it on the next change to the wallet list (a wallet discovered or removed, or
-any wallet's status changing), 3 attempts in total. If the list never changes
-again, no retry runs. A
-manual `connect()` or `disconnect()` on a remembered wallet ends its automatic
-reconnect for the session. A `disconnect()` while the automatic reconnect still
-waits for the extension aborts it without forgetting the wallet, so the next
-load reconnects it.
+A reconnect opens no connect prompt while the site stays authorised in the
+extension. When the authorisation was revoked, the extension prompts once. A
+refusal (`USER_REJECTED`) forgets the wallet, so the next load stays silent.
+Any other failure sets `wallet.error` and keeps the wallet remembered.
+Kheopskit retries it on the next change to the wallet list (a wallet discovered
+or removed, or any wallet's status changing), 3 attempts in total. If the list
+never changes again, no retry runs. A manual `connect()` or `disconnect()` on a
+remembered wallet ends its automatic reconnect for the session. A
+`disconnect()` while the automatic reconnect still waits for the extension
+aborts it without forgetting the wallet, so the next load reconnects it.
 Automatic reconnect also ends when the wallet disappears mid-attempt, and the
 wallet stays remembered for the next load.
 
@@ -296,7 +299,10 @@ code:
 - **Shared.** Concurrent `connect()` calls on one wallet share one platform
   attempt, so the extension is asked once. Each call gets its own promise.
 - **Idempotent.** `connect()` on a connected wallet and `disconnect()` on a
-  disconnected wallet resolve at once without asking the platform.
+  disconnected wallet resolve at once without asking the platform. A
+  `connect()` made while a `disconnect()` still waits for the platform waits
+  for that disconnect to settle, then connects if the wallet ended up
+  disconnected.
 - **Abortable.** `connect({ signal })` rejects that caller with `ABORTED` when
   the signal fires before the platform answers. Other callers keep waiting.
   The attempt itself is abandoned once every caller that passed a signal has
@@ -332,18 +338,24 @@ code:
   granted, `disconnect()` aborts it and resolves without waiting for the
   prompt.
 - **After the subscription.** Once the last `kheopskit$` subscriber has
-  unsubscribed, `connect()` and `disconnect()` on a wallet object from that
-  subscription reject with `ABORTED` without asking the platform.
+  unsubscribed, `connect()` and `disconnect()` on an injected wallet object
+  from that subscription reject with `ABORTED` without asking the platform. A
+  placeholder's `connect()` rejects the same way, and its `disconnect()` still
+  resolves at once. The live WalletConnect connector is not wrapped, so its
+  `connect()` still opens the AppKit modal and its `disconnect()` still ends a
+  live session.
 
 Every rejection of `connect()` is a `KheopskitError` with a stable `code` and
 the `walletId`, and so is an `ABORTED` `disconnect()`. A `disconnect()` whose
-platform call fails (Solana) rejects with the platform's own error.
+platform call fails (Solana, the WalletConnect connector) rejects with the
+platform's own error.
 
 | Code | When |
 |------|------|
 | `USER_REJECTED` | The user refused the prompt. `cause` holds the platform error. |
 | `CONNECT_FAILED` | Any other platform failure, including a Polkadot extension whose `enable()` result lacks `accounts.get`, `accounts.subscribe`, `signer.signPayload` or `signer.signRaw`, or whose `accounts.get()` rejects. `cause` holds the platform error. |
 | `ABORTED` | The call was abandoned, as listed above. The message reads `connect of wallet <id> was aborted` or `disconnect of wallet <id> was aborted`. |
+| `FEATURE_NOT_SUPPORTED` | A Solana Wallet Standard wallet that lacks `standard:connect`. |
 | `WALLET_PENDING` | `connect()` on a placeholder whose live wallet was not discovered before hydration ended, and always on a `getHydratedSnapshot` placeholder. |
 
 A Polkadot extension sends a plain `Error` on refusal, so kheopskit maps its
@@ -406,8 +418,8 @@ goes to `localStorage` as JSON:
 }
 ```
 
-- `remembered` lists the wallets the user connected. It is written as soon as
-  a connect succeeds and cleared as soon as `disconnect()` starts on a
+- `remembered` lists the injected wallets the user connected. It is written as
+  soon as a connect succeeds and cleared as soon as `disconnect()` starts on a
   connected wallet. A `disconnect()` that aborts a pending connect leaves it
   unchanged.
 - `cachedWallets` and `cachedAccounts` are written by the hydration rule above:

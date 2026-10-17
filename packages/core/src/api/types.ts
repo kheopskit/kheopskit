@@ -104,7 +104,8 @@ export type BaseWallet = {
 	 * `connecting` while a `connect()` call or an auto-reconnect waits for the
 	 * platform, `connected` once the platform granted it, `disconnected`
 	 * otherwise. On a reload, a remembered wallet kheopskit will reconnect is
-	 * `connecting` from the first frame.
+	 * `connecting` from the first frame when the cache recorded it connected,
+	 * which the cache does 1 s after the state settles.
 	 */
 	status: WalletStatus;
 	/**
@@ -126,7 +127,9 @@ export type BaseWallet = {
 	 *   `disconnect()` is called, or when the last `kheopskit$` subscriber
 	 *   unsubscribes; those reject every remaining caller with `ABORTED`.
 	 * - **Idempotent.** On a connected wallet it resolves at once without
-	 *   touching the platform.
+	 *   touching the platform, unless a `disconnect()` still waits for the
+	 *   platform. It then waits for that disconnect to settle and connects
+	 *   again if the wallet ended up disconnected.
 	 * - **Abortable.** See {@link ConnectOptions.signal}. There is no default
 	 *   timeout.
 	 * - **Settles with the state.** It resolves only after `kheopskit$` has
@@ -134,9 +137,10 @@ export type BaseWallet = {
 	 *   consumer-visible state already reflects the connect. On platforms that
 	 *   list accounts asynchronously (Ethereum `eth_accounts`), the accounts may
 	 *   arrive in a later emission. No emission shows a disconnected wallet
-	 *   still listing accounts, or a connected wallet listing the accounts of a
-	 *   previous connection. Another wallet's pending `eth_accounts` request
-	 *   never delays them. A `disconnect()` that
+	 *   still listing live accounts, or a connected wallet listing the accounts
+	 *   of a previous connection. During hydration a wallet's cached
+	 *   placeholder accounts stay listed whatever its status. Another wallet's
+	 *   pending `eth_accounts` request never delays them. A `disconnect()` that
 	 *   completes while it waits for that state rejects it with `ABORTED`. If
 	 *   the platform's disconnect is still pending or refuses, it resolves once
 	 *   the state shows the wallet connected (today only Solana has a platform
@@ -145,11 +149,13 @@ export type BaseWallet = {
 	 *   removed, a Wallet Standard wallet unregistered) rejects `ABORTED`;
 	 *   granted first, it resolves and the wallet stays remembered. Once the last `kheopskit$`
 	 *   subscriber has unsubscribed, a call on a wallet object from that
-	 *   subscription rejects with `ABORTED` without asking the platform.
+	 *   subscription rejects with `ABORTED` without asking the platform,
+	 *   placeholders included.
 	 * - **Typed rejections.** A platform rejection is wrapped in a
 	 *   `KheopskitError` carrying the original error as `cause` and the
 	 *   `walletId`: `USER_REJECTED` when the user refused the prompt,
-	 *   `CONNECT_FAILED` otherwise.
+	 *   `CONNECT_FAILED` otherwise. A Wallet Standard wallet without
+	 *   `standard:connect` rejects with `FEATURE_NOT_SUPPORTED`.
 	 */
 	connect: (options?: ConnectOptions) => Promise<void>;
 	/**
@@ -165,8 +171,9 @@ export type BaseWallet = {
 	 * subscription makes that emission impossible. Once the last `kheopskit$`
 	 * subscriber has unsubscribed, a call on a wallet object from that
 	 * subscription rejects with `ABORTED` without asking the platform and
-	 * without changing the remembered list. A `disconnect()` started before
-	 * that point settles once the platform has answered: the wallet was
+	 * without changing the remembered list, except on a placeholder, whose
+	 * `disconnect()` resolves. A `disconnect()` started before that point
+	 * settles once the platform has answered: the wallet was
 	 * forgotten when it was called, and nothing else is written once the
 	 * subscription has ended.
 	 */
@@ -398,9 +405,9 @@ export type KheopskitConfig<
 	 * The WalletConnect row is not governed by this option: AppKit restores its
 	 * own session on load, and the row hydrates `connecting` while it does.
 	 *
-	 * A reconnect never prompts while the site stays authorised in the
-	 * extension. When the authorisation was revoked the extension prompts once;
-	 * a refusal forgets the wallet, so the next load stays silent. A manual
+	 * A reconnect opens no connect prompt while the site stays authorised in
+	 * the extension. When the authorisation was revoked the extension prompts
+	 * once; a refusal forgets the wallet, so the next load stays silent. A manual
 	 * `connect()` or `disconnect()` on a remembered wallet ends its automatic
 	 * reconnect for the session. A `disconnect()` while the automatic reconnect
 	 * still waits for the extension aborts it without forgetting the wallet, so
@@ -408,10 +415,10 @@ export type KheopskitConfig<
 	 * Automatic reconnect also ends when the wallet disappears mid-attempt; the
 	 * wallet stays remembered for the next load.
 	 *
-	 * A wallet this accepts shows `status: "connecting"` from the first frame
-	 * until its attempt settles. A wallet this rejects shows `disconnected`
-	 * from the first frame, without its cached accounts, so nothing flashes
-	 * from connected to disconnected.
+	 * A cached connected wallet this accepts shows `status: "connecting"` from
+	 * the first frame until its attempt settles. A wallet this rejects shows
+	 * `disconnected` from the first frame, without its cached accounts, so
+	 * nothing flashes from connected to disconnected.
 	 *
 	 * @default true
 	 */

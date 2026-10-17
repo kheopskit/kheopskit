@@ -10,9 +10,11 @@ export type KheopskitErrorCode =
 	 * its `signal` fired before the platform answered, `disconnect()` was
 	 * called while it pended, its wallet disappeared, or the last `kheopskit$`
 	 * subscriber unsubscribed.
-	 * For either call: the wallet object came from a subscription that had
-	 * already ended, in which case the call rejects without asking the platform
-	 * and without changing the remembered list.
+	 * For either call on an injected wallet: the wallet object came from a
+	 * subscription that had already ended, in which case the call rejects
+	 * without asking the platform and without changing the remembered list. A
+	 * placeholder's `connect()` rejects the same way, its `disconnect()`
+	 * resolves, and the WalletConnect connector still calls AppKit.
 	 */
 	| "ABORTED"
 	/** The user refused the wallet's connect prompt. `cause` holds the platform error. */

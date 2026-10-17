@@ -14,7 +14,7 @@ https://github.com/kheopskit/kheopskit
 > [MIGRATING_TO_V4.md](../core/MIGRATING_TO_V4.md).
 
 > **Upgrading from v5?** v6 makes `connect()` shared, idempotent and
-> abortable, types every rejection, adds `status`, `isDiscovering`,
+> abortable, types its rejections, adds `status`, `isDiscovering`,
 > `isPlaceholder` and `signRaw`, and moves WalletConnect to a plugin. See
 > [MIGRATING_TO_V6.md](https://github.com/kheopskit/kheopskit/blob/main/packages/core/MIGRATING_TO_V6.md).
 > The [core README](https://github.com/kheopskit/kheopskit/blob/main/packages/core/README.md#wallet-lifecycle)
@@ -122,8 +122,9 @@ const { accounts } = useWallets<typeof platforms>();
 | `useAccount(accountId)` | the account with this id, or `undefined` | when that account changes |
 | `useConnect(walletId)` | `{ connect, disconnect, status, error }` for one wallet | when that wallet changes |
 
-`useWallet` and `useAccount` compare every field of the item, and SDK handles by
-identity. Another wallet connecting does not re-render them.
+`useWallet` and `useAccount` compare the item's fields, SDK handles by identity
+and any two functions as equal. Another wallet connecting does not re-render
+them.
 
 A connect button with `useConnect`:
 

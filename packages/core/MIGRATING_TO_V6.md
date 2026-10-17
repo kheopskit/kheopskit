@@ -1,12 +1,13 @@
 # Migrating to Kheopskit v6
 
 v6 tightens the wallet connection contract. `connect()` and `disconnect()` are
-safe to call from UI code, rejections are typed, and no emission of the state
-stream shows a disconnected wallet still listing accounts or a connected wallet
-listing the accounts of a previous connection. v6 also renames the store's
-remembered list, keeps the extension's account order, and changes how the
-Polkadot plugin talks to an extension. Kheopskit calls `enable()` itself, keeps
-the raw object the extension returns, and exposes raw signing on every account.
+safe to call from UI code, `connect()` rejections are typed, and no emission of
+the state stream shows a disconnected wallet still listing live accounts or a
+connected wallet listing the accounts of a previous connection. v6 also renames
+the store's remembered list, keeps the extension's account order, and changes
+how the Polkadot plugin talks to an extension. Kheopskit calls `enable()`
+itself, keeps the raw object the extension returns, and exposes raw signing on
+every live account.
 
 `@kheopskit/core`, `@kheopskit/react` and the repo release tag move to
 **`6.0.0`** together.
@@ -27,7 +28,7 @@ This guide grows with each v6 change. Each section covers one area.
 | Refused prompt | the extension's plain `Error` | `KheopskitError` `USER_REJECTED` with `cause` | [1](#1-connect-and-disconnect) |
 | Other connect failure | platform error passed through | `KheopskitError` `CONNECT_FAILED` with `cause` | [1](#1-connect-and-disconnect) |
 | When `connect()` resolves | when the platform call returned | after `kheopskit$` emitted the wallet with `isConnected: true`, with two exceptions; accounts a platform lists asynchronously (Ethereum `eth_accounts`) may follow in a later emission | [1](#1-connect-and-disconnect) |
-| Intermediate emissions | a wallet could show connected with the previous connection's accounts for one frame | a synchronous burst is one emission; no emission shows a disconnected wallet still listing accounts or a connected wallet listing a previous connection's accounts | [1](#1-connect-and-disconnect) |
+| Intermediate emissions | a wallet could show connected with the previous connection's accounts for one frame | a synchronous burst is one emission; no emission shows a disconnected wallet still listing live accounts or a connected wallet listing a previous connection's accounts; cached placeholder accounts stay listed during hydration | [1](#1-connect-and-disconnect) |
 | Account streams | one read per platform, re-run for every wallet of the platform whenever any wallet changes | in `kheopskit$`, one stream per wallet connection, started empty; a sibling's connect or disconnect leaves it alone and its pending request delays nobody | [1](#1-connect-and-disconnect) |
 | Store's remembered list | `KheopskitStoreData.autoReconnect` | `KheopskitStoreData.remembered`; v5 data migrates on read | [2](#2-store) |
 | Edit the remembered list | `store.addEnabledWalletId`, `store.removeEnabledWalletId` | `store.rememberWallet`, `store.forgetWallet` | [2](#2-store) |
@@ -101,9 +102,11 @@ Each section ends with the app code it makes redundant. In short:
 - `ABORTED`: this `connect()` or `disconnect()` call was abandoned. For
   `connect()`, its `signal` fired before the platform answered, `disconnect()`
   was called while it pended, or the last `kheopskit$` subscriber
-  unsubscribed. For either call, the wallet object came from a subscription
-  that had already ended; the call then rejects without asking the platform
-  and without changing the remembered list.
+  unsubscribed. For either call on an injected wallet, the wallet object came
+  from a subscription that had already ended; the call then rejects without
+  asking the platform and without changing the remembered list. A
+  placeholder's `connect()` rejects the same way and its `disconnect()`
+  resolves. The WalletConnect connector is not wrapped and still calls AppKit.
 - `USER_REJECTED`: the user refused the wallet prompt. `cause` holds the
   platform error. It is an EIP-1193 error with `code: 4001` on Ethereum; on
   Polkadot the extension's own `Error`, for Talisman
@@ -118,7 +121,9 @@ Each section ends with the app code it makes redundant. In short:
   `@kheopskit/core/walletconnect` (see section 5). It is not a rejection and
   carries no `walletId`.
 
-Every rejection is a `KheopskitError` carrying `walletId`.
+Every rejection of `connect()` is a `KheopskitError` carrying `walletId`, and
+so is an `ABORTED` `disconnect()`. A `disconnect()` whose platform call fails
+(Solana, the WalletConnect connector) rejects with the platform's own error.
 
 ```ts
 try {
@@ -141,9 +146,10 @@ try {
 - **One platform attempt per wallet.** Concurrent `connect()` calls share it
   and the platform is asked once. Each call still gets its own promise. An
   abort through a caller's `signal` before the platform answers rejects that
-  caller only, and an abort after the grant changes nothing. The attempt is
-  abandoned once every caller that passed a signal has aborted and no caller
-  without one joined, on `disconnect()`, or when the last `kheopskit$`
+  caller only, and an abort after the grant changes nothing. A Polkadot
+  extension counts as granted only once its account list has been read. The
+  attempt is abandoned once every caller that passed a signal has aborted and
+  no caller without one joined, on `disconnect()`, or when the last `kheopskit$`
   subscriber unsubscribes; those reject every remaining caller `ABORTED`.
 - **Resolution follows the state.** `connect()` resolves once `kheopskit$` has
   emitted a state in which the wallet has `isConnected: true`. `disconnect()`
@@ -159,9 +165,10 @@ try {
   `isConnected`, not the account list. An authorised wallet may share zero
   accounts, and on platforms that list accounts asynchronously (Ethereum
   `eth_accounts`) the accounts may arrive in a later emission. What holds for
-  every emission is that none shows a disconnected wallet still listing
+  every emission is that none shows a disconnected wallet still listing live
   accounts or a connected wallet listing the accounts of a previous
-  connection.
+  connection. During hydration a wallet's cached placeholder accounts stay
+  listed whatever its status.
 - **No default timeout.** A Polkadot extension prompt pends until the user
   answers it. Pass `AbortSignal.timeout(ms)` to cap your wait for the platform's
   answer. The wait for the state after a grant is not capped. Aborting ends
@@ -201,8 +208,9 @@ try {
   and resolves once it is open; `isConnected` follows when the user approves.
 - **No throttle on the stream.** `throttleTime(16)` is replaced by a microtask
   coalesce. A synchronous burst (wallets, then accounts) becomes one emission,
-  so no emission shows a disconnected wallet still listing accounts. A wallet's
-  accounts leave the state in the same emission that shows it disconnected,
+  so no emission shows a disconnected wallet still listing live accounts. A
+  wallet's live accounts leave the state in the same emission that shows it
+  disconnected,
   even while another wallet's `eth_accounts` request is pending. Accounts a
   platform lists asynchronously (Ethereum `eth_accounts`) may arrive in a later
   emission. The first emission can arrive one microtask after subscribe.
@@ -249,11 +257,12 @@ try {
 | `store.addEnabledWalletId(walletId)` | `store.rememberWallet(walletId)` |
 | `store.removeEnabledWalletId(walletId)` | `store.forgetWallet(walletId)` |
 
-The list holds the wallets the user connected. Kheopskit adds a wallet on
-every successful connect, whatever `config.autoReconnect` says, and removes it
-when a connected wallet is disconnected. The `autoReconnect` config option
-keeps its name and meaning. It decides whether the remembered wallets
-reconnect on load.
+The list holds the injected wallets the user connected. Kheopskit adds a
+wallet on every successful connect, whatever `config.autoReconnect` says, and
+removes it when a connected wallet is disconnected. The WalletConnect
+connector is never added; AppKit restores its own session. The `autoReconnect`
+config option keeps its name and meaning. It decides whether the remembered
+wallets reconnect on load.
 
 The compact cookie format is unchanged. The list stays under the key `r`.
 
@@ -382,7 +391,7 @@ subscriber leaves.
 
 Accounts the extension lists without a `type` are now kept as `sr25519`. v5
 went through pjs-signer, which dropped them. `polkadot({ accountTypes })` is
-the only filter.
+the only type filter.
 
 ### `connect()` rejects an incomplete extension
 
@@ -449,23 +458,23 @@ server and the client evaluate it for the same input and both must agree, or
 the markup diverges. It receives the `BaseWallet` fields only, so key on
 `wallet.id`.
 
-Every successful `connect()` is still recorded in the remembered list, whatever
-`autoReconnect` says.
+Every successful `connect()` of an injected wallet is still recorded in the
+remembered list, whatever `autoReconnect` says.
 
 ### Refused reconnects are forgotten
 
-A reconnect never prompts while the site stays authorised in the extension.
-When the authorisation was revoked the extension prompts once; a refusal
-forgets the wallet (it leaves the remembered list), so the next load stays
-silent. Any other failure sets `wallet.error`, keeps the wallet remembered and
-is retried on the next change to the wallet list, 3 attempts in total. A
-manual `connect()` or `disconnect()` on a remembered wallet ends its automatic
-reconnect for the session. A `disconnect()` while the automatic reconnect
-still waits for the extension aborts it without forgetting the wallet, so the
-next load reconnects it. Automatic reconnect also ends when the wallet
-disappears mid-attempt; the wallet stays remembered for the next load. Nothing
-is written to `console.error` any more; `debug: true` logs the failure with
-`console.debug`.
+A reconnect opens no connect prompt while the site stays authorised in the
+extension. When the authorisation was revoked the extension prompts once; a
+refusal forgets the wallet (it leaves the remembered list), so the next load
+stays silent. Any other failure sets `wallet.error`, keeps the wallet
+remembered and is retried on the next change to the wallet list, 3 attempts in
+total. A manual `connect()` or `disconnect()` on a remembered wallet ends its
+automatic reconnect for the session. A `disconnect()` while the automatic
+reconnect still waits for the extension aborts it without forgetting the
+wallet, so the next load reconnects it. Automatic reconnect also ends when the
+wallet disappears mid-attempt; the wallet stays remembered for the next load.
+Nothing is written to `console.error` any more; `debug: true` logs the failure
+with `console.debug`.
 
 ### First frame after a reload
 
@@ -622,7 +631,9 @@ await account.txCreator.signBytes(bytes);
 
 A placeholder wallet is never connected (`isConnected: false`). A cached wallet
 that kheopskit has already discovered is not a placeholder. It carries its live
-handle and shows `status: "connecting"` while its reconnect is pending. Its
+`connect()` and `disconnect()` and shows `status: "connecting"` while its
+reconnect is pending. A Polkadot wallet's `extension` stays `undefined` until
+that reconnect succeeds. Its
 cached accounts stay placeholders until the live accounts replace them.
 
 Plugins never set the flag. Kheopskit sets it on every item it emits, so a
@@ -679,7 +690,9 @@ A state literal or test mock typed as `KheopskitState` must add the field:
 
 Hydration now also waits for discovery. With a cache, `isHydrating` stays
 `true` until `load` or `hydrationTimeout`, whichever comes first. A
-`hydrationGracePeriod` of `0` still turns hydration off.
+`hydrationGracePeriod` of `0` still turns hydration off in `kheopskit$`. Under
+`KheopskitProvider`, the first render still shows the cached placeholders with
+`isHydrating: true` until the first emission.
 
 ### New option: `hydrationTimeout`
 
@@ -688,7 +701,8 @@ hydrationTimeout: number // default 3000
 ```
 
 The upper bound in milliseconds on `isHydrating`. `hydrationGracePeriod` is now
-only the minimum time placeholders are shown; `0` still disables them.
+only the minimum time placeholders are shown; `0` still disables them in
+`kheopskit$`, though not in `KheopskitProvider`'s first render.
 `hydrationTimeout` replaces the old cap of six times `hydrationGracePeriod` and
 wins over a longer grace period, so an app that raised `hydrationGracePeriod`
 sets `hydrationTimeout` as well. To keep the old cap, set it to six times the
@@ -755,8 +769,27 @@ still open is persisted.
 
 ## 9. `@kheopskit/react`: one shared instance and wallet hooks
 
-Nothing to change in an app that uses `useWallets`, `useAccounts` and
-`KheopskitProvider`. Their signatures and results stay the same.
+`useWallets`, `useAccounts` and `KheopskitProvider` keep their signatures.
+Their results are v6 state, so they change the way sections 4, 7 and 8 describe.
+A mock of `useWallets()` adds `isDiscovering`, a wallet built by hand adds
+`status`, and code that reads an SDK handle or calls `signRaw` narrows on
+`isPlaceholder` first:
+
+```diff
+  const mock: ReturnType<typeof useWallets> = {
+    config,
+    wallets: [],
+    accounts: [],
+    isHydrating: false,
++   isDiscovering: false,
+  };
+
+  const { accounts } = useWallets<typeof platforms>();
+  const account = accounts.find((a) => a.id === accountId);
+- if (account?.platform === "polkadot")
++ if (account?.platform === "polkadot" && !account.isPlaceholder)
+    await account.txCreator.signBytes(bytes);
+```
 
 ### Context shape (internal)
 

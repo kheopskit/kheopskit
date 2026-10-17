@@ -13,7 +13,7 @@ See [Kheopswap](https://github.com/kheopswap/kheopswap) (polkadot/ethereum) and 
 
 > **Upgrading from v3?** v4 moves platforms to plugins and makes platform SDKs (and WalletConnect) optional peer dependencies. See the [v4 migration guide](./packages/core/MIGRATING_TO_V4.md).
 
-> **Upgrading from v5?** v6 makes `connect()` shared, idempotent and abortable, types every rejection, adds wallet `status`, `isDiscovering`, `isPlaceholder` and `signRaw`, and moves WalletConnect to a plugin. See the [v6 migration guide](./packages/core/MIGRATING_TO_V6.md).
+> **Upgrading from v5?** v6 makes `connect()` shared, idempotent and abortable, types its rejections, adds wallet `status`, `isDiscovering`, `isPlaceholder` and `signRaw`, and moves WalletConnect to a plugin. See the [v6 migration guide](./packages/core/MIGRATING_TO_V6.md).
 
 ## Features
 
@@ -398,10 +398,10 @@ function RootComponent() {
 On every page load kheopskit runs the same steps. The [core README](./packages/core/README.md#wallet-lifecycle) gives each rule with its numbers and source file.
 
 1. **Discovery.** Polkadot extensions are read from `window.injectedWeb3` at subscribe, 100, 300, 600 and 1100 ms later, and at `load` and 100 ms after. `isDiscovering` turns `false` after the `load` read. Nothing looks again later.
-2. **Hydration.** The first frame shows the previous visit's wallets and accounts from the cache as placeholders (`isPlaceholder: true`). `isHydrating` ends after the 500 ms grace period, the `load` read and every reconnect has settled, and at 3000 ms (`hydrationTimeout`) at the latest.
+2. **Hydration.** The first frame shows the previous visit's wallets and accounts from the cache as placeholders (`isPlaceholder: true`). `isHydrating` ends after the 500 ms grace period, the `load` read and the reconnect of every cached connected wallet have settled, and at 3000 ms (`hydrationTimeout`) at the latest.
 3. **Reconnect.** Wallets the user connected last time reconnect, without a prompt while the site stays authorised, and show `status: "connecting"` meanwhile. A refusal forgets the wallet; other failures set `error`.
 4. **Connect.** An injected wallet's `connect()` is shared between concurrent calls, resolves at once on a connected wallet, takes an `AbortSignal`, has no timeout, rejects with a typed `KheopskitError`, and resolves once the state shows the wallet connected.
-5. **Persistence.** `remembered` gains a wallet on every connect and loses it when a connected wallet is disconnected. The wallet and account cache is written 1 second after hydration ends and the state stops changing, to `localStorage` or to a cookie with `ssrCookies`.
+5. **Persistence.** `remembered` gains an injected wallet on every connect (the WalletConnect connector is never remembered) and loses it when a connected wallet is disconnected. The wallet and account cache is written 1 second after hydration ends and the state stops changing, to `localStorage` or to a cookie with `ssrCookies`.
 
 ## Testing
 

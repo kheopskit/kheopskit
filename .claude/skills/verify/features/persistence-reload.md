@@ -6,7 +6,7 @@ Kheopskit remembers discovered wallets, connected accounts, and which wallets to
 
 - `persist-storage` writes `localStorage["kheopskit"]` = `{ remembered, cachedWallets, cachedAccounts }` on vite-react.
 - `persist-cookie` writes the `kheopskit` cookie in compact form `{ v, r, w, a }` on nextjs-react and tanstack-start (`localStorage` stays `null`).
-- `auto-reconnect` reconnects the wallets listed in `remembered` / `r` after a reload, without a user action. The row reads `Connecting…` (button disabled) from the first frame until the reconnect settles, then `Disconnect`. A reconnect the user refuses (`USER_REJECTED`) forgets the wallet. Any other failure keeps it remembered. Every failed reconnect shows its error under the wallet name.
+- `auto-reconnect` reconnects the wallets listed in `remembered` / `r` after a reload, without a user action. Once the cache has recorded the connect (1 s after the state settles), the row reads `Connecting…` (button disabled) from the first frame until the reconnect settles, then `Disconnect`. A reconnect the user refuses (`USER_REJECTED`) forgets the wallet. Any other failure keeps it remembered. Every failed reconnect shows its error under the wallet name.
 - `no-empty-flash` keeps the Wallets table from rendering with zero rows after a reload when wallets were cached.
 - `no-reorder` keeps the Accounts order (polkadot, ethereum, solana) in every frame while wallets reconnect.
 - `disconnect-forgets` removes a disconnected wallet from `remembered` / `r`, so it stays disconnected after a reload.
@@ -32,7 +32,7 @@ Preconditions:
 ## Gotchas
 
 - `remembered` is written as soon as a connect succeeds and cleared as soon as `disconnect()` starts. `cachedWallets` and `cachedAccounts` are written 1 s after hydration ends and the state settles. Poll the storage. Do not read it right after the click.
-- With nothing cached, `isHydrating` is `false` from the first frame. Otherwise hydration ends once the grace period (500 ms in the playground) has passed, the page has fired `load`, and every wallet that hydrated as `connecting` has settled: connected with its accounts read, disconnected with an error, not remembered, or absent. `hydrationTimeout` (3000 ms) ends it whatever is pending. A wallet still `Connecting…` at write time keeps its previous cached entry and accounts, so a slow `__dotEnableDelayMs` never empties the cache.
+- With nothing cached, `isHydrating` is `false` from the first `kheopskit$` emission; the provider's first render reads `true` until then. Otherwise hydration ends once the grace period (500 ms in the playground) has passed, the page has fired `load`, and every wallet that hydrated as `connecting` has settled: connected with its accounts read, disconnected with an error, not remembered, or absent. `hydrationTimeout` (3000 ms) ends it whatever is pending. A wallet still `Connecting…` at write time keeps its previous cached entry and accounts, so a slow `__dotEnableDelayMs` never empties the cache.
 - The cookie value is URI-encoded JSON. `readPersistedState` decodes it.
 - A fresh Playwright context starts empty, so persistence holds only within one test. Do the reload inside the same test.
 - On SSR apps, a hydration mismatch shows up as a `console.error`, and the fixture fails the test. That failure is the signal. Do not suppress it.
