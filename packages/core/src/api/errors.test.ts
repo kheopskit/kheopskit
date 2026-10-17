@@ -26,12 +26,19 @@ describe("connect rejection classification", () => {
 		expect(error).toMatchObject({ code: "USER_REJECTED", walletId, cause });
 	});
 
-	it("maps polkadot-js's Rejected message to USER_REJECTED", () => {
-		const cause = new Error("Rejected");
-		expect(toConnectError(cause, walletId, isRefusalMessage)).toMatchObject({
-			code: "USER_REJECTED",
-			cause,
-		});
+	it("maps polkadot-js's and SubWallet's refusal messages to USER_REJECTED", () => {
+		for (const message of [
+			"Connection request was rejected by the user.",
+			"Connection request was cancelled by the user.",
+			"Rejected",
+			"Cancelled",
+		]) {
+			const cause = new Error(message);
+			expect(toConnectError(cause, walletId, isRefusalMessage)).toMatchObject({
+				code: "USER_REJECTED",
+				cause,
+			});
+		}
 	});
 
 	it("maps any other error to CONNECT_FAILED with the original as cause", () => {

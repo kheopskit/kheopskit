@@ -63,11 +63,6 @@ export const abortedError = (walletId: WalletId): KheopskitError =>
 		walletId,
 	});
 
-/**
- * Wraps a platform connect rejection into a {@link KheopskitError}:
- * `USER_REJECTED` when the platform's recogniser identifies a refused prompt,
- * `CONNECT_FAILED` otherwise. A `KheopskitError` passes through untouched.
- */
 export const toConnectError = (
 	error: unknown,
 	walletId: WalletId,
@@ -89,7 +84,6 @@ export const toConnectError = (
 
 const EIP1193_USER_REJECTED_REQUEST = 4001;
 
-/** EIP-1193 providers reject a refused `eth_requestAccounts` with `code: 4001`. */
 export const isEip1193UserRejection = (error: unknown): boolean =>
 	typeof error === "object" &&
 	error !== null &&
@@ -114,11 +108,15 @@ const REFUSAL_MESSAGES: readonly RefusalMessage[] = [
 		evidence: "live",
 	},
 	{
-		pattern: /^Rejected$/,
-		wallet: "polkadot-js extension",
+		pattern: /^Connection request was (rejected|cancelled) by the user\.$/,
+		wallet: "polkadot-js extension (extension-base 0.64 State.ts)",
 		evidence: "inferred",
 	},
-	{ pattern: /^Rejected$/, wallet: "SubWallet", evidence: "inferred" },
+	{
+		pattern: /^(Rejected|Cancelled)$/,
+		wallet: "SubWallet (Extension.ts)",
+		evidence: "inferred",
+	},
 	{
 		pattern: /^User rejected the request\.$/,
 		wallet: "Phantom (Wallet Standard)",
