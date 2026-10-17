@@ -7,7 +7,8 @@ import {
 	type FakePolkadotExtension,
 } from "../../testing/fakePolkadotExtension";
 import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../../utils/WalletId";
-import type { WalletConnectWallet } from "../types";
+import type { LiveWalletConnectWallet } from "../platformAccounts";
+import type { AppKitInstance } from "../types";
 import { getPolkadotAccounts$ } from "./accounts";
 import type {
 	PolkadotInjected,
@@ -59,7 +60,9 @@ const createMockExtension = (
 
 const injectedWalletWith = (
 	extension: PolkadotInjected,
-	overrides: Partial<PolkadotInjectedWallet> = {},
+	overrides: Partial<
+		Exclude<PolkadotInjectedWallet, { isPlaceholder: true }>
+	> = {},
 ): PolkadotInjectedWallet => ({
 	id: "polkadot:test-wallet" as WalletId,
 	platform: "polkadot",
@@ -294,7 +297,7 @@ describe("getPolkadotAccounts$", () => {
 			const [account] = await firstValueFrom(
 				getPolkadotAccounts$(of([wallet]), ["sr25519"]),
 			);
-			if (!account) throw new Error("no account");
+			if (!account || account.isPlaceholder) throw new Error("no account");
 
 			await expect(account.signRaw(data, options)).resolves.toBe(
 				FAKE_SIGNATURE,
@@ -345,8 +348,8 @@ describe("getPolkadotAccounts$", () => {
 					// getAccount("polkadot").allAccounts is always empty. Accounts must
 					// come from session.namespaces (WalletConnect 0-accounts regression).
 					getAccount: vi.fn(() => ({ allAccounts: [] })),
-				} as unknown as WalletConnectWallet["appKit"],
-			} as WalletConnectWallet;
+				} as unknown as AppKitInstance,
+			} as LiveWalletConnectWallet;
 			return { wallet, provider };
 		};
 
@@ -471,7 +474,7 @@ describe("getPolkadotAccounts$", () => {
 			const [account] = await firstValueFrom(
 				getPolkadotAccounts$(of([wallet]), ["sr25519"]),
 			);
-			if (!account) throw new Error("no account");
+			if (!account || account.isPlaceholder) throw new Error("no account");
 
 			await expect(account.signRaw("hello")).resolves.toBe("0xabcd");
 			expect(provider.client.request).toHaveBeenCalledWith({

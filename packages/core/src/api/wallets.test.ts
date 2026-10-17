@@ -16,6 +16,7 @@ import {
 import { getKheopskit$ } from "./kheopskit";
 import { createKheopskitStore } from "./store";
 import type {
+	AppKitInstance,
 	BaseWallet,
 	KheopskitConfig,
 	KheopskitPlatform,
@@ -555,7 +556,7 @@ describe("getWallets$ WalletConnect connector", () => {
 		id: "walletconnect" as WalletId,
 		type: "walletconnect",
 		platforms: [],
-		appKit: {} as WalletConnectWallet["appKit"],
+		appKit: {} as AppKitInstance,
 		name: "A WalletConnect wallet",
 		icon: "",
 		status: "disconnected",

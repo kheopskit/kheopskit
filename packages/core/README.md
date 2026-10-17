@@ -90,9 +90,24 @@ Each platform entry point also exports its SDK-precise types
 carries the SDK-free `KheopskitConfig`, `KheopskitState`, `BaseWallet` and
 `BaseWalletAccount`.
 
-> While `state.isHydrating` is `true`, wallets/accounts are cached placeholders
-> carrying only the base fields — SDK fields (`signer`, `client`,
-> provider/extension handles) are absent until hydration completes.
+While `state.isHydrating` is `true`, wallets and accounts restored from the
+cache are placeholders with `isPlaceholder: true`. Each platform type is a union
+on that flag, and a placeholder has no SDK handle (`txCreator`, `client`,
+`signer`, `provider`, `extension`, …), so the compiler makes you narrow before
+you sign:
+
+```ts
+if (account.isPlaceholder) return;
+await account.txCreator.signBytes(bytes);
+```
+
+A placeholder wallet's `connect()` waits for kheopskit to discover the live
+wallet and connects that one. It rejects with `WALLET_PENDING` if hydration
+ends first, and with `ABORTED` if its `signal` fires while it waits. Its
+`disconnect()` resolves at once. No item is a placeholder once `isHydrating`
+is `false`. In React, the provider's initial snapshot, shown until the first
+stream emission, has no stream to wait on, so a placeholder's `connect()` from
+it rejects with `WALLET_PENDING` at once.
 
 `wallet.connect()` and `wallet.disconnect()` are safe to call straight from UI
 code. Concurrent `connect()` calls on one wallet share one platform attempt, so

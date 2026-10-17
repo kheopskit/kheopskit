@@ -13,6 +13,7 @@ import {
 	getCaip10Addresses,
 	getSessionCaip10s,
 	getWalletConnectSessionAccounts$,
+	type LiveWalletConnectWallet,
 } from "../platformAccounts";
 import type {
 	AppKitInstance,
@@ -71,7 +72,7 @@ const getInjectedWalletAccounts$ = (
 				signRaw: async (data, options) =>
 					(await signRaw({ address, ...encodeRawData(data, options?.type) }))
 						.signature,
-			} as PolkadotAccount;
+			} as Exclude<PolkadotAccount, { isPlaceholder: true }>;
 		};
 
 		const toAccounts = (accounts: PolkadotInjectedAccount[]) =>
@@ -200,7 +201,7 @@ const getAppKitPolkadotSigning = (appKit: AppKitInstance, address: string) => {
 };
 
 const getWalletConnectAccounts$ = (
-	wallet: WalletConnectWallet,
+	wallet: LiveWalletConnectWallet,
 ): Observable<PolkadotAccount[]> =>
 	getWalletConnectSessionAccounts$({
 		wallet,

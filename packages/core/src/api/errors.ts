@@ -19,6 +19,13 @@ export type KheopskitErrorCode =
 	| "USER_REJECTED"
 	/** The wallet's connect call failed for another reason. `cause` holds the platform error. */
 	| "CONNECT_FAILED"
+	/**
+	 * `connect()` was called on a placeholder wallet restored from the cache:
+	 * on `kheopskit$`, hydration ended without kheopskit discovering that
+	 * wallet; on `getHydratedSnapshot` and the React provider's initial
+	 * snapshot, always.
+	 */
+	| "WALLET_PENDING"
 	/** The wallet does not advertise a capability kheopskit needs to proceed. */
 	| "FEATURE_NOT_SUPPORTED"
 	/** No active WalletConnect session for the requested operation. */
@@ -71,6 +78,13 @@ export const abortedError = (
 	new KheopskitError(
 		"ABORTED",
 		`${operation} of wallet ${walletId} was aborted`,
+		{ walletId },
+	);
+
+export const walletPendingError = (walletId: WalletId): KheopskitError =>
+	new KheopskitError(
+		"WALLET_PENDING",
+		`wallet ${walletId} was not discovered before hydration ended`,
 		{ walletId },
 	);
 

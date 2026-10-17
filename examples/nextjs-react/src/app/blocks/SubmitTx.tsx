@@ -189,7 +189,7 @@ const SubmitEthxTx: FC<{
 	const [txHash, setTxHash] = useState<string | null>(null);
 
 	const handleSendClick = async () => {
-		if (!isHex(recipient.address)) return;
+		if (account.isPlaceholder || !isHex(recipient.address)) return;
 		try {
 			const walletChainId = await account.client.getChainId();
 
@@ -320,6 +320,7 @@ const SubmitTxDot: FC<{
 	}, [tx]);
 
 	const handleSendClick = () => {
+		if (account.isPlaceholder) return;
 		try {
 			console.log("Sending transaction", { chainId, recipient, account });
 			const api = getPolkadotApi(chainId as PolkadotChainId);
@@ -371,6 +372,7 @@ const SubmitTxSol: FC<{
 	const [signature, setSignature] = useState<string | null>(null);
 
 	const handleSendClick = async () => {
+		if (account.isPlaceholder) return;
 		try {
 			const rpc = getSolanaRpc();
 			const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();

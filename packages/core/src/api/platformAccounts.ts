@@ -17,6 +17,11 @@ import type {
 } from "./types";
 import { isWalletConnectWallet } from "./types";
 
+export type LiveWalletConnectWallet = Exclude<
+	WalletConnectWallet,
+	{ isPlaceholder: true }
+>;
+
 export type PlatformAccountsOptions<
 	TWallet extends BaseWallet,
 	TAccount extends BaseWalletAccount,
@@ -27,7 +32,7 @@ export type PlatformAccountsOptions<
 	getInjectedAccounts$: (wallet: TWallet) => Observable<TAccount[]>;
 	/** Account stream for the WalletConnect connector. */
 	getWalletConnectAccounts$: (
-		wallet: WalletConnectWallet,
+		wallet: LiveWalletConnectWallet,
 	) => Observable<TAccount[]>;
 	/** Optional post-flatten transform (e.g. Polkadot's `accountTypes` filter). */
 	mapAccounts?: (accounts: TAccount[]) => TAccount[];
@@ -72,7 +77,7 @@ export const createPlatformAccounts$ = <
 			const other = b[i];
 			return !!other && nameAndChangeKey(account) === nameAndChangeKey(other);
 		});
-	const accountsOf = (wallet: TWallet | WalletConnectWallet) =>
+	const accountsOf = (wallet: TWallet | LiveWalletConnectWallet) =>
 		isWalletConnectWallet(wallet)
 			? getWalletConnectAccounts$(wallet)
 			: getInjectedAccounts$(wallet);
@@ -104,7 +109,10 @@ export const createPlatformAccounts$ = <
 		};
 
 		const reconcile = (wallets: (TWallet | WalletConnectWallet)[]) => {
-			const connected = wallets.filter((wallet) => wallet.isConnected);
+			const connected = wallets.filter(
+				(wallet): wallet is TWallet | LiveWalletConnectWallet =>
+					wallet.isConnected && !wallet.isPlaceholder,
+			);
 			const keys = new Map(
 				connected.map((w) => [w.id, connectionKey(w)] as const),
 			);
@@ -204,7 +212,7 @@ export const getCaip10Addresses = (caip10s: string[]): string[] => [
 export const getWalletConnectSessionAccounts$ = <
 	TAccount extends BaseWalletAccount,
 >(options: {
-	wallet: WalletConnectWallet;
+	wallet: LiveWalletConnectWallet;
 	platform: WalletPlatform;
 	/** WalletConnect namespace, e.g. "polkadot" | "solana" | "eip155". */
 	namespace: string;

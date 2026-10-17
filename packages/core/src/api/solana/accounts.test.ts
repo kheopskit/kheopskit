@@ -2,7 +2,8 @@ import { createSignableMessage } from "@solana/kit";
 import { firstValueFrom, of, take, toArray } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../../utils/WalletId";
-import type { WalletConnectWallet } from "../types";
+import type { LiveWalletConnectWallet } from "../platformAccounts";
+import type { AppKitInstance } from "../types";
 import type { SolanaInjectedWallet } from "./types";
 
 const ADDRESS_1 = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
@@ -57,13 +58,17 @@ const createMockStandardWallet = () => {
 
 const createMockInjectedWallet = (
 	standardWallet: ReturnType<typeof createMockStandardWallet>,
-	overrides: Partial<SolanaInjectedWallet> = {},
+	overrides: Partial<
+		Exclude<SolanaInjectedWallet, { isPlaceholder: true }>
+	> = {},
 ): SolanaInjectedWallet => ({
 	platform: "solana",
 	type: "injected",
 	id: "solana:Phantom" as WalletId,
 	sourceId: "Phantom",
-	wallet: standardWallet as unknown as SolanaInjectedWallet["wallet"],
+	wallet: standardWallet as unknown as NonNullable<
+		SolanaInjectedWallet["wallet"]
+	>,
 	chains: ["solana:mainnet", "solana:devnet"],
 	name: "Phantom",
 	icon: "data:image/svg+xml;base64,AAAA",
@@ -76,8 +81,8 @@ const createMockInjectedWallet = (
 
 const createMockAppKitWallet = (
 	namespaces: Record<string, { accounts: string[] }>,
-	overrides: Partial<WalletConnectWallet> = {},
-): WalletConnectWallet => {
+	overrides: Partial<LiveWalletConnectWallet> = {},
+): LiveWalletConnectWallet => {
 	const listeners = new Map<string, Set<ChangeListener>>();
 	const provider = {
 		session: { topic: "test-topic", namespaces },
@@ -115,7 +120,7 @@ const createMockAppKitWallet = (
 			// getAccount("solana").allAccounts is always empty. Accounts must come
 			// from session.namespaces (WalletConnect 0-accounts regression).
 			getAccount: vi.fn(() => ({ allAccounts: [] })),
-		} as unknown as WalletConnectWallet["appKit"],
+		} as unknown as AppKitInstance,
 		...overrides,
 	};
 };
@@ -143,7 +148,9 @@ describe("getSolanaAccounts$", () => {
 			expect(accounts).toHaveLength(1);
 			expect(accounts[0]?.platform).toBe("solana");
 			expect(accounts[0]?.address).toBe(ADDRESS_1);
-			expect(typeof accounts[0]?.signer.modifyAndSignMessages).toBe("function");
+			expect(typeof accounts[0]?.signer?.modifyAndSignMessages).toBe(
+				"function",
+			);
 			expect(typeof accounts[0]?.getSigner).toBe("function");
 		});
 
@@ -215,7 +222,8 @@ describe("getSolanaAccounts$", () => {
 				getSolanaAccounts$(of([wallet]), "solana:mainnet"),
 			);
 			const account = accounts[0];
-			if (!account) throw new Error("expected an account");
+			if (!account || account.isPlaceholder)
+				throw new Error("expected a live account");
 
 			const [signed] = await account.signer.modifyAndSignMessages([
 				createSignableMessage(new Uint8Array([1, 2, 3])),
@@ -241,7 +249,8 @@ describe("getSolanaAccounts$", () => {
 				getSolanaAccounts$(of([wallet]), "solana:mainnet"),
 			);
 			const account = accounts[0];
-			if (!account) throw new Error("expected an account");
+			if (!account || account.isPlaceholder)
+				throw new Error("expected a live account");
 
 			await expect(
 				account.signer.modifyAndSignMessages([

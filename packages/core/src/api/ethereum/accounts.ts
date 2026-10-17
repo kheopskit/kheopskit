@@ -19,6 +19,7 @@ import {
 	createPlatformAccounts$,
 	getCaip10Addresses,
 	getSessionCaip10s,
+	type LiveWalletConnectWallet,
 } from "../platformAccounts";
 import type { WalletConnectWallet } from "../types";
 import type {
@@ -180,7 +181,7 @@ const sameAddresses = (a: string[], b: string[]) =>
 	a.length === b.length && a.every((addr, i) => addr === b[i]);
 
 const getWalletConnectAccounts$ = (
-	wallet: WalletConnectWallet,
+	wallet: LiveWalletConnectWallet,
 ): Observable<EthereumAccount[]> => {
 	const provider = wallet.appKit.getProvider("eip155");
 

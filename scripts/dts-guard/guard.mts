@@ -21,6 +21,7 @@ import type {
 	KheopskitConfig,
 	KheopskitPlatform,
 	SyncableStorage,
+	WalletConnectWallet,
 	WalletId,
 } from "@kheopskit/core";
 import type {
@@ -112,6 +113,72 @@ export type InternalIsTyped = Expect<
 	>
 >;
 
+type Present<T> = Exclude<T, undefined>;
+
+export type SigningSurfacesAreTyped = Expect<
+	NoneAny<
+		[
+			Present<PolkadotAccount["txCreator"]>,
+			Present<EthereumAccount["client"]>,
+			Present<SolanaAccount["signer"]>,
+			Present<EthereumWallet["provider"]>,
+		]
+	>
+>;
+
+export const polkadotTxCreator = (account: PolkadotAccount) => {
+	// @ts-expect-error a placeholder has no txCreator
+	const unnarrowed: Present<PolkadotAccount["txCreator"]> = account.txCreator;
+	if (account.isPlaceholder) return unnarrowed;
+	const narrowed: Present<PolkadotAccount["txCreator"]> = account.txCreator;
+	return narrowed;
+};
+
+export const polkadotSignRaw = (account: PolkadotAccount) => {
+	// @ts-expect-error a placeholder has no signRaw
+	const unnarrowed: Present<PolkadotAccount["signRaw"]> = account.signRaw;
+	if (account.isPlaceholder) return unnarrowed;
+	const narrowed: Present<PolkadotAccount["signRaw"]> = account.signRaw;
+	return narrowed;
+};
+
+export const ethereumClient = (account: EthereumAccount) => {
+	// @ts-expect-error a placeholder has no client
+	const unnarrowed: Present<EthereumAccount["client"]> = account.client;
+	if (account.isPlaceholder) return unnarrowed;
+	const narrowed: Present<EthereumAccount["client"]> = account.client;
+	return narrowed;
+};
+
+export const solanaSigner = (account: SolanaAccount) => {
+	// @ts-expect-error a placeholder has no signer
+	const unnarrowed: SolanaSigner = account.signer;
+	if (account.isPlaceholder) return unnarrowed;
+	const narrowed: SolanaSigner = account.signer;
+	return narrowed;
+};
+
+export const walletConnectAppKit = (wallet: WalletConnectWallet) => {
+	// @ts-expect-error a placeholder has no appKit
+	wallet.appKit.getAccount("eip155");
+	if (wallet.isPlaceholder) return;
+	return wallet.appKit.getAccount("eip155");
+};
+export type PlaceholderAppKitIsAbsent = Expect<
+	Equal<
+		Extract<WalletConnectWallet, { isPlaceholder: true }>["appKit"],
+		undefined
+	>
+>;
+
+export const ethereumProvider = (wallet: EthereumWallet) => {
+	// @ts-expect-error a placeholder has no provider
+	const unnarrowed: Present<EthereumWallet["provider"]> = wallet.provider;
+	if (wallet.isPlaceholder) return unnarrowed;
+	const narrowed: Present<EthereumWallet["provider"]> = wallet.provider;
+	return narrowed;
+};
+
 declare const polkadotWallet: PolkadotInjectedWallet;
 export const rawSignature = polkadotWallet.extension?.signer.signRaw({
 	address: "",
@@ -122,7 +189,7 @@ export type ReadonlyIsOptionalBoolean = Expect<
 	Equal<PolkadotAccount["readonly"], boolean | undefined>
 >;
 export type SignRawReturnsHex = Expect<
-	Equal<ReturnType<PolkadotAccount["signRaw"]>, Promise<`0x${string}`>>
+	Equal<ReturnType<Present<PolkadotAccount["signRaw"]>>, Promise<`0x${string}`>>
 >;
 export type WalletConnectIsTyped = Expect<
 	NoneAny<[typeof walletConnect, ReturnType<typeof walletConnect>]>

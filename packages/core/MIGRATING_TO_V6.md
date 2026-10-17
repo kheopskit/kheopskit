@@ -277,7 +277,7 @@ accounts from `state.accounts`; kheopskit owns the subscription. As in v5,
 `connect()` reads `accounts.get()` before it resolves, so the emission that
 first shows the wallet connected already lists its accounts; the list then
 follows `accounts.subscribe`. The field is `undefined` while the wallet is
-disconnected and while `state.isHydrating` is `true`.
+disconnected, and a placeholder (section 7) has none.
 
 ```diff
 - const accounts = wallet.extension?.getAccounts() ?? [];
@@ -286,7 +286,7 @@ disconnected and while `state.isHydrating` is `true`.
 
 ### `account.signRaw`
 
-Every Polkadot account has
+Every Polkadot account that is not a placeholder (section 7) has
 `signRaw(data: string | Uint8Array, options?: { type?: "bytes" | "payload" })`.
 It resolves the hex signature. A string is sent as text and a `Uint8Array` as
 `0x` hex. Injected accounts go through the extension's `signer.signRaw`,
@@ -307,6 +307,7 @@ and both values show the same screen. The SIWS `Version` line must read `1.0.0`;
 Talisman's parser rejects `1` and falls back to the generic screen.
 
 ```ts
+if (account.isPlaceholder) return;
 const signature = await account.signRaw(siwsMessage);
 ```
 
@@ -443,6 +444,8 @@ so the snapshot applies the same reconnect rule as the live stream.
 - A "reconnect only this wallet" rule implemented by reading storage before
   calling `connect()`. Pass it as the `autoReconnect` function.
 
+---
+
 ## 5. WalletConnect is a plugin
 
 WalletConnect moved to its own entry point, `@kheopskit/core/walletconnect`.
@@ -523,3 +526,62 @@ fakes on `window.injectedWeb3`.
 An app that calls `getKheopskit$` without a `store` persists to
 `localStorage`. Seed it with `createKheopskitStore()`, then call `destroy()` on
 that seeding store. The seeded data uses `remembered`, not v5's `autoReconnect`.
+
+---
+
+## 7. Placeholders carry `isPlaceholder`
+
+### The union
+
+Every wallet and account in `kheopskit$` and in the hydrated snapshot carries
+`isPlaceholder`. It is `true` for an item restored from the cache that its live
+counterpart has not replaced yet, and `false` otherwise. Each platform type is a
+union on it:
+
+| Type | Absent on a placeholder |
+|------|-------------------------|
+| `PolkadotAccount` | `txCreator` (polkadot-api v3) or `polkadotSigner` (v2), `signRaw` |
+| `EthereumAccount` | `client` |
+| `SolanaAccount` | `signer`, `getSigner` |
+| `PolkadotInjectedWallet` | `extension`, `sourceId` |
+| `EthereumInjectedWallet` | `provider`, `sourceId` |
+| `SolanaInjectedWallet` | `wallet`, `chains`, `sourceId` |
+| `WalletConnectWallet` | `appKit` |
+
+In v5 these fields were typed as present and were `undefined` at runtime until
+hydration ended. In v6 reading one without narrowing is a compile error:
+
+```ts
+// v5: compiles, throws while hydrating
+await account.txCreator.signBytes(bytes);
+// v6
+if (account.isPlaceholder) return;
+await account.txCreator.signBytes(bytes);
+```
+
+A placeholder wallet is never connected (`isConnected: false`). A cached wallet
+that kheopskit has already discovered is not a placeholder: it carries its live
+handle and shows `status: "connecting"` while its reconnect is pending. Its
+cached accounts stay placeholders until the live accounts replace them.
+
+Plugins never set the flag: kheopskit sets it on every item it emits, so a
+custom plugin's wallet and account types type it as `isPlaceholder?: false`.
+
+### `connect()` on a placeholder
+
+| | v5 | v6 |
+|---|----|----|
+| `connect()` | throws `PendingWalletError` synchronously | waits for the live wallet with the same id and calls its `connect(options)`; rejects `WALLET_PENDING` if hydration ends without it, `ABORTED` if `signal` fires first |
+| `disconnect()` | throws `PendingWalletError` synchronously | resolves at once |
+
+`PendingWalletError` is gone. On a bare `getHydratedSnapshot()` result, which
+has no live stream behind it, `connect()` rejects `WALLET_PENDING`.
+
+### What downstream apps delete
+
+- Guards that read an SDK field behind `!isHydrating` and cast it to present.
+  Narrow on `isPlaceholder` instead; `isHydrating` can still disable the
+  button.
+- A `hasAccountsFrom`-style check that counts cached accounts as usable.
+  Filter on `!account.isPlaceholder`.
+- `try`/`catch` around a placeholder's `connect()` for `PendingWalletError`.

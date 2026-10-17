@@ -6,9 +6,10 @@ import type {
 } from "viem";
 import type { WalletAccountId } from "../../utils/WalletAccountId";
 import type { WalletId } from "../../utils/WalletId";
-import type { BaseWallet } from "../types";
+import type { BaseWallet, Placeholder, PlaceholderWallet } from "../types";
 
-export type EthereumInjectedWallet = {
+type LiveEthereumInjectedWallet = {
+	isPlaceholder?: false;
 	platform: "ethereum";
 	type: "injected";
 	id: WalletId;
@@ -28,16 +29,21 @@ export type EthereumInjectedWallet = {
 	disconnect: BaseWallet["disconnect"];
 };
 
+export type EthereumInjectedWallet =
+	| LiveEthereumInjectedWallet
+	| PlaceholderWallet<LiveEthereumInjectedWallet, "sourceId" | "provider">;
+
 export type EthereumWallet = EthereumInjectedWallet;
 
-export type EthereumAccount = {
+type LiveEthereumAccount = {
+	isPlaceholder?: false;
 	id: WalletAccountId;
 	platform: "ethereum";
 	/**
 	 * Signing surface for this account: a viem {@link WalletClient} bound to the
 	 * wallet's provider (sign/send via viem actions). Per-platform signing
 	 * surfaces differ — Solana exposes `signer`/`getSigner(chain)`, Polkadot
-	 * exposes `polkadotSigner`. Absent while `state.isHydrating` is `true`.
+	 * exposes `polkadotSigner`. Absent on a placeholder.
 	 */
 	client: WalletClient<CustomTransport, undefined, Account, undefined>;
 	address: `0x${string}`;
@@ -46,3 +52,7 @@ export type EthereumAccount = {
 	walletName: string;
 	walletId: WalletId;
 };
+
+export type EthereumAccount =
+	| LiveEthereumAccount
+	| Placeholder<LiveEthereumAccount, "client">;

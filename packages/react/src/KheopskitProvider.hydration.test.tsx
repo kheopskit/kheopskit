@@ -57,6 +57,9 @@ const WalletsConsumer = () => {
 			<span data-testid="account-order">
 				{accounts.map((a) => `${a.platform}:${a.walletName}`).join(",")}
 			</span>
+			<span data-testid="placeholders">
+				{`${wallets.length + accounts.length}:${[...wallets, ...accounts].every((i) => i.isPlaceholder)}`}
+			</span>
 			<span data-testid="account-chainids">
 				{accounts
 					.map((a) => (a as { chainId?: number }).chainId ?? "-")
@@ -310,6 +313,29 @@ describe("KheopskitProvider snapshots under an autoReconnect predicate", () => {
 		expect(screen.getByTestId("account-order")).toHaveTextContent(
 			expectedAccounts,
 		);
+	});
+
+	it("the server snapshot and the client initial snapshot hold only placeholders", () => {
+		const ssrCookies = `kheopskit=${encodeURIComponent(JSON.stringify(cachedState))}`;
+		// biome-ignore lint/suspicious/noDocumentCookie: necessary for test setup
+		document.cookie = ssrCookies;
+		seedCache(cachedState.cachedWallets, cachedState.cachedAccounts);
+		const withCookies = (
+			<KheopskitProvider config={config} ssrCookies={ssrCookies}>
+				<WalletsConsumer />
+			</KheopskitProvider>
+		);
+
+		expect(renderToString(withCookies)).toContain(
+			`data-testid="placeholders">3:true</span>`,
+		);
+
+		render(
+			<KheopskitProvider config={config}>
+				<WalletsConsumer />
+			</KheopskitProvider>,
+		);
+		expect(screen.getByTestId("placeholders")).toHaveTextContent("3:true");
 	});
 
 	it("hydrating the server markup on the client raises no hydration warning and keeps the connecting status", async () => {

@@ -81,6 +81,15 @@ export type BaseWallet = {
 	name: string;
 	icon: string;
 	/**
+	 * `true` for a wallet restored from the cache that kheopskit has not
+	 * discovered yet: its SDK handle and `sourceId` are absent and it is never
+	 * connected. On `kheopskit$` its `connect()` waits for the live wallet and
+	 * connects that one; on `getHydratedSnapshot` it rejects with
+	 * `WALLET_PENDING`. Its `disconnect()` resolves at once. Set on every wallet
+	 * of `kheopskit$` and of the hydrated snapshot; plugins leave it unset.
+	 */
+	isPlaceholder?: boolean;
+	/**
 	 * `connecting` while a `connect()` call or an auto-reconnect waits for the
 	 * platform, `connected` once the platform granted it, `disconnected`
 	 * otherwise. On a reload, a remembered wallet kheopskit will reconnect is
@@ -159,6 +168,12 @@ export type BaseWallet = {
  */
 export type BaseWalletAccount = {
 	id: WalletAccountId;
+	/**
+	 * `true` for an account restored from the cache that the live wallet has
+	 * not listed yet: its signing surface is absent. Set on every account of
+	 * `kheopskit$` and of the hydrated snapshot; plugins leave it unset.
+	 */
+	isPlaceholder?: boolean;
 	platform: WalletPlatform;
 	/** Base58 (Solana), SS58 (Polkadot) or 0x-hex (Ethereum) address. */
 	address: string;
@@ -168,16 +183,8 @@ export type BaseWalletAccount = {
 	walletId: WalletId;
 };
 
-/**
- * The single WalletConnect connector, shared across every platform.
- *
- * Unlike injected wallets, it is **not tied to a platform**: one WalletConnect
- * session spans whichever namespaces the remote wallet approves in a single
- * pairing (a namespace can't be added to a live session afterwards). So there is
- * exactly one of these in `wallets`, discriminated by `type: "walletconnect"`.
- * Its accounts appear in `accounts`, each carrying its own `platform`.
- */
-export type WalletConnectWallet = {
+type LiveWalletConnectWallet = {
+	isPlaceholder?: false;
 	id: WalletId;
 	type: "walletconnect";
 	/**
@@ -215,6 +222,37 @@ export type WalletConnectWallet = {
 	/** Ends the live session when there is one; resolves at once otherwise. */
 	disconnect: () => Promise<void>;
 };
+
+/**
+ * The single WalletConnect connector, shared across every platform.
+ *
+ * Unlike injected wallets, it is **not tied to a platform**: one WalletConnect
+ * session spans whichever namespaces the remote wallet approves in a single
+ * pairing (a namespace can't be added to a live session afterwards). So there is
+ * exactly one of these in `wallets`, discriminated by `type: "walletconnect"`.
+ * Its accounts appear in `accounts`, each carrying its own `platform`.
+ *
+ * A placeholder (see {@link BaseWallet.isPlaceholder}) has no `appKit`.
+ */
+export type WalletConnectWallet =
+	| LiveWalletConnectWallet
+	| PlaceholderWallet<LiveWalletConnectWallet, "appKit">;
+
+/**
+ * The cached stand-in for a live item `T`: `isPlaceholder: true`, and the
+ * fields `K`, which only the live item carries, absent. Platform account and
+ * wallet types are `T | Placeholder<T, K>`, so narrow on `isPlaceholder`
+ * before reading a field of `K`.
+ */
+export type Placeholder<T, K extends keyof T> = Omit<T, K | "isPlaceholder"> & {
+	isPlaceholder: true;
+} & { [P in K]?: undefined };
+
+/** A {@link Placeholder} wallet, which is never connected. */
+export type PlaceholderWallet<
+	T extends { isConnected: boolean },
+	K extends keyof T,
+> = Omit<Placeholder<T, K>, "isConnected"> & { isConnected: false };
 
 /** Narrows a wallet to the platform-less {@link WalletConnectWallet}. */
 export const isWalletConnectWallet = (
@@ -396,17 +434,26 @@ export type KheopskitConfig<
  *
  * @remarks
  * While {@link KheopskitState.isHydrating} is `true`, `wallets` and `accounts`
- * may contain cached placeholders restored from storage. The **SDK handles** the
- * platform types advertise (e.g. `account.signer` / `getSigner` on Solana,
- * `account.client` on Ethereum, `wallet.provider` / `extension`) are **absent at
- * runtime even though the types claim them**, and placeholder wallets throw if
- * `connect`/`disconnect` is called. Guard all access to those behind
- * `!isHydrating`.
+ * may contain placeholders restored from the cache, flagged
+ * `isPlaceholder: true`. Each platform type is a union on that flag: a
+ * placeholder lacks the SDK handles (`account.txCreator` or `polkadotSigner`
+ * on Polkadot, `account.client` on Ethereum, `account.signer` / `getSigner` on
+ * Solana, `wallet.extension` / `provider` / `wallet` and `sourceId`), so the
+ * compiler rejects reading them until you narrow:
+ *
+ * ```ts
+ * if (account.isPlaceholder) return;
+ * account.txCreator; // TxCreator
+ * ```
+ *
+ * A placeholder wallet's `connect()` waits for the live wallet and connects
+ * it, rejecting with `WALLET_PENDING` if hydration ends first. No item is a
+ * placeholder once `isHydrating` is `false`.
  *
  * The plain, serializable platform data that is persisted in the cache IS
  * restored on the placeholders (Ethereum `chainId`, Polkadot key `type`), so it
- * renders immediately on reload without flashing. Solana `chains` is not cached,
- * so it remains absent until the live account loads.
+ * renders immediately on reload without flashing. Solana `chains` is not
+ * cached: a placeholder account's is empty.
  */
 export type KheopskitState<
 	P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],
@@ -418,9 +465,8 @@ export type KheopskitState<
 	 * Whether the state is still being hydrated from cache.
 	 *
 	 * During hydration, cached wallets/accounts may be displayed before the
-	 * actual wallet extensions have injected. See the type-level remarks: while
-	 * this is `true`, SDK-typed fields (signer/client/provider/extension) are not
-	 * present at runtime — guard all access behind `!isHydrating`.
+	 * actual wallet extensions have injected. See the type-level remarks: those
+	 * are flagged `isPlaceholder: true` and carry no SDK handle.
 	 */
 	isHydrating: boolean;
 	/**
