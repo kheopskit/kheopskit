@@ -8,6 +8,8 @@ const getWalletsTable = (page: Page) =>
 		.getByRole("table")
 		.filter({ has: page.getByRole("columnheader", { name: "Accounts" }) });
 
+type SignRawPayload = { address: string; data: string; type: string };
+
 const getAccountsTable = (page: Page) =>
 	page
 		.getByRole("table")
@@ -82,7 +84,7 @@ test.describe("polkadot mock wallet", () => {
 		await expect(accountRow).toContainText("polkadot");
 
 		// Sign goes through papi pjs-signer -> signRaw on the mock extension
-		await accountRow.getByRole("button", { name: "Sign" }).click();
+		await accountRow.getByRole("button", { name: "Sign", exact: true }).click();
 		await expect(page.getByText(/Signature: 0x22/).first()).toBeVisible();
 
 		await walletRow.getByRole("button", { name: "Disconnect" }).click();
@@ -90,6 +92,41 @@ test.describe("polkadot mock wallet", () => {
 			walletRow.getByRole("button", { name: "Connect" }),
 		).toBeVisible();
 		await expect(accountRow).not.toBeVisible();
+	});
+
+	test("Sign in sends the SIWS text through signRaw", async ({ page }) => {
+		await page.goto("/");
+
+		await getWalletsTable(page)
+			.getByRole("row", { name: /mock-polkadot-wallet/ })
+			.getByRole("button", { name: "Connect" })
+			.click();
+		const accountRow = getAccountsTable(page).getByRole("row", {
+			name: /Mock Account/,
+		});
+		await accountRow.getByRole("button", { name: "Sign in" }).click();
+		await expect(page.getByText(/Signature: 0x22/).first()).toBeVisible();
+
+		const payload = await page.evaluate(() =>
+			(window as { __dotSignRawArgs?: SignRawPayload[] }).__dotSignRawArgs?.at(
+				-1,
+			),
+		);
+		const { host, origin } = new URL(page.url());
+		const expectedStart = [
+			`${host} wants you to sign in with your Substrate account:`,
+			"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+			"",
+			"Kheopskit sign-in",
+			"",
+			`URI: ${origin}`,
+			"Version: 1.0.0",
+		].join("\n");
+		expect(payload?.address).toBe(
+			"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+		);
+		expect(payload?.type).toBe("bytes");
+		expect(payload?.data.slice(0, expectedStart.length)).toBe(expectedStart);
 	});
 });
 
