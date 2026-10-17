@@ -53,8 +53,9 @@ This guide grows with each v6 change. Each section covers one area.
   platform error: an EIP-1193 error with `code: 4001` on Ethereum; on
   Polkadot the extension's own `Error`, for Talisman
   `Site <url> has not been authorised for Talisman yet` (observed live for
-  both the Reject button and a closed prompt), for polkadot-js and SubWallet
-  `Rejected`.
+  both the Reject button and a closed prompt), for polkadot-js
+  `Connection request was rejected by the user.` or `... cancelled by the
+  user.`, for SubWallet `Rejected` or `Cancelled`.
 - `CONNECT_FAILED`: any other platform failure. `cause` holds the platform
   error.
 
