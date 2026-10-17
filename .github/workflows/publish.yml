@@ -62,25 +62,15 @@ jobs:
             exit 1
           fi
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-      - name: Get Version Packages PR Body by Number
-        id: pr_body
+      - name: Create GitHub Release from Version Packages PR Body
         run: |
           BODY=$(gh pr view "$PR_NUMBER" --json body -q .body)
           # Remove everything up to and including '#Releases' (case-insensitive, handles possible whitespace)
           CLEAN_BODY=$(echo "$BODY" | sed -E '1,/^# [Rr]eleases[[:space:]]*$/d')
           # Remove the section about the root package (## kheopskit ... until next ## or end of file)
           CLEAN_BODY=$(echo "$CLEAN_BODY" | awk '/^## kheopskit(@[0-9A-Za-z.-]+)?/ {skip=1} /^## / && !/^## kheopskit(@[0-9A-Za-z.-]+)?/ {skip=0} !skip')
-          echo "body<<EOF" >> $GITHUB_OUTPUT
-          echo "$CLEAN_BODY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "$CLEAN_BODY" | gh release create "v$VERSION" --title "v$VERSION" --target "$GITHUB_SHA" --notes-file -
         env:
           PR_NUMBER: ${{ steps.pr_number.outputs.number }}
+          VERSION: ${{ steps.get_version.outputs.version }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: v${{ steps.get_version.outputs.version }}
-          name: v${{ steps.get_version.outputs.version }}
-          body: ${{ steps.pr_body.outputs.body }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
