@@ -896,6 +896,33 @@ describe("getKheopskit$ connect semantics", () => {
 		sub.unsubscribe();
 	});
 
+	it("a disconnect whose wallet leaves the list the moment the store forgets it resolves", async () => {
+		const sources$ = new BehaviorSubject<EngineSource[]>([{ name: "engine" }]);
+		const platform = enginePlatform({ sources$ });
+		const store = createKheopskitStore();
+		const emissions: KheopskitState[] = [];
+		const sub = getKheopskit$(engineConfig(platform), { store }).subscribe(
+			(state) => emissions.push(state),
+		);
+		await settleMicrotasks();
+		await walletIn(emissions.at(-1), engineWalletId).connect();
+		expect(walletIn(emissions.at(-1), engineWalletId).isConnected).toBe(true);
+		const removeOnForget = store.observable.subscribe((state) => {
+			if ((state.remembered ?? []).length === 0) sources$.next([]);
+		});
+
+		const disconnecting = walletIn(
+			emissions.at(-1),
+			engineWalletId,
+		).disconnect();
+		expect(await settlementOf(disconnecting)).toBe("resolved");
+		expect(emissions.at(-1)?.wallets).toEqual([]);
+		expect(rememberedWalletIds()).toEqual([]);
+
+		removeOnForget.unsubscribe();
+		sub.unsubscribe();
+	});
+
 	it("a disconnect on a cached connected wallet the reconnect rule rejects resolves at once, and the wallet leaves the list with its source", async () => {
 		const sources$ = new BehaviorSubject<EngineSource[]>([{ name: "engine" }]);
 		const { emissions, sub } = subscribeEngineDuringHydration(sources$, true);
