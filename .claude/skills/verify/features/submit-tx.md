@@ -1,6 +1,6 @@
 # Submit a transaction
 
-The "Submitting a transaction" block sends a 0-value transfer from a selected account to a selected recipient on a selected network. The `Send` button appears only when the network's platform matches both accounts. Progress shows as toasts (`Transaction submitted` / `broadcasted` / `successful`, or `Transaction sent: …` on Solana), and an Ethereum or Polkadot run also shows a `View on block explorer` link.
+The "Submitting a transaction" block sends a 0-value transfer from a selected account to a selected recipient on a selected network. A `Send` button appears once a network is selected and `From` and `To` share a platform (on Ethereum, `To` must have a hex address). The network itself does not gate it, and an Ethereum `Send` is disabled on a non-EVM network. Progress shows as toasts (Ethereum `Transaction submitted: <hash>` then `Transaction successful`, Polkadot `Transaction created` then `broadcasted` then `Transaction successful`, Solana `Transaction sent: <sig>`), and every platform shows a `View on block explorer` link.
 
 ## Sub-features
 
@@ -24,13 +24,13 @@ Preconditions:
 - **Connect.** Click `Connect` on the extension's Wallets row and approve in the extension. The Accounts table shows the `Guardians` account.
 - **Select.** Open the `Network` combobox and pick a network. Then pick the `Guardians` account in the `From` and `To` comboboxes. A `Send` button appears.
 - **Send.** Click `Send`. Before you approve in the extension popup, confirm that the signer name contains `Guardians`, then approve.
-- **Result.** A toast reads `Transaction successful` (Ethereum and Polkadot) or `Transaction sent: <sig>` (Solana). On Ethereum and Polkadot, a `View on block explorer` link appears. Open it and confirm the transaction exists on chain.
+- **Result.** A toast reads `Transaction successful` (Ethereum and Polkadot) or `Transaction sent: <sig>` (Solana). A `View on block explorer` link appears. Open it and confirm the transaction exists on chain.
 - **Proof.** Save screenshots of the filled form, the extension approval showing the signer name, the success toast, and the explorer page into `.verify/evidence/<timestamp>-<app>-real-submit-tx/`.
 
 ## Gotchas
 
 - Never approve a signature unless the signer name contains `Guardians`. If it does not, stop and ask the user.
 - These are real networks. Fees are spent even on a 0-value transfer.
-- `Send` is absent rather than disabled when the platforms don't match, for example an Ethereum network with a Polkadot account.
+- `Send` is absent when `From` and `To` do not share a platform. A Polkadot network with an Ethereum `From` still renders an Ethereum `Send`, disabled. Pick the network that matches the accounts.
 - The Polkadot path reads chain metadata over a public RPC, so the first send on a network can take several seconds.
 - Run `serve.sh stop <app>` when you are done.

@@ -1,6 +1,6 @@
 # Wallet discovery
 
-When the playground loads, the Wallets table lists every wallet that Kheopskit discovers: Polkadot extensions (`window.injectedWeb3`), Ethereum wallets (EIP-6963), Solana wallets (Wallet Standard), and one WalletConnect row. Each row shows the platform, the icon and name, an account count, and a `Connect` button.
+When the playground loads, the Wallets table lists every wallet that Kheopskit discovers: Polkadot extensions (`window.injectedWeb3`), Ethereum wallets (EIP-6963), Solana wallets (Wallet Standard), and, when the app has a WalletConnect project ID, one WalletConnect row. Each row shows the platform, the icon and name, an account count, and a `Connect` button.
 
 ## Sub-features
 
@@ -25,9 +25,9 @@ Preconditions:
 - **Polkadot row.** Run `walletsTable(page).getByRole("row", { name: /mock-polkadot-wallet/ })`. The row is visible, contains `polkadot`, and has a `Connect` button.
 - **Ethereum row.** Use the row name `/Mock Ethereum Wallet/`. The row contains `ethereum` and a blue icon.
 - **Solana row.** Use the row name `/Mock Solana Wallet/`. The row contains `solana` and a purple icon.
-- **WalletConnect row.** Use the row name `/WalletConnect/`. Its first cell is `—`.
+- **WalletConnect row.** Only with a project ID in the app's `.env`. Use the row name `/WalletConnect/`. Its first cell is `—`.
 - **Counts.** Every row has a cell with exact text `0`: `row.getByRole("cell", { name: "0", exact: true })`.
-- **Proof.** Run `snap(page, testInfo, "01-discovered")`. The ARIA snapshot lists all four rows.
+- **Proof.** Run `snap(page, testInfo, "01-discovered")`. The ARIA snapshot lists three rows, four with a WalletConnect project ID.
 
 ## Driving `discovery-settled`
 
