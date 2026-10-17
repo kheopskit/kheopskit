@@ -5,7 +5,8 @@ import { useKheopskitExternalStore } from "./context";
 /**
  * Returns the current kheopskit state (wallets, accounts, config, isHydrating)
  * and re-renders on every change. To follow one wallet or account, prefer
- * {@link useWallet} or {@link useAccount}.
+ * {@link useWallet} or {@link useAccount}. Each wallet's `connect` and
+ * `disconnect` act on the pipeline that runs when they are called.
  *
  * Pass the platform tuple as a type argument to recover SDK-precise account and
  * wallet types — `useWallets<typeof platforms>()`. React contexts can't be

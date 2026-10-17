@@ -141,7 +141,9 @@ export const App = () => (
 returns `{ connect, disconnect, status, error }`. It aborts a pending
 `connect()` when the component unmounts or `walletId` changes, and rejects
 `ABORTED` a `connect()` that starts after. `useWallets()` and `useAccounts()`
-re-render on every state change.
+re-render on every state change. Every `connect` and `disconnect` a hook hands
+out acts on the pipeline that runs when it is called, including right after an
+`<Activity>` reveal restarts it.
 
 ```tsx
 import type { WalletId } from "@kheopskit/core";

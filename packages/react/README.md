@@ -151,7 +151,18 @@ const ConnectButton = ({ walletId }: { walletId: WalletId }) => {
 - Every other failure rejects with the wallet's `KheopskitError`, such as
   `USER_REJECTED`, and also shows in `error`.
 - `connect` and `disconnect` keep their identity while `walletId` stays the
-  same.
+  same. A `useEffect(() => { connect() }, [connect])` connects on mount and
+  again after every `<Activity>` reveal.
+
+Every action a hook hands out acts on the pipeline that runs when it is called:
+`connect` and `disconnect` from `useConnect`, from a `useWallet` wallet and
+from a `useWallets()` wallet. An `<Activity>` hide of the provider stops the
+pipeline and a reveal restarts it. An action called in between, from a layout
+effect, a mount effect or a click during the reveal, waits for the restarted
+pipeline's first emission and then acts on the live wallet. An action called
+while no provider is mounted or every provider is hidden rejects `ABORTED` and
+starts no pipeline. Account actions such as `signRaw` bind to the extension,
+not to the pipeline, and work either way.
 
 The hooks from `createKheopskit` are typed to its platforms. Standalone, pass the
 platform tuple: `useWallet<typeof platforms>(walletId)`. `useConnect` is the
