@@ -176,12 +176,18 @@ export const getWalletConnectWallet$ = (
 					// Exposed on the wallet as the (decoupled) AppKitInstance escape hatch.
 					const appKitInstance = appKit as unknown as AppKitInstance;
 
-					const status$ = new BehaviorSubject({
+					const status$ = new BehaviorSubject<{
+						isPolkadotConnected: boolean;
+						isEthereumConnected: boolean;
+						isSolanaConnected: boolean;
+						opening: boolean;
+						error: KheopskitError | undefined;
+					}>({
 						isPolkadotConnected: false,
 						isEthereumConnected: false,
 						isSolanaConnected: false,
 						opening: false,
-						error: undefined as KheopskitError | undefined,
+						error: undefined,
 					});
 
 					const unsubProviders = appKit.subscribeProviders((providers) => {

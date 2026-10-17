@@ -1,14 +1,7 @@
 import type { BaseWallet, KheopskitConfig } from "./types";
 
-/**
- * Bookkeeping for wallet auto-reconnect attempts.
- *
- * One attempt runs per wallet at a time, a wallet that reconnected is left
- * alone (so a later manual disconnect is not fought), a wallet the user refused
- * is never asked again in this subscription, and a wallet whose connect keeps
- * failing (a permission permanently denied, a buggy provider) is retried on
- * later emissions only up to `maxAttempts`.
- */
+// `maxAttempts` caps retries: wallets$ re-emits on every discovery change, so a
+// connect that always rejects would otherwise be re-attempted on each one.
 export type ReconnectPolicyOptions = {
 	/** @default 3 */
 	maxAttempts?: number;
@@ -31,13 +24,6 @@ export const createReconnectPolicy = ({
 		return state.kind === "failed" && state.attempts < maxAttempts;
 	};
 
-	/**
-	 * Runs `connect` under the policy. Resolves `false` without connecting when
-	 * an attempt is already in flight, the wallet already reconnected, the user
-	 * refused it, or it exhausted its attempts; resolves `true` on success. A
-	 * rejection from `connect` is recorded as a failed attempt and rethrown for
-	 * the caller to report.
-	 */
 	const attempt = async (
 		walletId: string,
 		connect: () => Promise<unknown>,
@@ -57,7 +43,6 @@ export const createReconnectPolicy = ({
 		}
 	};
 
-	/** Marks a wallet the user refused: no later emission re-attempts it. */
 	const refuse = (walletId: string) => {
 		states.set(walletId, { kind: "refused" });
 	};
@@ -65,10 +50,8 @@ export const createReconnectPolicy = ({
 	return { shouldAttempt, attempt, refuse };
 };
 
-/**
- * The reconnect rule as one function, so the first-frame placeholder and the
- * live attempt evaluate the same `autoReconnect` the same way.
- */
+// Shared by the first-frame snapshot and the live attempt: both must evaluate
+// `autoReconnect` identically or the server and client markup diverge.
 export const reconnectAccepts = (
 	autoReconnect: KheopskitConfig["autoReconnect"],
 	wallet: BaseWallet,

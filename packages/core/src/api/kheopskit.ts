@@ -94,9 +94,6 @@ export const getKheopskit$ = <
 		let closed = false;
 		const waiters = new Set<StateWaiter>();
 		const wrapped = new WeakMap<BaseWallet, BaseWallet>();
-		// Wallets whose live stream has reported a connect attempt (or its
-		// failure): from then on their placeholder stops bridging `connecting`.
-		const attempted = new Set<WalletId>();
 
 		const isConnectedIn = (state: KheopskitState, walletId: WalletId) =>
 			state.wallets.some((w) => w.id === walletId && w.isConnected);
@@ -163,7 +160,6 @@ export const getKheopskit$ = <
 			liveWallets$,
 			kc.hydrationGracePeriod,
 			(w) => w.id,
-			// Hydration converges when every placeholder still reconnecting is connected in live
 			(liveWallets, cached) => {
 				const reconnectingIds = new Set(
 					cached.filter((w) => w.status === "connecting").map((w) => w.id),
@@ -174,20 +170,15 @@ export const getKheopskit$ = <
 				);
 			},
 			(live, cached) => {
-				if (live.status !== "disconnected" || live.error)
-					attempted.add(live.id);
-				const status =
-					cached.status === "connecting" && !attempted.has(live.id)
-						? "connecting"
-						: live.status;
+				const status = sessionRestoring(live, cached)
+					? "connecting"
+					: live.status;
 				return {
 					...cached,
 					status,
 					isConnected: status === "connected",
 					error: live.error,
-					// Priority: cached icon > localStorage cache > live icon
 					icon: cached.icon || getCachedIcon(cached.id) || live.icon,
-					// Use live wallet's connect/disconnect functions
 					connect: live.connect,
 					disconnect: live.disconnect,
 				};
@@ -357,6 +348,16 @@ type StateWaiter = {
 	resolve: () => void;
 	reject: (error: unknown) => void;
 };
+
+// AppKit restores a cached WalletConnect session on its own and reports nothing
+// until it has; an injected wallet reports its attempt from its first emission.
+const sessionRestoring = (
+	live: BaseWallet | WalletConnectWallet,
+	cached: BaseWallet | WalletConnectWallet,
+): boolean =>
+	isWalletConnectWallet(live) &&
+	live.status === "disconnected" &&
+	cached.status === "connecting";
 
 const accountsOfConnected = (
 	wallets: (BaseWallet | WalletConnectWallet)[],

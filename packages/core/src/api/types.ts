@@ -326,8 +326,8 @@ export type KheopskitConfig<
 	 * A wallet is remembered on every successful `connect()` and forgotten on
 	 * `disconnect()`, whatever this option says; the list is the store's
 	 * `remembered`. `true` reconnects every remembered wallet, `false` none,
-	 * and a function is asked per remembered wallet: with its cached
-	 * placeholder on the first frame, then with its live object before each
+	 * and a function is asked for each cached connected wallet on the first
+	 * frame, then for each remembered wallet with its live object before the
 	 * attempt. The function must be synchronous and pure. It runs on the server
 	 * and on the client for the same input and both must agree, or the markup
 	 * diverges. It receives the {@link BaseWallet} fields only, so key on `id`.

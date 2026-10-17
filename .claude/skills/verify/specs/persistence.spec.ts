@@ -10,9 +10,8 @@ import {
 	walletsTable,
 } from "../helpers";
 
-// Samples the Ethereum row's button label on every animation frame: the
-// reconnect window after a reload is shorter than a locator poll (the recorder
-// pattern from e2e/tests/no-flicker.spec.ts).
+// The Connecting… window after a reload is shorter than a locator poll, so the
+// label is sampled every animation frame and the sequence read back.
 const BUTTON_RECORDER = `
 (() => {
   const samples = [];

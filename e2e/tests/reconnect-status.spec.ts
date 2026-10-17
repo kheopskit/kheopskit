@@ -11,9 +11,8 @@ const MOCK_WALLETS_SCRIPT = path.join(
 	"mock-wallets.js",
 );
 
-// Records, on every animation frame, the label of the button in the Polkadot
-// mock's row (null while the row is absent). The reconnect window after a reload
-// is shorter than a locator poll, so the label sequence is read back instead.
+// The Connecting… window after a reload is shorter than a locator poll, so the
+// label is sampled every animation frame and the sequence read back.
 const BUTTON_RECORDER = `
 (() => {
   const samples = [];
