@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+permissions: {}
 jobs:
   publish:
     name: Publish and create release
@@ -13,14 +14,15 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-          cache: "pnpm"
+          package-manager-cache: false
           registry-url: "https://registry.npmjs.org/"
       - name: Install
         run: pnpm install --frozen-lockfile
@@ -39,41 +41,36 @@ jobs:
         id: get_version
         run: |
           VERSION=$(jq -r .version ./package.json)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Fail if release tag already exists
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
         run: |
-          if git rev-parse "v${{ steps.get_version.outputs.version }}" >/dev/null 2>&1; then
-            echo "Tag v${{ steps.get_version.outputs.version }} already exists."
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists."
             echo "The root package version was not bumped - include the root 'kheopskit' package in changesets."
             exit 1
           fi
       - name: Get PR Number from Commit Message
         id: pr_number
+        env:
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
-          PR_NUMBER=$(echo "${{ github.event.head_commit.message }}" | sed -n 's/^Version Packages (#\([0-9]*\)).*/\1/p')
+          PR_NUMBER=$(echo "$HEAD_COMMIT_MESSAGE" | sed -n 's/^Version Packages (#\([0-9]*\)).*/\1/p')
           if [ -z "$PR_NUMBER" ]; then
-            echo "No PR number found in commit message: ${{ github.event.head_commit.message }}"
+            echo "No PR number found in commit message: $HEAD_COMMIT_MESSAGE"
             exit 1
           fi
-          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
-      - name: Get Version Packages PR Body by Number
-        id: pr_body
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+      - name: Create GitHub Release from Version Packages PR Body
         run: |
-          BODY=$(gh pr view ${{ steps.pr_number.outputs.number }} --json body -q .body)
+          BODY=$(gh pr view "$PR_NUMBER" --json body -q .body)
           # Remove everything up to and including '#Releases' (case-insensitive, handles possible whitespace)
           CLEAN_BODY=$(echo "$BODY" | sed -E '1,/^# [Rr]eleases[[:space:]]*$/d')
           # Remove the section about the root package (## kheopskit ... until next ## or end of file)
           CLEAN_BODY=$(echo "$CLEAN_BODY" | awk '/^## kheopskit(@[0-9A-Za-z.-]+)?/ {skip=1} /^## / && !/^## kheopskit(@[0-9A-Za-z.-]+)?/ {skip=0} !skip')
-          echo "body<<EOF" >> $GITHUB_OUTPUT
-          echo "$CLEAN_BODY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "$CLEAN_BODY" | gh release create "v$VERSION" --title "v$VERSION" --target "$GITHUB_SHA" --notes-file -
         env:
+          PR_NUMBER: ${{ steps.pr_number.outputs.number }}
+          VERSION: ${{ steps.get_version.outputs.version }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: v${{ steps.get_version.outputs.version }}
-          name: v${{ steps.get_version.outputs.version }}
-          body: ${{ steps.pr_body.outputs.body }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
