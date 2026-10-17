@@ -89,6 +89,35 @@ describe("getPolkadotAccounts$", () => {
 		expect(accounts[0]?.type).toBe("ethereum");
 	});
 
+	it("re-emits when the extension renames an account", async () => {
+		const alice: ExtensionAccount = {
+			address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+			name: "Alice",
+			type: "sr25519",
+			genesisHash: null,
+			txCreator: {} as never,
+		};
+		let pushAccounts: (value: ExtensionAccount[]) => void = () => {};
+		const extension = {
+			subscribe: (cb: (value: ExtensionAccount[]) => void) => {
+				pushAccounts = cb;
+				return () => {};
+			},
+			getAccounts: () => [alice],
+		} as unknown as PolkadotInjectedWallet["extension"];
+		const wallet = createMockInjectedWallet([], { extension });
+
+		const names = firstValueFrom(
+			getPolkadotAccounts$(of([wallet]), ["sr25519"]).pipe(take(2), toArray()),
+		);
+		pushAccounts([{ ...alice, name: "Alice (renamed)" }]);
+
+		expect((await names).map((accounts) => accounts[0]?.name)).toEqual([
+			"Alice",
+			"Alice (renamed)",
+		]);
+	});
+
 	it("returns no accounts and warns when allowlist is empty", async () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const wallet = createMockInjectedWallet([
