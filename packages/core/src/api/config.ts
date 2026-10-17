@@ -42,8 +42,8 @@ export const resolveConfig = <
 
 	if (
 		config?.walletConnect !== undefined &&
-		typeof (config.walletConnect as { getWallet$?: unknown }).getWallet$ !==
-			"function"
+		typeof (config.walletConnect as { getWallet$?: unknown } | null)
+			?.getWallet$ !== "function"
 	) {
 		throw new KheopskitError(
 			"INVALID_CONFIG",
