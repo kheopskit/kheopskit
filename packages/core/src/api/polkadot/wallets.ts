@@ -1,9 +1,5 @@
 import { isEqual } from "lodash-es";
-import {
-	connectInjectedExtension,
-	getInjectedExtensions,
-	type InjectedExtension,
-} from "polkadot-api/pjs-signer";
+import { getInjectedExtensions } from "polkadot-api/pjs-signer";
 import { distinctUntilChanged, Observable, shareReplay, skip } from "rxjs";
 import { pageLoaded$ } from "../../utils/pageLoad";
 import { POLKADOT_EXTENSIONS } from "../../utils/polkadotExtensions";
@@ -15,7 +11,20 @@ import {
 import { createInjectedWallets$ } from "../injectedWallets";
 import type { KheopskitStore } from "../store";
 import type { KheopskitConfig } from "../types";
-import type { PolkadotInjectedWallet } from "./types";
+import type { PolkadotInjected, PolkadotInjectedWallet } from "./types";
+
+type InjectedWeb3Window = {
+	injectedWeb3?: Record<
+		string,
+		{ enable(appName: string): Promise<PolkadotInjected> } | undefined
+	>;
+};
+
+const enableExtension = async (identifier: string, appName: string) => {
+	const entry = (globalThis as InjectedWeb3Window).injectedWeb3?.[identifier];
+	if (!entry) throw new Error(`Unavailable extension: "${identifier}"`);
+	return entry.enable(appName);
+};
 
 const getInjectedWalletsIds = () =>
 	typeof window === "undefined"
@@ -73,20 +82,18 @@ export const getPolkadotWallets$ = (
 	store: KheopskitStore,
 	config: Pick<KheopskitConfig, "appName" | "walletConnect">,
 ) =>
-	createInjectedWallets$<WalletId, PolkadotInjectedWallet, InjectedExtension>(
+	createInjectedWallets$<WalletId, PolkadotInjectedWallet, PolkadotInjected>(
 		store,
 		{
 			sources$: createWalletIdsPoller$(),
 			getWalletId: (walletId) => walletId,
-			connect: (walletId) => {
-				const { identifier } = parseWalletId(walletId);
-				return connectInjectedExtension(
-					identifier,
+			connect: (walletId) =>
+				enableExtension(
+					parseWalletId(walletId).identifier,
 					config.appName ||
 						config.walletConnect?.metadata.name ||
 						window.location.hostname,
-				);
-			},
+				),
 			buildWallet: ({ walletId, handle, isConnected, connect, disconnect }) => {
 				const { identifier } = parseWalletId(walletId);
 				const extInfo = POLKADOT_EXTENSIONS[identifier];
