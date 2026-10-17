@@ -99,13 +99,6 @@ export const resetAppKitCache = (): void => {
 };
 
 /**
- * Drops a WalletConnect namespace's cached account observables. Called when a
- * namespace transitions to disconnected — including external disconnects (from
- * the wallet app), which flip status via `subscribeProviders` without ever
- * calling `disconnect()` — and when the connector is observed again, so a later
- * reconnect rebuilds the account observables against the fresh session instead
- * of a stale closure.
- *
  * Keys are `accounts:<walletId>:...`; the trailing colon scopes the prefix to
  * this wallet and avoids matching a sibling whose id is a string prefix.
  */
@@ -230,10 +223,9 @@ const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
 	);
 
 	return new Observable<WalletConnectWallet>((subscriber) => {
-		// The session may have changed while nobody observed, and AppKit's
-		// subscribeProviders only reports later changes: drop the account caches
-		// built for the previous session and re-read the providers.
 		for (const platform of allPlatforms) dropAccountsCache(platform);
+		// AppKit's subscribeProviders only reports later changes, so read the
+		// state that may have changed while nobody observed.
 		syncProviders({
 			polkadot: appKit.getProvider("polkadot"),
 			eip155: appKit.getProvider("eip155"),
