@@ -8,6 +8,7 @@ import {
 	Observable,
 	of,
 	shareReplay,
+	startWith,
 	switchMap,
 	take,
 	tap,
@@ -31,6 +32,8 @@ import { createKheopskitStore } from "./store";
 import type {
 	BaseWallet,
 	BaseWalletAccount,
+	CachedAccount,
+	CachedWallet,
 	KheopskitConfig,
 	KheopskitPlatform,
 	KheopskitState,
@@ -154,21 +157,52 @@ export const getKheopskit$ = <
 			map(([wallets, accounts]) => accountsOfConnected(wallets, accounts)),
 		);
 
+		const isDiscovering$ = pageLoaded$.pipe(
+			switchMap((loaded) =>
+				loaded
+					? liveWallets$.pipe(
+							take(1),
+							map(() => false),
+						)
+					: of(true),
+			),
+			shareReplay({ bufferSize: 1, refCount: true }),
+		);
+
+		const reconnecting = cachedWallets.filter((w) => w.status === "connecting");
+		const hydrationSettled$ = combineLatest([
+			liveWallets$,
+			liveAccounts$.pipe(startWith([] as BaseWalletAccount[])),
+			isDiscovering$,
+			store.observable.pipe(
+				map((s) => s.remembered ?? []),
+				take(1),
+			),
+		]).pipe(
+			map(
+				([wallets, accounts, isDiscovering, remembered]) =>
+					!isDiscovering &&
+					reconnecting.every((cached) =>
+						reconnectSettled(cached, {
+							wallets,
+							accounts,
+							cachedAccounts,
+							remembered,
+						}),
+					),
+			),
+			debounceTime(0, asapScheduler),
+			distinctUntilChanged(),
+		);
+
 		// Apply hydration buffer to wallets
 		const bufferedWallets$ = createHydrationBuffer(
 			cachedWallets,
 			liveWallets$,
 			kc.hydrationGracePeriod,
+			kc.hydrationTimeout,
 			(w) => w.id,
-			(liveWallets, cached) => {
-				const reconnectingIds = new Set(
-					cached.filter((w) => w.status === "connecting").map((w) => w.id),
-				);
-				if (reconnectingIds.size === 0) return true;
-				return [...reconnectingIds].every((id) =>
-					liveWallets.some((w) => w.id === id && w.isConnected),
-				);
-			},
+			hydrationSettled$,
 			(live, cached) => {
 				const status = sessionRestoring(live, cached)
 					? "connecting"
@@ -195,14 +229,9 @@ export const getKheopskit$ = <
 			cachedAccounts,
 			liveAccounts$,
 			kc.hydrationGracePeriod,
+			kc.hydrationTimeout,
 			(a) => a.walletId,
-			// Hydration converges when all wallets with cached accounts have provided live accounts
-			(liveAccounts, cached) => {
-				const cachedWalletIds = new Set(cached.map((a) => a.walletId));
-				if (cachedWalletIds.size === 0) return true;
-				const liveWalletIds = new Set(liveAccounts.map((a) => a.walletId));
-				return [...cachedWalletIds].every((id) => liveWalletIds.has(id));
-			},
+			hydrationSettled$,
 		);
 
 		// Share the buffered streams so the main and persistence subscriptions
@@ -219,16 +248,7 @@ export const getKheopskit$ = <
 		const subscription = combineLatest({
 			wallets: sharedWallets$,
 			accounts: sharedAccounts$,
-			isDiscovering: pageLoaded$.pipe(
-				switchMap((loaded) =>
-					loaded
-						? liveWallets$.pipe(
-								take(1),
-								map(() => false),
-							)
-						: of(true),
-				),
-			),
+			isDiscovering: isDiscovering$,
 		})
 			.pipe(
 				map(({ wallets, accounts, isDiscovering }) => {
@@ -297,26 +317,20 @@ export const getKheopskit$ = <
 				}),
 			)
 			.subscribe(({ wallets, accounts }) => {
-				// Cache ALL wallets to avoid wallet list flash on reload
-				// Only accounts from connected wallets are cached
-				const connectedWalletIds = new Set(
-					wallets.items.filter((w) => w.isConnected).map((w) => w.id),
-				);
-				const relevantAccounts = accounts.items.filter((a) =>
-					connectedWalletIds.has(a.walletId),
+				const snapshot = persistedSnapshot(
+					wallets.items,
+					accounts.items,
+					store.getCachedState(),
 				);
 
 				if (kc.debug) {
 					console.debug("[kheopskit] persisting state snapshot:", {
-						wallets: wallets.items.length,
-						accounts: relevantAccounts.length,
+						wallets: snapshot.wallets.length,
+						accounts: snapshot.accounts.length,
 					});
 				}
 
-				store.setCachedState(
-					wallets.items.map(serializeWallet),
-					relevantAccounts.map(serializeAccount),
-				);
+				store.setCachedState(snapshot.wallets, snapshot.accounts);
 
 				// Cache wallet icons in localStorage (separate from cookies for size)
 				const icons: Record<string, string> = {};
@@ -358,6 +372,69 @@ const sessionRestoring = (
 	isWalletConnectWallet(live) &&
 	live.status === "disconnected" &&
 	cached.status === "connecting";
+
+/**
+ * A cached connected wallet is settled once its reconnect reached a resting
+ * state: absent from the discovered wallets, connected with its accounts read,
+ * failed with an error, or disconnected with no attempt due because it is no
+ * longer remembered. A remembered wallet that reads disconnected without an
+ * error is still waiting for its attempt (the engine reports the attempt in a
+ * later emission), so it is not settled.
+ */
+const reconnectSettled = (
+	cached: BaseWallet | WalletConnectWallet,
+	live: {
+		wallets: (BaseWallet | WalletConnectWallet)[];
+		accounts: BaseWalletAccount[];
+		cachedAccounts: BaseWalletAccount[];
+		remembered: WalletId[];
+	},
+): boolean => {
+	const wallet = live.wallets.find((w) => w.id === cached.id);
+	if (!wallet) return true;
+	const status = sessionRestoring(wallet, cached)
+		? "connecting"
+		: wallet.status;
+	if (status === "connecting") return false;
+	if (status === "disconnected")
+		return wallet.error !== undefined || !live.remembered.includes(cached.id);
+	return (
+		!live.cachedAccounts.some((a) => a.walletId === cached.id) ||
+		live.accounts.some((a) => a.walletId === cached.id)
+	);
+};
+
+/**
+ * What goes to the cache: live data for every wallet, except that a wallet
+ * still connecting keeps its previous entry and accounts, so a slow reconnect
+ * never overwrites a connected cache with an empty one.
+ */
+const persistedSnapshot = (
+	wallets: (BaseWallet | WalletConnectWallet)[],
+	accounts: BaseWalletAccount[],
+	previous: { wallets: CachedWallet[]; accounts: CachedAccount[] },
+): { wallets: CachedWallet[]; accounts: CachedAccount[] } => {
+	const connecting = new Set(
+		wallets.filter((w) => w.status === "connecting").map((w) => w.id),
+	);
+	const connected = new Set(
+		wallets.filter((w) => w.isConnected).map((w) => w.id),
+	);
+	const previousWallets = new Map(previous.wallets.map((w) => [w.id, w]));
+	return {
+		wallets: wallets.map(
+			(w) =>
+				(connecting.has(w.id) && previousWallets.get(w.id)) ||
+				serializeWallet(w),
+		),
+		accounts: [
+			...accounts
+				.filter((a) => connected.has(a.walletId))
+				.map(serializeAccount),
+			...previous.accounts.filter((a) => connecting.has(a.walletId)),
+		],
+	};
+};
 
 const accountsOfConnected = (
 	wallets: (BaseWallet | WalletConnectWallet)[],

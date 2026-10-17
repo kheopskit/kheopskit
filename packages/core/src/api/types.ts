@@ -371,15 +371,32 @@ export type KheopskitConfig<
 	 */
 	storageKey: string;
 	/**
-	 * Grace period in milliseconds to wait for wallets to inject before
-	 * syncing to actual state. During this period, cached wallet/account
-	 * state from storage is preserved to prevent UI flashing.
+	 * Minimum time in milliseconds the cached placeholders are shown after a
+	 * reload, so the wallet list does not flash while extensions inject and
+	 * remembered wallets reconnect. Hydration goes on past it until every
+	 * input of {@link KheopskitConfig.hydrationTimeout} settled.
 	 *
-	 * Set to 0 to disable hydration buffering.
+	 * `0` disables placeholders: `isHydrating` is `false` from the first
+	 * emission.
 	 *
 	 * @default 500
 	 */
 	hydrationGracePeriod: number;
+	/**
+	 * Upper bound in milliseconds on {@link KheopskitState.isHydrating}.
+	 *
+	 * Hydration ends as soon as the grace period elapsed, discovery settled
+	 * ({@link KheopskitState.isDiscovering} is `false`) and every cached
+	 * connected wallet the reconnect rule accepts is settled: connected with
+	 * its accounts read, failed with `error` set, disconnected with no attempt
+	 * due, or absent from the discovered wallets. When this elapses first,
+	 * hydration ends anyway and a wallet whose reconnect is still pending
+	 * stays `connecting`. A prompt the extension opens for a revoked site
+	 * holds hydration until the user answers or this elapses.
+	 *
+	 * @default 3000
+	 */
+	hydrationTimeout: number;
 };
 
 /**
