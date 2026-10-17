@@ -27,6 +27,7 @@ import type {
 	PolkadotSignRawType,
 	PolkadotWallet,
 } from "./types";
+import { accountsAtConnect } from "./wallets";
 
 type RawSignature = `0x${string}`;
 
@@ -82,28 +83,11 @@ const getInjectedWalletAccounts$ = (
 				}
 			});
 
-		let emitted = false;
-		const emit = (accounts: PolkadotInjectedAccount[]) => {
-			emitted = true;
+		const emit = (accounts: PolkadotInjectedAccount[]) =>
 			subscriber.next(toAccounts(accounts));
-		};
 
-		const unsubscribe = injected.accounts.subscribe(emit);
-		injected.accounts.get().then(
-			(accounts) => {
-				if (!emitted) emit(accounts);
-			},
-			(error) => {
-				if (emitted) return;
-				console.error(
-					`[kheopskit] ${wallet.id}: accounts.get() failed, listing no accounts`,
-					error,
-				);
-				emit([]);
-			},
-		);
-
-		return unsubscribe;
+		emit(accountsAtConnect.get(injected) ?? []);
+		return injected.accounts.subscribe(emit);
 	});
 };
 

@@ -91,7 +91,7 @@ export type BaseWallet = {
 	 * - **Settles with the state.** It resolves only after `kheopskit$` has
 	 *   emitted a state in which this wallet has `isConnected: true`, so the
 	 *   consumer-visible state already reflects the connect. On platforms that
-	 *   list accounts asynchronously (Ethereum `eth_accounts`, Polkadot `accounts.get()`), the accounts may
+	 *   list accounts asynchronously (Ethereum `eth_accounts`), the accounts may
 	 *   arrive in a later emission. No emission shows a disconnected wallet
 	 *   still listing accounts. Until a fix tracked for 6.0.0 lands, an
 	 *   Ethereum wallet that reconnects while another connected Ethereum

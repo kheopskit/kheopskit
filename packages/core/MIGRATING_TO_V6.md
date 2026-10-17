@@ -29,7 +29,7 @@ This guide grows with each v6 change. Each section covers one area.
 | `disconnect()` while a `connect()` pends | rejects `WALLET_NOT_CONNECTED` | aborts the connect and resolves |
 | Refused prompt | the extension's plain `Error` | `KheopskitError` `USER_REJECTED` with `cause` |
 | Other connect failure | platform error passed through | `KheopskitError` `CONNECT_FAILED` with `cause` |
-| When `connect()` resolves | when the platform call returned | after `kheopskit$` emitted the wallet with `isConnected: true`; accounts a platform lists asynchronously (Ethereum `eth_accounts`, Polkadot `accounts.get()`) may follow in a later emission |
+| When `connect()` resolves | when the platform call returned | after `kheopskit$` emitted the wallet with `isConnected: true`; accounts a platform lists asynchronously (Ethereum `eth_accounts`) may follow in a later emission |
 | Intermediate emissions | a wallet could show connected with the previous connection's accounts for one frame | a synchronous burst is one emission; no emission shows a disconnected wallet still listing accounts. Until a fix tracked for 6.0.0 lands, an Ethereum wallet that reconnects while another connected Ethereum wallet's `eth_accounts` request is pending may show the accounts of its previous connection for as long as that request goes unanswered, and `connect()` may resolve on that emission. |
 | `wallet.extension` on a Polkadot wallet | pjs-signer's `InjectedExtension` (`getAccounts`, `subscribe`, `disconnect`) | the raw `enable()` result, typed `PolkadotInjected` (`accounts`, `signer`) |
 | Raw signing | `txCreator.signBytes(bytes)` only, hex with `type: "bytes"` | plus `account.signRaw(data, { type? })`, text or bytes |
@@ -108,7 +108,7 @@ try {
   impossible. The state your UI reads already reflects the change when the
   promise settles. This is about `isConnected`, not the account list: an
   authorised wallet may share zero accounts, and on platforms that list
-  accounts asynchronously (Ethereum `eth_accounts`, Polkadot `accounts.get()`) the accounts may arrive in
+  accounts asynchronously (Ethereum `eth_accounts`) the accounts may arrive in
   a later emission. What holds for every emission is that none shows a
   disconnected wallet still listing accounts. Until a fix tracked for 6.0.0
   lands, an Ethereum wallet that reconnects while another connected Ethereum
@@ -157,7 +157,7 @@ try {
   unanswered, and `connect()` may resolve on that emission. A wallet's
   accounts leave the state in the same emission that shows it disconnected,
   even while another wallet's accounts are being re-read. Accounts a platform
-  lists asynchronously (Ethereum `eth_accounts`, Polkadot `accounts.get()`) may arrive in a later
+  lists asynchronously (Ethereum `eth_accounts`) may arrive in a later
   emission. The first emission can arrive one microtask after subscribe.
   `KheopskitProvider` still paints the cached snapshot synchronously.
 
@@ -259,9 +259,11 @@ type PolkadotInjected = {
 ```
 
 `getAccounts()`, `subscribe()` and `disconnect()` are gone from it. Read
-accounts from `state.accounts`; kheopskit owns the subscription. The field is
-`undefined` while the wallet is disconnected and while `state.isHydrating` is
-`true`.
+accounts from `state.accounts`; kheopskit owns the subscription. As in v5,
+`connect()` reads `accounts.get()` before it resolves, so the emission that
+first shows the wallet connected already lists its accounts; the list then
+follows `accounts.subscribe`. The field is `undefined` while the wallet is
+disconnected and while `state.isHydrating` is `true`.
 
 ```diff
 - const accounts = wallet.extension?.getAccounts() ?? [];
@@ -321,10 +323,11 @@ the only filter.
 
 `connect()` rejects with `CONNECT_FAILED`, and the wallet stays disconnected
 and unremembered, when the `enable()` result lacks `accounts.get`,
-`accounts.subscribe`, `signer.signPayload` or `signer.signRaw`. `cause` holds
-an `Error` whose message names the extension, for example
-`Unsupported extension: "talisman"`. An account kheopskit cannot build is
-skipped and the wallet's other accounts are listed.
+`accounts.subscribe`, `signer.signPayload` or `signer.signRaw`, or when
+`accounts.get()` rejects. `cause` holds an `Error` whose message names the
+extension, for example `Unsupported extension: "talisman"`, or the extension's
+own error. An account kheopskit cannot build is skipped and the wallet's other
+accounts are listed.
 
 ### `readonly` and `partOfPortfolio`
 

@@ -9,6 +9,7 @@ import type {
 	PolkadotInjectedAccount,
 	PolkadotInjectedWallet,
 } from "./types";
+import { accountsAtConnect } from "./wallets";
 
 vi.mock("polkadot-api/pjs-signer", async (importOriginal) => {
 	const real = await importOriginal<typeof import("polkadot-api/pjs-signer")>();
@@ -56,6 +57,7 @@ const createMockExtension = (
 			signPayload: vi.fn(async () => ({ signature: "0x" })),
 		},
 	};
+	accountsAtConnect.set(extension, accounts);
 	return { extension, unsubscribe };
 };
 
@@ -152,10 +154,14 @@ describe("getPolkadotAccounts$", () => {
 	it("builds the signer with the detected factory and passes ecdsa for ethereum accounts", async () => {
 		const factory = vi.mocked(pjs.getTxCreatorFromPjs);
 		factory.mockClear();
-		const wallet = createMockInjectedWallet([
+		const listed = [
 			alice,
 			{ address: ETH, name: "Eth Key", type: "ethereum", genesisHash: null },
-		]);
+		];
+		const { extension } = createMockExtension(listed, {
+			subscribe: vi.fn(() => vi.fn()),
+		});
+		const wallet = createMockInjectedWallet(listed, { extension });
 
 		const accounts = await firstValueFrom(
 			getPolkadotAccounts$(of([wallet]), ["sr25519", "ethereum"]),
@@ -224,7 +230,7 @@ describe("getPolkadotAccounts$", () => {
 		expect(disconnected.unsubscribe).toHaveBeenCalledTimes(1);
 	});
 
-	it("emits the list from get() when subscribe has not called back", async () => {
+	it("emits the list read at connect before subscribe calls back", async () => {
 		const { extension } = createMockExtension([alice], {
 			subscribe: vi.fn(() => vi.fn()),
 		});
@@ -236,9 +242,11 @@ describe("getPolkadotAccounts$", () => {
 		]).subscribe((accounts) =>
 			emissions.push(accounts.map((account) => account.address)),
 		);
-		await nextMacrotask();
 
 		expect(emissions).toEqual([[ALICE]]);
+		await nextMacrotask();
+		expect(emissions).toEqual([[ALICE]]);
+		expect(extension.accounts.get).not.toHaveBeenCalled();
 		subscription.unsubscribe();
 	});
 
@@ -257,7 +265,7 @@ describe("getPolkadotAccounts$", () => {
 		subscription.unsubscribe();
 	});
 
-	it("skips an account it cannot build and emits the rest from get()", async () => {
+	it("skips an account it cannot build and emits the rest from the list read at connect", async () => {
 		const { extension } = createMockExtension([alice, broken], {
 			subscribe: vi.fn(() => vi.fn()),
 		});
@@ -275,9 +283,12 @@ describe("getPolkadotAccounts$", () => {
 		subscription.unsubscribe();
 	});
 
-	it("skips the get() result once subscribe has called back", async () => {
+	it("follows subscribe after the list read at connect", async () => {
 		const { extension } = createMockExtension([alice], {
-			get: vi.fn(async () => [{ ...alice, address: BOB }]),
+			subscribe: vi.fn((cb: (accounts: PolkadotInjectedAccount[]) => void) => {
+				cb([{ ...alice, address: BOB }]);
+				return vi.fn();
+			}),
 		});
 		const wallet = createMockInjectedWallet([alice], { extension });
 		const emissions: string[][] = [];
@@ -289,7 +300,7 @@ describe("getPolkadotAccounts$", () => {
 		);
 		await nextMacrotask();
 
-		expect(emissions).toEqual([[ALICE]]);
+		expect(emissions).toEqual([[ALICE], [BOB]]);
 		subscription.unsubscribe();
 	});
 

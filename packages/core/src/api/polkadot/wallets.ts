@@ -12,7 +12,11 @@ import { isRefusalMessage } from "../errors";
 import { createInjectedWallets$ } from "../injectedWallets";
 import type { KheopskitStore } from "../store";
 import type { KheopskitConfig } from "../types";
-import type { PolkadotInjected, PolkadotInjectedWallet } from "./types";
+import type {
+	PolkadotInjected,
+	PolkadotInjectedAccount,
+	PolkadotInjectedWallet,
+} from "./types";
 
 type EnableResult = {
 	accounts?: Partial<PolkadotInjected["accounts"]>;
@@ -37,12 +41,22 @@ const isPolkadotInjected = (
 	typeof injected.signer?.signPayload === "function" &&
 	typeof injected.signer.signRaw === "function";
 
-const enableExtension = async (identifier: string, appName: string) => {
+/**
+ * The accounts each extension listed when its connect was granted, so the
+ * emission that first shows the wallet connected already lists them.
+ */
+export const accountsAtConnect = new WeakMap<
+	PolkadotInjected,
+	PolkadotInjectedAccount[]
+>();
+
+const connectExtension = async (identifier: string, appName: string) => {
 	const entry = (globalThis as InjectedWeb3Window).injectedWeb3?.[identifier];
 	if (!entry) throw new Error(`Unavailable extension: "${identifier}"`);
 	const injected = await entry.enable(appName);
 	if (!isPolkadotInjected(injected))
 		throw new Error(`Unsupported extension: "${identifier}"`);
+	accountsAtConnect.set(injected, await injected.accounts.get());
 	return injected;
 };
 
@@ -108,7 +122,7 @@ export const getPolkadotWallets$ = (
 			sources$: createWalletIdsPoller$(),
 			getWalletId: (walletId) => walletId,
 			connect: (walletId) =>
-				enableExtension(
+				connectExtension(
 					parseWalletId(walletId).identifier,
 					config.appName ||
 						config.walletConnect?.metadata.name ||

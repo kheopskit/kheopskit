@@ -76,7 +76,7 @@ platform granted the connect changes nothing. A refused prompt rejects with
 `USER_REJECTED` and any other failure with `CONNECT_FAILED`. Both carry the
 platform error as `cause`. `connect()` resolves only after `kheopskit$` has
 emitted the wallet with `isConnected: true`. On platforms that list accounts
-asynchronously (Ethereum `eth_accounts`, Polkadot `accounts.get()`) the accounts may arrive in a later
+asynchronously (Ethereum `eth_accounts`) the accounts may arrive in a later
 emission. No emission shows a disconnected wallet still listing accounts.
 Until a fix tracked for 6.0.0 lands, an Ethereum wallet that reconnects while
 another connected Ethereum wallet's `eth_accounts` request is pending may show
@@ -107,7 +107,10 @@ Sign Request screen for hex; the screen follows the text `data`, not `type`.
 Enkrypt reads `type` as the encoding of `data`, so it needs the value the
 derived default sends. On a connected Polkadot wallet, `wallet.extension` is the raw object
 `enable()` returned, typed as `PolkadotInjected`. Use it for extension calls
-kheopskit does not wrap.
+kheopskit does not wrap. `connect()` reads `accounts.get()` before it resolves,
+so the emission that first shows the wallet connected already lists its
+accounts, and a rejected `accounts.get()` fails the connect with
+`CONNECT_FAILED`.
 
 ## Persisted store
 
