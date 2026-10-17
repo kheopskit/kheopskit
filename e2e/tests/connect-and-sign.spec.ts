@@ -92,7 +92,9 @@ test.describe("polkadot mock wallet", () => {
 		await expect(accountRow).not.toBeVisible();
 	});
 
-	test("clicking Connect twice quickly calls enable once", async ({ page }) => {
+	test("clicking Connect shows Connecting… and disables the button until enable answers", async ({
+		page,
+	}) => {
 		await page.goto("/");
 		await page.evaluate(() => {
 			(window as { __dotEnableDelayMs?: number }).__dotEnableDelayMs = 1000;
@@ -101,9 +103,10 @@ test.describe("polkadot mock wallet", () => {
 		const walletRow = getWalletsTable(page).getByRole("row", {
 			name: /mock-polkadot-wallet/,
 		});
-		const connect = walletRow.getByRole("button", { name: "Connect" });
-		await connect.click();
-		await connect.click();
+		await walletRow.getByRole("button", { name: "Connect" }).click();
+		const connecting = walletRow.getByRole("button", { name: "Connecting…" });
+		await expect(connecting).toBeDisabled();
+		await connecting.click({ force: true });
 
 		await expect(
 			walletRow.getByRole("button", { name: "Disconnect" }),

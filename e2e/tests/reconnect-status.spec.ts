@@ -11,7 +11,7 @@ const MOCK_WALLETS_SCRIPT = path.join(
 	"mock-wallets.js",
 );
 
-// Records, on every animation frame, the label of the button in the Ethereum
+// Records, on every animation frame, the label of the button in the Polkadot
 // mock's row (null while the row is absent). The reconnect window after a reload
 // is shorter than a locator poll, so the label sequence is read back instead.
 const BUTTON_RECORDER = `
@@ -20,10 +20,9 @@ const BUTTON_RECORDER = `
   window.__buttonSamples = samples;
   const tick = () => {
     const row = Array.from(document.querySelectorAll("tbody tr")).find((tr) =>
-      (tr.textContent || "").includes("Mock Ethereum Wallet"),
+      (tr.textContent || "").includes("mock-polkadot-wallet") && tr.querySelector("button"),
     );
-    const button = row ? row.querySelector("button") : null;
-    samples.push(button ? (button.textContent || "").trim() : null);
+    samples.push(row ? (row.querySelector("button").textContent || "").trim() : null);
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
@@ -44,11 +43,15 @@ const walletsTable = (page: Page) =>
 		.getByRole("table")
 		.filter({ has: page.getByRole("columnheader", { name: "Accounts" }) });
 
-const persistedRemembered = (page: Page): Promise<string[]> =>
+/** Names of the wallets in the persisted cache, across both storage backends. */
+const cachedWalletNames = (page: Page): Promise<string[]> =>
 	page.evaluate(() => {
 		try {
 			const raw = localStorage.getItem("kheopskit");
-			if (raw) return JSON.parse(raw).remembered ?? [];
+			if (raw)
+				return (JSON.parse(raw).cachedWallets ?? []).map(
+					(w: { name: string }) => w.name,
+				);
 		} catch {}
 		const entry = document.cookie
 			.split("; ")
@@ -57,7 +60,7 @@ const persistedRemembered = (page: Page): Promise<string[]> =>
 		const value = JSON.parse(
 			decodeURIComponent(entry.slice("kheopskit=".length)),
 		);
-		return value.r ?? value.remembered ?? [];
+		return (value.w ?? []).map((w: [string, string]) => w[1]);
 	});
 
 test("a remembered wallet shows Connecting… before Disconnect after a reload", async ({
@@ -65,21 +68,30 @@ test("a remembered wallet shows Connecting… before Disconnect after a reload",
 }) => {
 	await page.addInitScript({ path: MOCK_WALLETS_SCRIPT });
 	await page.addInitScript(BUTTON_RECORDER);
+	await page.addInitScript(() => {
+		(window as { __dotEnableDelayMs?: number }).__dotEnableDelayMs = 500;
+	});
 
 	await page.goto("/");
 	const row = walletsTable(page).getByRole("row", {
-		name: /Mock Ethereum Wallet/,
+		name: /mock-polkadot-wallet/,
 	});
 	await row.getByRole("button", { name: "Connect" }).click();
 	await expect(row.getByRole("button", { name: "Disconnect" })).toBeVisible();
 	await expect
-		.poll(() => persistedRemembered(page), { timeout: 15_000 })
-		.toContain("ethereum:xyz.kheopskit.mock");
+		.poll(() => cachedWalletNames(page), { timeout: 15_000 })
+		.toContain("mock-polkadot-wallet");
 
 	await page.reload();
+	await expect(row.getByRole("button", { name: "Connecting…" })).toBeDisabled();
 	await expect(row.getByRole("button", { name: "Disconnect" })).toBeVisible({
 		timeout: 15_000,
 	});
 
 	expect(await labelSequence(page)).toEqual(["Connecting…", "Disconnect"]);
+	expect(
+		await page.evaluate(
+			() => (window as { __dotEnableCalls?: number }).__dotEnableCalls,
+		),
+	).toBe(1);
 });
