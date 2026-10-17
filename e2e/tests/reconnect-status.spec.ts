@@ -3,6 +3,7 @@ import path from "node:path";
 // AppKit, which logs to the console in a headless run; this spec only reads the
 // row's button label.
 import { expect, type Page, test } from "@playwright/test";
+import { BUTTON_RECORDER, buttonSequence } from "../buttonRecorder";
 
 const MOCK_WALLETS_SCRIPT = path.join(
 	__dirname,
@@ -10,32 +11,6 @@ const MOCK_WALLETS_SCRIPT = path.join(
 	"mocks",
 	"mock-wallets.js",
 );
-
-// The Connecting… window after a reload is shorter than a locator poll, so the
-// label is sampled every animation frame and the sequence read back.
-const BUTTON_RECORDER = `
-(() => {
-  const samples = [];
-  window.__buttonSamples = samples;
-  const tick = () => {
-    const row = Array.from(document.querySelectorAll("tbody tr")).find((tr) =>
-      (tr.textContent || "").includes("mock-polkadot-wallet") && tr.querySelector("button"),
-    );
-    samples.push(row ? (row.querySelector("button").textContent || "").trim() : null);
-    requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
-})();
-`;
-
-const labelSequence = (page: Page): Promise<string[]> =>
-	page.evaluate(() =>
-		(
-			window as unknown as { __buttonSamples: (string | null)[] }
-		).__buttonSamples
-			.filter((label): label is string => label !== null)
-			.filter((label, i, all) => i === 0 || label !== all[i - 1]),
-	);
 
 const walletsTable = (page: Page) =>
 	page
@@ -82,12 +57,14 @@ test("a remembered wallet shows Connecting… before Disconnect after a reload",
 		.toContain("mock-polkadot-wallet");
 
 	await page.reload();
-	await expect(row.getByRole("button", { name: "Connecting…" })).toBeDisabled();
 	await expect(row.getByRole("button", { name: "Disconnect" })).toBeVisible({
 		timeout: 15_000,
 	});
 
-	expect(await labelSequence(page)).toEqual(["Connecting…", "Disconnect"]);
+	expect(await buttonSequence(page)).toEqual([
+		"Connecting… (disabled)",
+		"Disconnect",
+	]);
 	expect(
 		await page.evaluate(
 			() => (window as { __dotEnableCalls?: number }).__dotEnableCalls,
