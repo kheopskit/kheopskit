@@ -142,8 +142,9 @@ returns `{ connect, disconnect, status, error }`. It aborts a pending
 `connect()` when the component unmounts or `walletId` changes, and rejects
 `ABORTED` a `connect()` that starts after. `useWallets()` and `useAccounts()`
 re-render on every state change. Every `connect` and `disconnect` a hook hands
-out acts on the pipeline that runs when it is called, including right after an
-`<Activity>` reveal restarts it.
+out acts on the instance's pipeline when it is called, including right after an
+`<Activity>` reveal restarts it and while another provider or a `kheopskit$`
+subscriber holds it; once nothing holds it, they reject `ABORTED`.
 
 ```tsx
 import type { WalletId } from "@kheopskit/core";

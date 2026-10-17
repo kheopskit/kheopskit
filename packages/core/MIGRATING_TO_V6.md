@@ -680,7 +680,7 @@ subscriber is left.
 | `createKheopskit(config, { store? })` returns `kheopskit$` and `store` | the stream its provider subscribes to and the store that stream persists into; code outside React subscribes to the same pipeline |
 | `useWallet(walletId)`, `useAccount(accountId)` | one item or `undefined`; re-render only when that item changes; also returned by `createKheopskit`, typed to its platforms |
 | `useConnect(walletId)` | `{ connect, disconnect, status, error }`; aborts a pending `connect()` on unmount or when `walletId` changes; rejects `ABORTED` a `connect()` that starts after either |
-| wallet actions act on the running pipeline | `connect` and `disconnect` from `useConnect`, `useWallet` and `useWallets` act on the pipeline that runs when they are called, and wait for its first emission after an `<Activity>` reveal restarts it; called while no provider holds the pipeline, they reject `ABORTED` |
+| wallet actions act on the instance's pipeline | `connect` and `disconnect` from `useConnect`, `useWallet` and `useWallets` act on the instance's pipeline when they are called, while any provider of the instance or any `kheopskit$` subscriber holds it, and wait for its first emission after an `<Activity>` reveal restarts it; called once nothing holds the pipeline, they reject `ABORTED` without restarting it |
 | `store` prop on `KheopskitProvider` | the store the provider persists into, such as a memory store in tests |
 
 See the [React README](../react/README.md#one-instance-for-react-and-rxjs-code).

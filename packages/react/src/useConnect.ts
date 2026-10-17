@@ -24,7 +24,11 @@ export type UseConnectResult = {
 	 * when the state lists no wallet with this id.
 	 */
 	connect: () => Promise<void>;
-	/** Disconnects the wallet. Resolves once the state shows it disconnected. */
+	/**
+	 * Disconnects the wallet through the instance's pipeline, like a `useWallet`
+	 * wallet's `disconnect`, also after this component unmounted. Resolves once
+	 * the state shows it disconnected.
+	 */
 	disconnect: () => Promise<void>;
 	/** `undefined` while the state lists no wallet with this id. */
 	status: WalletStatus | undefined;
