@@ -48,11 +48,11 @@ const createWalletIdsPoller$ = () => {
 
 		let loadTimer: ReturnType<typeof setTimeout> | undefined;
 		const loadSub = pageLoaded$.pipe(skip(1)).subscribe(() => {
-			subscriber.next(getInjectedWalletsIds());
 			loadTimer = setTimeout(
 				() => subscriber.next(getInjectedWalletsIds()),
 				100,
 			);
+			subscriber.next(getInjectedWalletsIds());
 		});
 
 		return () => {
