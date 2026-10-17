@@ -766,7 +766,7 @@ describe("getKheopskit$ connect semantics", () => {
 		sub.unsubscribe();
 	});
 
-	it("a wallet that leaves the list after the platform granted its connect rejects that connect ABORTED", async () => {
+	it("a wallet that leaves the list after the platform granted its connect resolves that connect and stays remembered", async () => {
 		const sources$ = new BehaviorSubject<EngineSource[]>([{ name: "engine" }]);
 		const { emissions, sub } = subscribeEngineDuringHydration(sources$, false);
 		await settleMicrotasks();
@@ -780,12 +780,36 @@ describe("getKheopskit$ connect semantics", () => {
 		await vi.advanceTimersByTimeAsync(500);
 		expect(emissions.at(-1)?.isHydrating).toBe(false);
 		expect(emissions.at(-1)?.wallets).toEqual([]);
-		expect(await settlementOf(connecting)).toBe("rejected");
-		await expect(connecting).rejects.toMatchObject({
-			code: "ABORTED",
-			walletId: engineWalletId,
-			message: `[kheopskit] connect of wallet ${engineWalletId} was aborted`,
+		expect(await settlementOf(connecting)).toBe("resolved");
+		expect(rememberedWalletIds()).toEqual([engineWalletId]);
+
+		sub.unsubscribe();
+	});
+
+	it("a wallet that leaves the list the moment the engine remembers its granted connect resolves that connect, stays remembered and shows connected once re-added", async () => {
+		const sources$ = new BehaviorSubject<EngineSource[]>([{ name: "engine" }]);
+		const grant = createDeferred<string>();
+		const platform = enginePlatform({ sources$, connect: () => grant.promise });
+		const store = createKheopskitStore();
+		const emissions: KheopskitState[] = [];
+		const sub = getKheopskit$(engineConfig(platform), { store }).subscribe(
+			(state) => emissions.push(state),
+		);
+		await settleMicrotasks();
+		const removeOnRemember = store.observable.subscribe((state) => {
+			if ((state.remembered ?? []).length > 0) sources$.next([]);
 		});
+
+		const connecting = walletIn(emissions.at(-1), engineWalletId).connect();
+		grant.resolve("handle");
+		expect(await settlementOf(connecting)).toBe("resolved");
+		expect(emissions.at(-1)?.wallets).toEqual([]);
+		expect(rememberedWalletIds()).toEqual([engineWalletId]);
+
+		removeOnRemember.unsubscribe();
+		sources$.next([{ name: "engine" }]);
+		await settleMicrotasks();
+		expect(walletIn(emissions.at(-1), engineWalletId).isConnected).toBe(true);
 
 		sub.unsubscribe();
 	});
