@@ -136,7 +136,7 @@ both values show the same screen. The SIWS `Version` line must read `1.0.0`;
 Talisman's parser rejects `1` and falls back to the generic screen.
 
 ```ts
-const signature = await account.signRaw(siwsMessage, { type });
+const signature = await account.signRaw(siwsMessage, { type: "payload" });
 ```
 
 `txCreator.signBytes` is unchanged.
@@ -156,6 +156,19 @@ v5 subscribed to the extension's account list and never unsubscribed. v6
 unsubscribes when the wallet disconnects and when the last `kheopskit$`
 subscriber leaves.
 
+### Untyped accounts are kept
+
+Accounts the extension lists without a `type` are now kept as `sr25519`. v5
+went through pjs-signer, which dropped them. `polkadot({ accountTypes })` is
+the only filter.
+
+### `connect()` rejects an incomplete extension
+
+`connect()` rejects, and the wallet stays disconnected and unremembered, when
+the `enable()` result lacks `accounts.get`, `accounts.subscribe`,
+`signer.signPayload` or `signer.signRaw`. An account kheopskit cannot build is
+skipped and the wallet's other accounts are listed.
+
 ### `readonly` and `partOfPortfolio`
 
 Talisman adds these two fields to the accounts it shares with its own dapp
@@ -173,7 +186,7 @@ and the fourth factory argument (the signature type) is ignored by
 ### What to delete in your app
 
 - A second `enable()` call made to reach `signer.signRaw` for a Sign-In With
-  Substrate message. Call `account.signRaw(message, { type })`.
+  Substrate message. Call `account.signRaw(message, { type: "payload" })`.
 - A hand-built `ecdsaTxCreator` for ethereum-format accounts, and a
   `signatureTypeOf` helper that maps `ethereum` to `ecdsa`.
 - A memoised second `enable()` and a `pjsSignerOf` helper that rebuilds a pjs

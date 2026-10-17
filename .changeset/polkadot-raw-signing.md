@@ -10,4 +10,6 @@ Polkadot raw signing and the injected handle:
 - `wallet.extension` is the raw object `enable()` returned, typed as `PolkadotInjected`, instead of pjs-signer's `InjectedExtension`. kheopskit calls `enable()` itself.
 - `ethereum` accounts get their `txCreator` (or `polkadotSigner` on polkadot-api v2) built with the `ecdsa` signature type, so fee estimation and dry runs use a 65-byte mock signature.
 - The extension's account subscription is released on disconnect and when the last subscriber leaves.
+- Accounts the extension lists without a `type` are now kept as `sr25519`; `polkadot({ accountTypes })` is the only filter.
+- `connect()` rejects an extension whose `enable()` result lacks `accounts.get`, `accounts.subscribe`, `signer.signPayload` or `signer.signRaw`, and an account kheopskit cannot build is skipped instead of stalling the wallet's list.
 - `readonly` and `partOfPortfolio`, which Talisman adds for its own dapp origins, are typed as optional booleans on `PolkadotAccount`.
