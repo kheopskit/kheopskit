@@ -1,5 +1,6 @@
 import { firstValueFrom, of } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearAllCachedObservables } from "../../utils/getCachedObservable";
 import { WALLET_CONNECT_WALLET_ID } from "../../utils/WalletId";
 import type {
 	KheopskitPlatform,
@@ -16,6 +17,9 @@ const options: WalletConnectOptions = {
 };
 
 const ctx = { config: { debug: false } } as PlatformContext;
+
+const ADDRESS_A = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+const ADDRESS_B = "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty";
 
 describe("walletConnect().getWallet$ when @reown/appkit is unavailable", () => {
 	afterEach(() => {
@@ -307,11 +311,14 @@ describe("walletConnect() provider subscription lifetime through getKheopskit$",
 	afterEach(() => {
 		vi.resetModules();
 		vi.restoreAllMocks();
+		localStorage.clear();
+		clearAllCachedObservables();
 	});
 
 	const mockAppKit = () => {
 		const listeners = new Set<(p: Record<string, unknown>) => void>();
 		let providers: Record<string, unknown> = {};
+		let walletInfo: { name: string; icon: string } | undefined;
 		const createAppKit = vi.fn(() => ({
 			chainNamespaces: ["polkadot"],
 			getProvider: (namespace: string) => providers[namespace],
@@ -321,20 +328,56 @@ describe("walletConnect() provider subscription lifetime through getKheopskit$",
 					listeners.delete(cb);
 				};
 			},
-			getWalletInfo: () => undefined,
+			getWalletInfo: () => walletInfo,
 			open: vi.fn(() => Promise.resolve()),
 			disconnect: vi.fn(() => Promise.resolve()),
 		}));
 		vi.doMock("@reown/appkit/core", () => ({ createAppKit }));
+		const setProviders = (
+			next: Record<string, unknown>,
+			nextWalletInfo?: { name: string; icon: string },
+		) => {
+			providers = next;
+			walletInfo = nextWalletInfo;
+			for (const listener of listeners) listener(providers);
+		};
 		return {
 			createAppKit,
 			listeners,
-			setProviders: (next: Record<string, unknown>) => {
-				providers = next;
-				for (const listener of listeners) listener(providers);
+			setProviders,
+			pair: (
+				provider: SessionProvider,
+				address: string,
+				walletName: string,
+			) => {
+				provider.session = {
+					topic: address,
+					namespaces: {
+						polkadot: {
+							accounts: [
+								`polkadot:91b171bb158e2d3848fa23a9f1c25182:${address}`,
+							],
+						},
+					},
+				};
+				setProviders({ polkadot: provider }, { name: walletName, icon: "" });
+			},
+			disconnect: (provider: SessionProvider) => {
+				provider.session = undefined;
+				setProviders({});
 			},
 		};
 	};
+
+	const sessionProvider = () => ({
+		session: undefined as
+			| { topic: string; namespaces: Record<string, { accounts: string[] }> }
+			| undefined,
+		on: () => {},
+		off: () => {},
+		client: { request: vi.fn() },
+	});
+	type SessionProvider = ReturnType<typeof sessionProvider>;
 
 	const fakePlatform: KheopskitPlatform = {
 		platform: "polkadot",
@@ -342,7 +385,7 @@ describe("walletConnect() provider subscription lifetime through getKheopskit$",
 		getAccounts$: () => of([]),
 	};
 
-	const observe = async () => {
+	const observe = async (platform = fakePlatform) => {
 		const { getKheopskit$ } = await import("../kheopskit");
 		const { createKheopskitStore } = await import("../store");
 		const { walletConnect, resetAppKitCache } = await import("./plugin");
@@ -354,10 +397,16 @@ describe("walletConnect() provider subscription lifetime through getKheopskit$",
 		const mount = () => {
 			const states: KheopskitState[] = [];
 			const sub = getKheopskit$(
-				{ platforms: [fakePlatform], walletConnect: walletConnect(options) },
+				{ platforms: [platform], walletConnect: walletConnect(options) },
 				{ store: createKheopskitStore() },
 			).subscribe((s) => states.push(s));
-			return { sub, current: () => connector(states.at(-1)) };
+			const accounts = () =>
+				states.at(-1)?.accounts.map(({ address, walletName, name }) => ({
+					address,
+					walletName,
+					name,
+				}));
+			return { sub, current: () => connector(states.at(-1)), accounts };
 		};
 		return { mount, resetAppKitCache };
 	};
@@ -399,6 +448,56 @@ describe("walletConnect() provider subscription lifetime through getKheopskit$",
 		second.sub.unsubscribe();
 		resetAppKitCache();
 	});
+
+	it.each([
+		[
+			"one provider object across sessions, as AppKit 1.8.24",
+			(a: SessionProvider) => a,
+		],
+		["one provider object per session", () => sessionProvider()],
+	])(
+		"shows the new session's accounts under its wallet name after a swap while unobserved (%s)",
+		async (_shape, providerForB) => {
+			vi.resetModules();
+			const appKit = mockAppKit();
+			const { polkadot } = await import("../polkadot/plugin");
+			const { mount, resetAppKitCache } = await observe({
+				...polkadot(),
+				getWallets$: () => of([]),
+			});
+			const providerA = sessionProvider();
+			const providerB = providerForB(providerA);
+
+			const first = mount();
+			await vi.waitFor(() =>
+				expect(first.current()?.status).toBe("disconnected"),
+			);
+			appKit.pair(providerA, ADDRESS_A, "Nova");
+			await vi.waitFor(() =>
+				expect(first.accounts()).toEqual([
+					{ address: ADDRESS_A, walletName: "Nova", name: "Nova Polkadot" },
+				]),
+			);
+			first.sub.unsubscribe();
+
+			appKit.disconnect(providerA);
+			appKit.pair(providerB, ADDRESS_B, "SubWallet");
+
+			const second = mount();
+			await vi.waitFor(() =>
+				expect(second.accounts()).toEqual([
+					{
+						address: ADDRESS_B,
+						walletName: "SubWallet",
+						name: "SubWallet Polkadot",
+					},
+				]),
+			);
+
+			second.sub.unsubscribe();
+			resetAppKitCache();
+		},
+	);
 });
 
 describe("walletConnect()", () => {
