@@ -16,5 +16,5 @@
 - Persistence is best-effort: a storage write that throws keeps the in-memory state while the store is observed and never rejects `connect()` or `disconnect()`.
 - Wallet objects keep their identity across emissions that only change accounts.
 - `kheopskit$` no longer throttles by 16 ms. A synchronous burst is coalesced into one emission, so no emission shows a disconnected wallet still listing accounts. Until a fix tracked for 6.0.0 lands, an Ethereum wallet that reconnects while another connected Ethereum wallet's `eth_accounts` request is pending may show the accounts of its previous connection for as long as that request goes unanswered, and `connect()` may resolve on that emission. On platforms that list accounts asynchronously (Ethereum `eth_accounts`) the accounts may arrive in an emission after `connect()` resolved.
-- A pending `connect()` rejects `ABORTED` when its wallet disappears (extension removed, Wallet Standard unregister); a pending `disconnect()` resolves.
+- A `connect()` whose wallet disappears before the platform grants it (extension removed, Wallet Standard unregister) rejects `ABORTED`; granted first, it resolves and the wallet stays remembered. A pending `disconnect()` resolves.
 - Fixed: with two connected wallets, disconnecting one no longer leaves its accounts in the state while the other wallet's accounts are being re-read.

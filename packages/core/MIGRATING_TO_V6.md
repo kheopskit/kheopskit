@@ -113,10 +113,11 @@ try {
   your wait; it cannot close the extension's own prompt. Once no caller waits
   any more, a handle the extension returns afterwards is released, and the
   wallet is neither connected nor remembered.
-- **A wallet that disappears.** A pending `connect()` rejects `ABORTED` when
-  its wallet leaves the list (an extension removed, a Wallet Standard wallet
-  unregistered); a pending `disconnect()` resolves, since the wallet is no
-  longer connected.
+- **A wallet that disappears.** A `connect()` whose wallet leaves the list (an
+  extension removed, a Wallet Standard wallet unregistered) before the platform
+  grants it rejects `ABORTED`. Granted first, it resolves and the wallet stays
+  remembered. A pending `disconnect()` resolves, since the wallet is no longer
+  connected.
 - **`disconnect()` during a pending `connect()`** aborts the connect (its
   promise rejects `ABORTED`) and resolves. It never waits for the prompt. The
   same holds when the connect has been granted by the platform and is still
