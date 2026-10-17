@@ -31,6 +31,25 @@ pnpm add @reown/appkit                                           # WalletConnect
 A Polkadot-only dapp that doesn't use WalletConnect installs none of the
 Ethereum/Solana SDKs nor `@reown/appkit`, and none of their code is bundled.
 
+WalletConnect is a plugin from its own entry point, so only a dapp that imports
+`@kheopskit/core/walletconnect` bundles AppKit:
+
+```ts
+import { getKheopskit$ } from "@kheopskit/core";
+import { polkadot } from "@kheopskit/core/polkadot";
+import { walletConnect } from "@kheopskit/core/walletconnect";
+import { polkadot as polkadotNetwork } from "@reown/appkit/networks";
+
+const kheopskit$ = getKheopskit$({
+  platforms: [polkadot()],
+  walletConnect: walletConnect({
+    projectId: "<your Reown project id>",
+    metadata: { name: "My Dapp", description: "", url: "https://my.dapp", icons: [] },
+    networks: [polkadotNetwork],
+  }),
+});
+```
+
 ## Usage
 
 Platforms are enabled by passing **plugins** (imported from their entry points)
@@ -48,7 +67,7 @@ const kheopskit$ = getKheopskit$({
     ethereum(),
     solana({ chain: "solana:mainnet" }),
   ],
-  appName: "My Dapp", // shown by Polkadot extensions; defaults to walletConnect.metadata.name, then the hostname
+  appName: "My Dapp", // shown by Polkadot extensions; defaults to the WalletConnect metadata name, then the hostname
   autoReconnect: true,
 });
 

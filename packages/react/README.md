@@ -27,6 +27,25 @@ pnpm add @solana/kit @wallet-standard/app @wallet-standard/base  # Solana
 pnpm add @reown/appkit                                           # WalletConnect (optional)
 ```
 
+WalletConnect is a plugin from `@kheopskit/core/walletconnect`; only a dapp that
+imports it bundles AppKit:
+
+```ts
+import { createKheopskit } from "@kheopskit/react";
+import { polkadot } from "@kheopskit/core/polkadot";
+import { walletConnect } from "@kheopskit/core/walletconnect";
+import { polkadot as polkadotNetwork } from "@reown/appkit/networks";
+
+export const { KheopskitProvider, useWallets, useAccounts } = createKheopskit({
+  platforms: [polkadot()],
+  walletConnect: walletConnect({
+    projectId: "<your Reown project id>",
+    metadata: { name: "My Dapp", description: "", url: "https://my.dapp", icons: [] },
+    networks: [polkadotNetwork],
+  }),
+});
+```
+
 ## Usage
 
 Recommended: bind your platform tuple once with `createKheopskit` and get a
