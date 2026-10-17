@@ -1,16 +1,17 @@
 import { firstValueFrom } from "rxjs";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveConfig } from "../config";
 import { createKheopskitStore } from "../store";
 import type { KheopskitConfig, WalletConnectConfig } from "../types";
 import { polkadot } from "./plugin";
 
-const { connectInjectedExtension } = vi.hoisted(() => ({
+const { connectInjectedExtension, injected } = vi.hoisted(() => ({
 	connectInjectedExtension: vi.fn().mockResolvedValue({}),
+	injected: { names: ["test-extension"] },
 }));
 
 vi.mock("polkadot-api/pjs-signer", () => ({
-	getInjectedExtensions: () => ["test-extension"],
+	getInjectedExtensions: () => injected.names,
 	connectInjectedExtension,
 }));
 
@@ -66,5 +67,54 @@ describe("polkadot wallet connect", () => {
 			"test-extension",
 			"localhost",
 		);
+	});
+});
+
+describe("polkadot wallet discovery", () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		Object.defineProperty(document, "readyState", {
+			value: "interactive",
+			configurable: true,
+		});
+		injected.names = [];
+	});
+
+	afterEach(() => {
+		Reflect.deleteProperty(document, "readyState");
+		vi.useRealTimers();
+		injected.names = ["test-extension"];
+	});
+
+	it("reads injectedWeb3 again at window load", () => {
+		const plugin = polkadot();
+		const emissions: string[][] = [];
+		const subscription = plugin
+			.getWallets$({
+				store: createKheopskitStore(),
+				config: resolveConfig({ platforms: [plugin] }),
+			})
+			.subscribe((wallets) => emissions.push(wallets.map((w) => w.id)));
+
+		vi.advanceTimersByTime(1200);
+		injected.names = ["at-load"];
+		window.dispatchEvent(new Event("load"));
+		expect(emissions.at(-1)).toEqual(["polkadot:at-load"]);
+
+		injected.names = ["at-load", "load-plus-100"];
+		vi.advanceTimersByTime(100);
+		expect(emissions.at(-1)).toEqual([
+			"polkadot:at-load",
+			"polkadot:load-plus-100",
+		]);
+
+		injected.names = ["at-load", "load-plus-100", "too-late"];
+		vi.advanceTimersByTime(60_000);
+		expect(emissions.at(-1)).toEqual([
+			"polkadot:at-load",
+			"polkadot:load-plus-100",
+		]);
+
+		subscription.unsubscribe();
 	});
 });

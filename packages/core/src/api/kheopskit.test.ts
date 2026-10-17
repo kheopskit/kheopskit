@@ -1,8 +1,20 @@
-import { firstValueFrom, of, take } from "rxjs";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { firstValueFrom, of, type Subscription, take } from "rxjs";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WalletId } from "../utils/WalletId";
+import { getKheopskit$ } from "./kheopskit";
 import { polkadot } from "./polkadot/plugin";
 import { createKheopskitStore } from "./store";
+import type { KheopskitState } from "./types";
+import { getWallets$ } from "./wallets";
+
+const { injected } = vi.hoisted(() => ({
+	injected: { names: [] as string[] },
+}));
+
+vi.mock("polkadot-api/pjs-signer", () => ({
+	getInjectedExtensions: () => injected.names,
+	connectInjectedExtension: vi.fn(),
+}));
 
 vi.mock("./wallets", () => ({
 	getWallets$: vi.fn(() => of([])),
@@ -106,5 +118,78 @@ describe("getKheopskit$ cached account filtering", () => {
 		expect(account?.address).toBe(
 			"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
 		);
+	});
+});
+
+describe("getKheopskit$ discovery", () => {
+	let subscription: Subscription | undefined;
+
+	const setReadyState = (value: DocumentReadyState) =>
+		Object.defineProperty(document, "readyState", {
+			value,
+			configurable: true,
+		});
+
+	const fireLoad = () => {
+		setReadyState("complete");
+		window.dispatchEvent(new Event("load"));
+	};
+
+	const recordStates = () => {
+		const states: KheopskitState[] = [];
+		subscription = getKheopskit$({ platforms: [polkadot()] }).subscribe(
+			(state) => states.push(state),
+		);
+		return states;
+	};
+
+	beforeEach(() => {
+		localStorage.clear();
+		vi.useFakeTimers();
+		injected.names = [];
+		vi.mocked(getWallets$).mockImplementation((config, store) =>
+			polkadot().getWallets$({ config, store }),
+		);
+	});
+
+	afterEach(() => {
+		subscription?.unsubscribe();
+		Reflect.deleteProperty(document, "readyState");
+		vi.useRealTimers();
+		vi.mocked(getWallets$).mockImplementation(() => of([]));
+	});
+
+	it("isDiscovering is true before load and false after", () => {
+		setReadyState("interactive");
+		const states = recordStates();
+
+		vi.advanceTimersByTime(1200);
+		expect(states.length).toBeGreaterThan(0);
+		expect(states.map((s) => s.isDiscovering)).not.toContain(false);
+
+		fireLoad();
+		vi.advanceTimersByTime(20);
+		expect(states.at(-1)?.isDiscovering).toBe(false);
+	});
+
+	it("the emission that ends discovery already lists the extension present at load", () => {
+		setReadyState("interactive");
+		const states = recordStates();
+
+		vi.advanceTimersByTime(1200);
+		injected.names = ["talisman"];
+		fireLoad();
+		vi.advanceTimersByTime(20);
+
+		const settled = states.find((s) => s.isDiscovering === false);
+		expect(settled?.wallets.map((w) => w.id)).toEqual(["polkadot:talisman"]);
+	});
+
+	it("isDiscovering is false from the first emission when subscribed after load", () => {
+		setReadyState("complete");
+		const states = recordStates();
+
+		vi.advanceTimersByTime(20);
+		expect(states[0]?.isDiscovering).toBe(false);
 	});
 });
