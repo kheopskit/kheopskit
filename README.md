@@ -139,7 +139,8 @@ export const App = () => (
 `useWallet(walletId)` and `useAccount(accountId)` return one item, or
 `undefined`, and re-render only when that item changes. `useConnect(walletId)`
 returns `{ connect, disconnect, status, error }`. It aborts a pending
-`connect()` when the component unmounts. `useWallets()` and `useAccounts()`
+`connect()` when the component unmounts, and rejects `ABORTED` a `connect()`
+that starts after. `useWallets()` and `useAccounts()`
 re-render on every state change.
 
 ```tsx
