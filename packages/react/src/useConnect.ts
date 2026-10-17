@@ -31,7 +31,7 @@ const createWalletActions = (
 	store: KheopskitExternalStore,
 	walletId: WalletId,
 ) => {
-	let signal: AbortSignal | undefined;
+	let scope: AbortController | undefined;
 
 	const currentWallet = () => {
 		const wallet = store
@@ -43,23 +43,20 @@ const createWalletActions = (
 
 	return {
 		connect: async () => {
-			const callSignal = signal;
+			if (!scope || scope.signal.aborted) scope = new AbortController();
+			const { signal } = scope;
 			try {
-				await currentWallet().connect({ signal: callSignal });
+				await currentWallet().connect({ signal });
 			} catch (error) {
 				const abortedByCleanup =
-					callSignal?.aborted &&
+					signal.aborted &&
 					error instanceof KheopskitError &&
 					error.code === "ABORTED";
 				if (!abortedByCleanup) throw error;
 			}
 		},
 		disconnect: async () => currentWallet().disconnect(),
-		startAbortScope: () => {
-			const controller = new AbortController();
-			signal = controller.signal;
-			return () => controller.abort();
-		},
+		abortPendingConnects: () => scope?.abort(),
 	};
 };
 
@@ -84,7 +81,7 @@ export const useConnect = (walletId: WalletId): UseConnectResult => {
 		[store, walletId],
 	);
 
-	useEffect(() => actions.startAbortScope(), [actions]);
+	useEffect(() => actions.abortPendingConnects, [actions]);
 
 	return {
 		connect: actions.connect,
