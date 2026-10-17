@@ -6,7 +6,7 @@ import type { KheopskitError } from "./errors";
 export type WalletPlatform = "polkadot" | "ethereum" | "solana";
 
 /**
- * Minimal structural view of a WalletConnect `UniversalProvider` — the subset
+ * Minimal structural view of a WalletConnect `UniversalProvider`, the subset
  * kheopskit reads. Declared locally so core never depends on
  * `@walletconnect/universal-provider`. The concrete instance comes from
  * `@reown/appkit` at runtime.
@@ -29,7 +29,7 @@ export type WalletConnectProvider = {
 };
 
 /**
- * Minimal structural view of the Reown AppKit instance — the subset kheopskit's
+ * Minimal structural view of the Reown AppKit instance, the subset kheopskit's
  * account factories use. Exposed as the `appKit` escape hatch on AppKit wallets;
  * cast it to `@reown/appkit`'s `AppKit` type for the full API. Declared locally
  * so core never depends on `@reown/appkit`'s types (it's an optional peer).
@@ -89,8 +89,9 @@ export type BaseWallet = {
 	 * `true` for a wallet restored from the cache that kheopskit has not
 	 * discovered yet: its SDK handle and `sourceId` are absent and it is never
 	 * connected. On `kheopskit$` its `connect()` waits for the live wallet and
-	 * connects that one; on `getHydratedSnapshot` it rejects with
-	 * `WALLET_PENDING`. Its `disconnect()` resolves at once. Set on every wallet
+	 * connects that one, rejecting with `WALLET_PENDING` if hydration ends first
+	 * and `ABORTED` if its `signal` fires or the subscription ends. On
+	 * `getHydratedSnapshot` it rejects with `WALLET_PENDING`. Its `disconnect()` resolves at once. Set on every wallet
 	 * of `kheopskit$` and of the hydrated snapshot; plugins leave it unset.
 	 */
 	isPlaceholder?: boolean;
@@ -275,7 +276,7 @@ export const isWalletConnectWallet = (
 ): wallet is WalletConnectWallet => wallet.type === "walletconnect";
 
 /**
- * Narrows a wallet to an injected (browser-extension / Wallet Standard) wallet —
+ * Narrows a wallet to an injected (browser-extension / Wallet Standard) wallet,
  * the complement of {@link isWalletConnectWallet}. `state.wallets` is
  * `(InjectedWallet | WalletConnectWallet)[]`, so use this to recover the
  * injected-only fields when iterating: `platform`, `sourceId`, and the SDK
@@ -396,7 +397,9 @@ export type KheopskitConfig<
 	 * extension. When the authorisation was revoked the extension prompts once;
 	 * a refusal forgets the wallet, so the next load stays silent. A manual
 	 * `connect()` or `disconnect()` on a remembered wallet ends its automatic
-	 * reconnect for the session, so a disconnect the user makes is never undone.
+	 * reconnect for the session. A `disconnect()` while the automatic reconnect
+	 * still waits for the extension aborts it without forgetting the wallet, so
+	 * the next load reconnects it.
 	 * Automatic reconnect also ends when the wallet disappears mid-attempt; the
 	 * wallet stays remembered for the next load.
 	 *
@@ -496,8 +499,9 @@ export type KheopskitConfig<
  * `isPlaceholder: true`. Each platform type is a union on that flag: a
  * placeholder lacks the SDK handles (`account.txCreator` or `polkadotSigner`
  * on Polkadot, `account.client` on Ethereum, `account.signer` / `getSigner` on
- * Solana, `wallet.extension` / `provider` / `wallet` and `sourceId`), so the
- * compiler rejects reading them until you narrow:
+ * Solana, `wallet.extension` / `provider` / `wallet` and `sourceId`). Reading
+ * one without narrowing yields a possibly-`undefined` value, so the compiler
+ * rejects using it as present until you narrow:
  *
  * ```ts
  * if (account.isPlaceholder) return;
