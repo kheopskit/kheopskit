@@ -5,10 +5,14 @@ on:
     branches:
       - main
 
+permissions: {}
+
 jobs:
   quality:
     name: Quality
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -66,6 +70,8 @@ jobs:
   e2e:
     name: E2E (production builds, mock wallets)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
