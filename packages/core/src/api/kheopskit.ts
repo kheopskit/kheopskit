@@ -159,6 +159,7 @@ export const getKheopskit$ = <
 			...placeholder,
 			connect: async (options) => {
 				const live = await whenLive(placeholder.id, options?.signal);
+				if (closed) throw abortedError(placeholder.id, "connect");
 				await live.connect(options);
 			},
 		});
