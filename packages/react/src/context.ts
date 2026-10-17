@@ -1,6 +1,19 @@
 import type { KheopskitState } from "@kheopskit/core";
-import { createContext } from "react";
+import { createContext, useContext } from "react";
 
-export const KheopskitContext = createContext<{
-	state: KheopskitState;
-} | null>(null);
+export type KheopskitExternalStore = {
+	subscribe: (onChange: () => void) => () => void;
+	getSnapshot: () => KheopskitState;
+	getServerSnapshot: () => KheopskitState;
+};
+
+export const KheopskitContext = createContext<KheopskitExternalStore | null>(
+	null,
+);
+
+export const useKheopskitExternalStore = (hookName: string) => {
+	const store = useContext(KheopskitContext);
+	if (!store)
+		throw new Error(`${hookName} can't be used without a KheopskitProvider`);
+	return store;
+};

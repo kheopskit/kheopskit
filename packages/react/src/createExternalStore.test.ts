@@ -1,38 +1,66 @@
-import { BehaviorSubject, Subject } from "rxjs";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { BehaviorSubject, Observable, Subject } from "rxjs";
+import { describe, expect, it, vi } from "vitest";
 import { createExternalStore } from "./createExternalStore";
 
-describe("createExternalStore (React)", () => {
-	afterEach(() => {
-		vi.restoreAllMocks();
+const storeOf = <T>(
+	observable$: Observable<T>,
+	initialValue: T,
+	serverValue = initialValue,
+) => createExternalStore(() => ({ observable$, initialValue }), serverValue);
+
+const countingSubscriptions = <T>(subject: Subject<T>) => {
+	let count = 0;
+	const observable$ = new Observable<T>((subscriber) => {
+		count++;
+		return subject.subscribe(subscriber);
 	});
+	return { observable$, subscriptions: () => count };
+};
 
-	describe("initialization", () => {
-		it("returns store with required methods", () => {
-			const subject = new BehaviorSubject({ count: 0 });
-			const store = createExternalStore(subject.asObservable(), { count: 0 });
+const flushMicrotasks = () => Promise.resolve();
 
-			expect(store.getSnapshot).toBeDefined();
-			expect(store.getServerSnapshot).toBeDefined();
-			expect(store.subscribe).toBeDefined();
-			expect(store.destroy).toBeDefined();
+describe("createExternalStore (React)", () => {
+	describe("source resolution", () => {
+		it("resolves the source only when a client path reads it", () => {
+			const resolveSource = vi.fn(() => ({
+				observable$: new Subject<{ side: string }>(),
+				initialValue: { side: "client" },
+			}));
+			const store = createExternalStore(resolveSource, { side: "server" });
+
+			expect(store.getServerSnapshot()).toEqual({ side: "server" });
+			expect(resolveSource).toHaveBeenCalledTimes(0);
+
+			expect(store.getSnapshot()).toEqual({ side: "client" });
+			expect(resolveSource).toHaveBeenCalledTimes(1);
 		});
 
-		it("getSnapshot returns initial value before any emission", () => {
-			const subject = new Subject<{ value: number }>();
-			const initialValue = { value: 42 };
-			const store = createExternalStore(subject.asObservable(), initialValue);
+		it("resolves the source once across snapshots and subscriptions", () => {
+			const resolveSource = vi.fn(() => ({
+				observable$: new BehaviorSubject({ count: 1 }).asObservable(),
+				initialValue: { count: 0 },
+			}));
+			const store = createExternalStore(resolveSource, { count: 0 });
 
-			expect(store.getSnapshot()).toEqual(initialValue);
+			store.getSnapshot();
+			store.subscribe(() => {});
+			store.subscribe(() => {});
+
+			expect(store.getSnapshot()).toEqual({ count: 1 });
+			expect(resolveSource).toHaveBeenCalledTimes(1);
 		});
 	});
 
 	describe("getSnapshot", () => {
-		it("returns latest emitted value", () => {
+		it("returns the initial value before any emission", () => {
+			const store = storeOf(new Subject<{ value: number }>(), { value: 42 });
+
+			expect(store.getSnapshot()).toEqual({ value: 42 });
+		});
+
+		it("returns the latest emitted value while subscribed", () => {
 			const subject = new BehaviorSubject({ count: 0 });
-			const store = createExternalStore(subject.asObservable(), { count: 0 });
-			// React subscribes (in an effect) before reading snapshots; the
-			// subscription is what tracks live emissions into getSnapshot.
+			const store = storeOf(subject.asObservable(), { count: 0 });
 			store.subscribe(() => {});
 
 			subject.next({ count: 10 });
@@ -41,280 +69,107 @@ describe("createExternalStore (React)", () => {
 			subject.next({ count: 20 });
 			expect(store.getSnapshot()).toEqual({ count: 20 });
 		});
-
-		it("returns same reference for unchanged value", () => {
-			const subject = new BehaviorSubject({ count: 0 });
-			const store = createExternalStore(subject.asObservable(), { count: 0 });
-
-			subject.next({ count: 5 });
-			const snapshot1 = store.getSnapshot();
-			const snapshot2 = store.getSnapshot();
-
-			expect(snapshot1).toBe(snapshot2);
-		});
 	});
 
 	describe("getServerSnapshot", () => {
-		it("returns initialValue when no serverValue provided", () => {
-			const subject = new BehaviorSubject({ data: "client" });
-			const initialValue = { data: "initial" };
-			const store = createExternalStore(subject.asObservable(), initialValue);
-
-			expect(store.getServerSnapshot()).toEqual(initialValue);
-		});
-
-		it("returns serverValue when provided", () => {
-			const subject = new BehaviorSubject({ data: "client" });
-			const initialValue = { data: "initial" };
-			const serverValue = { data: "server" };
-			const store = createExternalStore(
-				subject.asObservable(),
-				initialValue,
-				serverValue,
-			);
-
-			expect(store.getServerSnapshot()).toEqual(serverValue);
-		});
-
-		it("getServerSnapshot is stable (does not change with emissions)", () => {
+		it("returns the server value, unchanged by emissions", () => {
 			const subject = new BehaviorSubject({ count: 0 });
-			const serverValue = { count: 999 };
-			const store = createExternalStore(
+			const store = storeOf(
 				subject.asObservable(),
 				{ count: 0 },
-				serverValue,
+				{ count: 999 },
 			);
+			store.subscribe(() => {});
 
 			subject.next({ count: 100 });
-			expect(store.getServerSnapshot()).toEqual(serverValue);
 
-			subject.next({ count: 200 });
-			expect(store.getServerSnapshot()).toEqual(serverValue);
+			expect(store.getServerSnapshot()).toEqual({ count: 999 });
+			expect(store.getSnapshot()).toEqual({ count: 100 });
 		});
 	});
 
 	describe("subscribe", () => {
-		it("calls callback with initial value", () => {
-			const subject = new BehaviorSubject({ value: 1 });
-			const store = createExternalStore(subject.asObservable(), { value: 1 });
+		it("calls the listener with the current value", () => {
+			const store = storeOf(new BehaviorSubject({ value: 1 }), { value: 0 });
 
-			const callback = vi.fn();
-			const unsubscribe = store.subscribe(callback);
+			const listener = vi.fn();
+			store.subscribe(listener);
 
-			expect(callback).toHaveBeenCalledTimes(1);
-			expect(callback).toHaveBeenCalledWith({ value: 1 });
-
-			unsubscribe();
+			expect(listener.mock.calls).toEqual([[{ value: 1 }]]);
 		});
 
-		it("calls callback on each emission", () => {
+		it("calls the listener on each emission until it unsubscribes", () => {
 			const subject = new BehaviorSubject({ value: 0 });
-			const store = createExternalStore(subject.asObservable(), { value: 0 });
+			const store = storeOf(subject.asObservable(), { value: 0 });
 
-			const callback = vi.fn();
-			const unsubscribe = store.subscribe(callback);
-
+			const listener = vi.fn();
+			const unsubscribe = store.subscribe(listener);
 			subject.next({ value: 1 });
-			subject.next({ value: 2 });
-			subject.next({ value: 3 });
-
-			expect(callback).toHaveBeenCalledTimes(4); // initial + 3 emissions
-			expect(callback).toHaveBeenLastCalledWith({ value: 3 });
-
 			unsubscribe();
+			subject.next({ value: 2 });
+
+			expect(listener.mock.calls).toEqual([[{ value: 0 }], [{ value: 1 }]]);
 		});
 
-		it("unsubscribe stops callbacks", () => {
-			const subject = new BehaviorSubject({ value: 0 });
-			const store = createExternalStore(subject.asObservable(), { value: 0 });
-
-			const callback = vi.fn();
-			const unsubscribe = store.subscribe(callback);
-
-			subject.next({ value: 1 });
-			expect(callback).toHaveBeenCalledTimes(2);
-
-			unsubscribe();
-
-			subject.next({ value: 2 });
-			subject.next({ value: 3 });
-			expect(callback).toHaveBeenCalledTimes(2); // No more calls
-		});
-
-		it("multiple subscribers work independently", () => {
+		it("keeps notifying the remaining listener when another leaves", async () => {
 			const subject = new BehaviorSubject({ count: 0 });
-			const store = createExternalStore(subject.asObservable(), { count: 0 });
+			const store = storeOf(subject.asObservable(), { count: 0 });
 
-			const callback1 = vi.fn();
-			const callback2 = vi.fn();
-
-			const unsub1 = store.subscribe(callback1);
-			const unsub2 = store.subscribe(callback2);
-
+			const leaving = vi.fn();
+			const staying = vi.fn();
+			const unsubscribe = store.subscribe(leaving);
+			store.subscribe(staying);
+			unsubscribe();
+			await flushMicrotasks();
 			subject.next({ count: 5 });
 
-			expect(callback1).toHaveBeenCalledTimes(2);
-			expect(callback2).toHaveBeenCalledTimes(2);
-
-			unsub1();
-
-			subject.next({ count: 10 });
-
-			expect(callback1).toHaveBeenCalledTimes(2); // stopped
-			expect(callback2).toHaveBeenCalledTimes(3); // still receiving
-
-			unsub2();
+			expect(leaving.mock.calls).toEqual([[{ count: 0 }]]);
+			expect(staying.mock.calls).toEqual([[{ count: 0 }], [{ count: 5 }]]);
 		});
 	});
 
-	describe("destroy", () => {
-		it("stops receiving updates from observable", () => {
+	describe("source lifetime", () => {
+		it("releases the source a microtask after the last listener leaves", async () => {
+			const subject = new Subject<{ value: number }>();
+			const store = storeOf(subject.asObservable(), { value: 0 });
+
+			const unsubscribe = store.subscribe(() => {});
+			unsubscribe();
+			expect(subject.observed).toBe(true);
+
+			await flushMicrotasks();
+			expect(subject.observed).toBe(false);
+		});
+
+		it("keeps one source subscription across a StrictMode unsubscribe and resubscribe", async () => {
 			const subject = new BehaviorSubject({ value: 0 });
-			const store = createExternalStore(subject.asObservable(), { value: 0 });
+			const { observable$, subscriptions } = countingSubscriptions(subject);
+			const store = storeOf(observable$, { value: 0 });
 
-			store.destroy();
-
-			subject.next({ value: 100 });
-
-			// getSnapshot will still return the last value before destroy
-			expect(store.getSnapshot()).toEqual({ value: 0 });
-		});
-	});
-
-	describe("React StrictMode compatibility", () => {
-		it("reconnects observable after destroy when resubscribed", () => {
-			// React StrictMode mounts → unmounts → remounts components
-			// This test simulates that pattern
-			const subject = new BehaviorSubject({ value: 0 });
-			const store = createExternalStore(subject.asObservable(), { value: 0 });
-
-			// First mount: subscribe
-			const callback1 = vi.fn();
-			const unsub1 = store.subscribe(callback1);
-			expect(callback1).toHaveBeenCalledWith({ value: 0 });
-
-			// StrictMode unmount: destroy is called
-			unsub1();
-			store.destroy();
-
-			// StrictMode remount: subscribe again
-			const callback2 = vi.fn();
-			const unsub2 = store.subscribe(callback2);
-			expect(callback2).toHaveBeenCalledWith({ value: 0 });
-
-			// Now emit new value - should reach the second subscriber
-			subject.next({ value: 100 });
-
-			expect(callback2).toHaveBeenCalledWith({ value: 100 });
-			expect(store.getSnapshot()).toEqual({ value: 100 });
-
-			unsub2();
-		});
-
-		it("continues working after multiple destroy/resubscribe cycles", () => {
-			const subject = new BehaviorSubject({ count: 0 });
-			const store = createExternalStore(subject.asObservable(), { count: 0 });
-
-			// Cycle 1
-			const cb1 = vi.fn();
-			store.subscribe(cb1)();
-			store.destroy();
-
-			// Cycle 2
-			const cb2 = vi.fn();
-			store.subscribe(cb2)();
-			store.destroy();
-
-			// Cycle 3 - should still work
-			const cb3 = vi.fn();
-			const unsub3 = store.subscribe(cb3);
-
-			subject.next({ count: 42 });
-
-			expect(cb3).toHaveBeenCalledWith({ count: 42 });
-			expect(store.getSnapshot()).toEqual({ count: 42 });
-
-			unsub3();
-		});
-
-		it("does not disconnect while subscribers exist", () => {
-			const subject = new BehaviorSubject({ data: "initial" });
-			const store = createExternalStore(subject.asObservable(), {
-				data: "initial",
-			});
-
-			const callback = vi.fn();
-			const unsub = store.subscribe(callback);
-
-			// Calling destroy while subscribed should not break things
-			store.destroy();
-
-			// New emissions should still work because we have an active subscriber
-			subject.next({ data: "updated" });
-
-			expect(callback).toHaveBeenCalledWith({ data: "updated" });
-			expect(store.getSnapshot()).toEqual({ data: "updated" });
-
-			unsub();
-		});
-
-		it("getSnapshot returns updated value after reconnection", () => {
-			const subject = new BehaviorSubject({ status: "pending" });
-			const store = createExternalStore(subject.asObservable(), {
-				status: "pending",
-			});
-
-			// Simulate StrictMode: subscribe, unsubscribe, destroy
 			store.subscribe(() => {})();
-			store.destroy();
+			const listener = vi.fn();
+			store.subscribe(listener);
+			await flushMicrotasks();
+			subject.next({ value: 100 });
 
-			// Resubscribe
-			const callback = vi.fn();
-			const unsub = store.subscribe(callback);
+			expect(subscriptions()).toBe(1);
+			expect(listener).toHaveBeenLastCalledWith({ value: 100 });
+		});
 
-			// Emit new value
+		it("subscribes the source again after a release", async () => {
+			const subject = new BehaviorSubject({ status: "pending" });
+			const { observable$, subscriptions } = countingSubscriptions(subject);
+			const store = storeOf(observable$, { status: "pending" });
+
+			store.subscribe(() => {})();
+			await flushMicrotasks();
+			const listener = vi.fn();
+			store.subscribe(listener);
 			subject.next({ status: "complete" });
 
-			// getSnapshot should reflect the new value
+			expect(subscriptions()).toBe(2);
 			expect(store.getSnapshot()).toEqual({ status: "complete" });
-
-			unsub();
-		});
-	});
-
-	describe("SSR scenarios", () => {
-		it("server: getServerSnapshot provides consistent value for hydration", () => {
-			const serverData = { wallets: [], accounts: [], config: {} };
-			const subject = new BehaviorSubject(serverData);
-			const store = createExternalStore(
-				subject.asObservable(),
-				serverData,
-				serverData,
-			);
-
-			// On server, getServerSnapshot is called
-			expect(store.getServerSnapshot()).toEqual(serverData);
-		});
-
-		it("client hydration: getSnapshot may differ from getServerSnapshot", () => {
-			const serverData = { wallets: [], accounts: [] };
-			const clientData = { wallets: ["wallet1"], accounts: ["account1"] };
-
-			const subject = new BehaviorSubject(clientData);
-			const store = createExternalStore(
-				subject.asObservable(),
-				serverData,
-				serverData,
-			);
-			// React subscribes on the client (in an effect) before reading
-			// getSnapshot; the subscription is what surfaces the live client value.
-			store.subscribe(() => {});
-
-			// Server returns stable value
-			expect(store.getServerSnapshot()).toEqual(serverData);
-
-			// Client has updated value
-			expect(store.getSnapshot()).toEqual(clientData);
+			expect(listener).toHaveBeenLastCalledWith({ status: "complete" });
 		});
 	});
 });

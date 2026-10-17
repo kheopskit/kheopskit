@@ -1,77 +1,54 @@
 import type { Observable, Subscription } from "rxjs";
 
+export type ExternalStoreSource<T> = {
+	observable$: Observable<T>;
+	initialValue: T;
+};
+
+/**
+ * React calls only `getServerSnapshot` on the server, so `resolveSource` runs
+ * on the client alone, on the first `getSnapshot` or `subscribe`.
+ */
 export const createExternalStore = <T>(
-	observable$: Observable<T>,
-	initialValue: T,
-	serverValue?: T,
+	resolveSource: () => ExternalStoreSource<T>,
+	serverValue: T,
 ) => {
-	// Use null as sentinel to indicate we haven't received first emission yet
-	let latestValue: T | null = null;
-	let subscription: Subscription | null = null;
-	let subscriberCount = 0;
+	let source: ExternalStoreSource<T> | undefined;
+	let latestValue: T | undefined;
+	let subscription: Subscription | undefined;
 	const listeners = new Set<(value: T) => void>();
 
-	const ensureSubscription = () => {
-		if (!subscription || subscription.closed) {
-			subscription = observable$.subscribe((value) => {
-				latestValue = value;
-				for (const listener of listeners) {
-					listener(value);
-				}
-			});
-		}
+	const getSource = () => {
+		source ??= resolveSource();
+		return source;
 	};
 
-	// The subscription is created lazily by subscribe() (which React calls from a
-	// committed passive effect), never during render. React may render a tree and
-	// throw it away without committing — StrictMode double-invokes the initial
-	// render, and concurrent/Suspense can discard renders — so subscribing eagerly
-	// here (createExternalStore runs inside the Provider's render-phase useMemo) would leak
-	// the discarded store's observable subscription. Until the first emission,
-	// getSnapshot falls back to initialValue.
-	const getSnapshot = () => latestValue ?? initialValue;
+	const getSnapshot = () => latestValue ?? getSource().initialValue;
 
-	/**
-	 * Returns the server-side snapshot for SSR hydration.
-	 * This prevents hydration mismatches by providing a consistent
-	 * value during server rendering. Must return the same value as
-	 * what the server rendered.
-	 */
-	const getServerSnapshot = () => serverValue ?? initialValue;
+	const getServerSnapshot = () => serverValue;
 
-	const subscribe = (callback: (value: T) => void) => {
-		subscriberCount++;
-		// Subscribe to the observable BEFORE registering this listener, so a
-		// synchronous replay (BehaviorSubject / shareReplay) updates latestValue
-		// without double-invoking this callback — the current value is emitted once,
-		// explicitly, just below.
-		ensureSubscription();
-		listeners.add(callback);
+	const releaseWhenUnobserved = () => {
+		if (listeners.size) return;
+		subscription?.unsubscribe();
+		subscription = undefined;
+	};
 
-		// Immediately emit current value (BehaviorSubject semantics)
-		callback(getSnapshot());
+	const subscribe = (listener: (value: T) => void) => {
+		if (!subscription || subscription.closed)
+			subscription = getSource().observable$.subscribe((value) => {
+				latestValue = value;
+				for (const notify of listeners) notify(value);
+			});
+		listeners.add(listener);
+		listener(getSnapshot());
 
 		return () => {
-			subscriberCount--;
-			listeners.delete(callback);
-			// Don't close the observable subscription on unsubscribe
-			// Let destroy() handle that when the store is truly being disposed
+			listeners.delete(listener);
+			// StrictMode and a changed `subscribe` unsubscribe and resubscribe in
+			// the same task; releasing at once would restart the source between.
+			queueMicrotask(releaseWhenUnobserved);
 		};
 	};
 
-	const destroy = () => {
-		// Only unsubscribe if no one is listening
-		// React StrictMode may call destroy and then immediately resubscribe
-		if (subscriberCount === 0 && subscription) {
-			subscription.unsubscribe();
-			subscription = null;
-		}
-	};
-
-	return {
-		getSnapshot,
-		getServerSnapshot,
-		subscribe,
-		destroy,
-	};
+	return { getSnapshot, getServerSnapshot, subscribe };
 };

@@ -1,21 +1,17 @@
 import {
 	createKheopskitStore,
-	getHydratedSnapshot,
 	getKheopskit$,
 	type KheopskitConfig,
-	type KheopskitState,
-	resolveConfig,
+	type KheopskitStore,
 } from "@kheopskit/core";
 import {
 	type FC,
 	type PropsWithChildren,
+	useCallback,
 	useEffect,
-	useMemo,
 	useRef,
-	useSyncExternalStore,
 } from "react";
-import { KheopskitContext } from "./context";
-import { createExternalStore } from "./createExternalStore";
+import { KheopskitSourceProvider } from "./KheopskitSourceProvider";
 
 export type KheopskitProviderProps = PropsWithChildren & {
 	/**
@@ -46,15 +42,28 @@ export type KheopskitProviderProps = PropsWithChildren & {
 	 * ```
 	 */
 	ssrCookies?: string;
+	/**
+	 * Store the provider reads the cache from and persists into, on the client.
+	 * Defaults to a store per mount, backed by cookies when `ssrCookies` is set
+	 * and by localStorage otherwise. The server snapshot always comes from
+	 * `ssrCookies`.
+	 *
+	 * @example
+	 * ```tsx
+	 * // tests
+	 * const store = createKheopskitStore({ storage: createMemoryStorage() });
+	 * render(<KheopskitProvider config={config} store={store}>…</KheopskitProvider>);
+	 * ```
+	 */
+	store?: KheopskitStore;
 };
 
 export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 	children,
 	config,
 	ssrCookies,
+	store,
 }) => {
-	const resolvedConfig = useMemo(() => resolveConfig(config), [config]);
-
 	// Dev-only: warn if the `config` prop reference changes between renders. A new
 	// object each render recreates the store and re-subscribes the whole pipeline
 	// (re-hydrating, dropping live connection state) on every render. `config` must
@@ -78,85 +87,32 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 		lastConfigRef.current = config;
 	}, [config]);
 
-	// Create a single store for both reading cached state and powering the observable
-	const kheopskitStore = useMemo(
-		() =>
-			createKheopskitStore({
-				ssrCookies,
-				storageKey: resolvedConfig.storageKey,
-			}),
-		[ssrCookies, resolvedConfig.storageKey],
-	);
-
-	// Read cached state from the store for SSR hydration.
-	// Icons stay OFF: this snapshot must match the server-rendered markup, and the
-	// server never sees the localStorage icon cache (see GetHydratedSnapshotOptions).
-	const serverValue = useMemo<KheopskitState>(() => {
-		if (ssrCookies === undefined) {
+	const resolveSource = useCallback(
+		(resolvedConfig: KheopskitConfig) => {
+			const sourceStore =
+				store ??
+				createKheopskitStore({
+					ssrCookies,
+					storageKey: resolvedConfig.storageKey,
+				});
 			return {
-				wallets: [],
-				accounts: [],
-				config: resolvedConfig,
-				isHydrating: true,
-				isDiscovering: true,
+				store: sourceStore,
+				kheopskit$: getKheopskit$(resolvedConfig, {
+					ssrCookies,
+					store: sourceStore,
+				}),
 			};
-		}
-		return {
-			...getHydratedSnapshot(kheopskitStore, resolvedConfig),
-			config: resolvedConfig,
-			isHydrating: true,
-			isDiscovering: true,
-		};
-	}, [ssrCookies, kheopskitStore, resolvedConfig]);
-
-	// Client-only initial snapshot, read straight from the client cache so a hard
-	// reload paints the cached wallet/account list on the very first frame instead
-	// of flashing empty until the live observable produces its first emission —
-	// which can be asynchronous (e.g. WalletConnect's AppKit is loaded via dynamic
-	// import, so the underlying combineLatest can't emit synchronously).
-	//
-	// We can't derive this from `serverValue`: without SSR cookies that stays empty
-	// (to keep the server/client hydration markup identical), so the SPA case would
-	// otherwise render nothing. This snapshot is only ever read on the client via
-	// getSnapshot, so reading the cache here is safe — and getCachedIcon returns ""
-	// on the server, making the icon enrichment a no-op there.
-	const initialValue = useMemo<KheopskitState>(() => {
-		return {
-			...getHydratedSnapshot(kheopskitStore, resolvedConfig, {
-				icons: true,
-			}),
-			config: resolvedConfig,
-			isHydrating: true,
-			isDiscovering: true,
-		};
-	}, [kheopskitStore, resolvedConfig]);
-
-	const store = useMemo(
-		() =>
-			createExternalStore(
-				getKheopskit$(config, { ssrCookies, store: kheopskitStore }),
-				initialValue,
-				serverValue,
-			),
-		[config, ssrCookies, kheopskitStore, initialValue, serverValue],
+		},
+		[ssrCookies, store],
 	);
-
-	// Cleanup store subscriptions when store changes or component unmounts
-	useEffect(() => {
-		return () => store.destroy();
-	}, [store]);
-
-	const state = useSyncExternalStore(
-		store.subscribe,
-		store.getSnapshot,
-		store.getServerSnapshot,
-	);
-
-	const value = useMemo(() => ({ state }), [state]);
 
 	return (
-		<KheopskitContext.Provider value={value}>
+		<KheopskitSourceProvider
+			config={config}
+			ssrCookies={ssrCookies}
+			resolveSource={resolveSource}
+		>
 			{children}
-		</KheopskitContext.Provider>
+		</KheopskitSourceProvider>
 	);
 };
