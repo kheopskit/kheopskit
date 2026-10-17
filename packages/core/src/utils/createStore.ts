@@ -37,7 +37,7 @@ export const createStore = <T>(
 	});
 
 	const update = (val: T) => {
-		setStoredData(key, val, storage);
+		persistBestEffort(key, val, storage);
 		subject.next(val);
 	};
 
@@ -59,7 +59,13 @@ const parseData = <T>(str: string | null, defaultValue: T): T => {
 	return defaultValue;
 };
 
-const setStoredData = <T>(key: string, val: T, storage: SyncableStorage) => {
+const persistBestEffort = <T>(
+	key: string,
+	val: T,
+	storage: SyncableStorage,
+) => {
 	const str = JSON.stringify(val);
-	storage.setItem(key, str);
+	try {
+		storage.setItem(key, str);
+	} catch {}
 };

@@ -4,7 +4,7 @@ import type {
 } from "polkadot-api/pjs-signer";
 import type { WalletAccountId } from "../../utils/WalletAccountId";
 import type { WalletId } from "../../utils/WalletId";
-import type { PolkadotAccountType } from "../types";
+import type { BaseWallet, PolkadotAccountType } from "../types";
 
 export type PolkadotInjectedWallet = {
 	id: WalletId;
@@ -20,8 +20,8 @@ export type PolkadotInjectedWallet = {
 	name: string;
 	icon: string;
 	isConnected: boolean;
-	connect: () => Promise<void>;
-	disconnect: () => Promise<void>;
+	connect: BaseWallet["connect"];
+	disconnect: BaseWallet["disconnect"];
 };
 
 export type PolkadotWallet = PolkadotInjectedWallet;

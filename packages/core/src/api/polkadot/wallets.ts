@@ -12,6 +12,7 @@ import {
 	parseWalletId,
 	type WalletId,
 } from "../../utils/WalletId";
+import { isRefusalMessage } from "../errors";
 import { createInjectedWallets$ } from "../injectedWallets";
 import type { KheopskitStore } from "../store";
 import type { KheopskitConfig } from "../types";
@@ -87,6 +88,8 @@ export const getPolkadotWallets$ = (
 						window.location.hostname,
 				);
 			},
+			isUserRejection: isRefusalMessage,
+			releaseAbandonedHandle: (handle) => handle.disconnect(),
 			buildWallet: ({ walletId, handle, isConnected, connect, disconnect }) => {
 				const { identifier } = parseWalletId(walletId);
 				const extInfo = POLKADOT_EXTENSIONS[identifier];

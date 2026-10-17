@@ -11,6 +11,9 @@ Full docs and the interactive playground: https://github.com/kheopskit/kheopskit
 > (and WalletConnect) optional peer dependencies. See
 > [MIGRATING_TO_V4.md](./MIGRATING_TO_V4.md).
 
+> **Upgrading from v5?** v6 changes the `connect()`/`disconnect()` contract and
+> the error codes. See [MIGRATING_TO_V6.md](./MIGRATING_TO_V6.md).
+
 ## Install
 
 `rxjs` is always required; every platform SDK (and WalletConnect) is an optional
@@ -62,6 +65,29 @@ carries the SDK-free `KheopskitConfig`, `KheopskitState`, `BaseWallet` and
 > While `state.isHydrating` is `true`, wallets/accounts are cached placeholders
 > carrying only the base fields — SDK fields (`signer`, `client`,
 > provider/extension handles) are absent until hydration completes.
+
+`wallet.connect()` and `wallet.disconnect()` are safe to call straight from UI
+code. Concurrent `connect()` calls on one wallet share one platform attempt, so
+the extension is asked once, and each call gets its own promise. A repeat call
+on a wallet that is already connected (or disconnected) resolves at once.
+`connect({ signal })` rejects that caller with a `KheopskitError` of code
+`ABORTED` when the signal fires before the platform answers. An abort after the
+platform granted the connect changes nothing. A refused prompt rejects with
+`USER_REJECTED` and any other failure with `CONNECT_FAILED`. Both carry the
+platform error as `cause`. `connect()` resolves only after `kheopskit$` has
+emitted the wallet with `isConnected: true`. On platforms that list accounts
+asynchronously (Ethereum `eth_accounts`) the accounts may arrive in a later
+emission. No emission shows a disconnected wallet still listing accounts.
+Until a fix tracked for 6.0.0 lands, an Ethereum wallet that reconnects while
+another connected Ethereum wallet's `eth_accounts` request is pending may show
+the accounts of its previous connection for as long as that request goes
+unanswered, and `connect()` may resolve on that emission. `disconnect()`
+resolves once it has emitted `isConnected: false`, or once a later `connect()`
+or the end of the subscription makes that emission impossible. After the last
+subscriber has unsubscribed, `connect()` and `disconnect()` on a wallet object
+from that subscription reject `ABORTED` without asking the platform. There is
+no default timeout: pass `AbortSignal.timeout(ms)` to cap the wait for the
+platform's answer.
 
 `state.isDiscovering` is `true` until the page has fired `load` and kheopskit
 has read `window.injectedWeb3` again, so the emission that turns it `false`

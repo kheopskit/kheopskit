@@ -37,8 +37,10 @@ const connectWith = async (config: Partial<KheopskitConfig>) => {
 		store: createKheopskitStore(),
 		config: resolveConfig({ ...config, platforms: [plugin] }),
 	});
+	const subscription = wallets$.subscribe();
 	const [wallet] = await firstValueFrom(wallets$);
 	await wallet?.connect();
+	subscription.unsubscribe();
 };
 
 describe("polkadot wallet connect", () => {
