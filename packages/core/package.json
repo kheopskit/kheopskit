@@ -8,7 +8,8 @@
 		"dist",
 		"README.md",
 		"MIGRATING_TO_V4.md",
-		"MIGRATING_TO_V6.md"
+		"MIGRATING_TO_V6.md",
+		"CHANGELOG.md"
 	],
 	"main": "./dist/index.js",
 	"module": "./dist/index.mjs",

@@ -6,7 +6,8 @@
 	"sideEffects": false,
 	"files": [
 		"dist",
-		"README.md"
+		"README.md",
+		"CHANGELOG.md"
 	],
 	"main": "./dist/index.js",
 	"module": "./dist/index.mjs",
