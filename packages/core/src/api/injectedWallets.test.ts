@@ -144,8 +144,11 @@ describe("createInjectedWallets$", () => {
 
 	it("abort rejects with ABORTED and a late handle never connects or remembers", async () => {
 		const deferred = createDeferred<string>();
-		const release = vi.fn();
-		const { sub, wallet } = setup({ connect: () => deferred.promise, release });
+		const releaseAbandonedHandle = vi.fn();
+		const { sub, wallet } = setup({
+			connect: () => deferred.promise,
+			releaseAbandonedHandle,
+		});
 
 		const controller = new AbortController();
 		const pending = wallet().connect({ signal: controller.signal });
@@ -161,7 +164,10 @@ describe("createInjectedWallets$", () => {
 
 		expect(wallet().isConnected).toBe(false);
 		expect(rememberedWalletIds()).toEqual([]);
-		expect(release).toHaveBeenCalledWith("late-handle", walletId);
+		expect(releaseAbandonedHandle).toHaveBeenCalledWith(
+			"late-handle",
+			walletId,
+		);
 
 		sub.unsubscribe();
 	});
@@ -219,12 +225,12 @@ describe("createInjectedWallets$", () => {
 
 	it("disconnect during a pending connect aborts it", async () => {
 		const deferred = createDeferred<string>();
-		const release = vi.fn();
+		const releaseAbandonedHandle = vi.fn();
 		const disconnect = vi.fn(async () => {});
 		const { sub, wallet } = setup({
 			connect: () => deferred.promise,
 			disconnect,
-			release,
+			releaseAbandonedHandle,
 		});
 
 		const pending = wallet().connect();
@@ -239,7 +245,10 @@ describe("createInjectedWallets$", () => {
 		expect(wallet().isConnected).toBe(false);
 		expect(rememberedWalletIds()).toEqual([]);
 		expect(disconnect).not.toHaveBeenCalled();
-		expect(release).toHaveBeenCalledWith("late-handle", walletId);
+		expect(releaseAbandonedHandle).toHaveBeenCalledWith(
+			"late-handle",
+			walletId,
+		);
 
 		sub.unsubscribe();
 	});
@@ -280,10 +289,10 @@ describe("createInjectedWallets$", () => {
 
 	it("tearing down the stream rejects a pending connect with ABORTED and releases the late handle", async () => {
 		const deferred = createDeferred<string>();
-		const release = vi.fn();
+		const releaseAbandonedHandle = vi.fn();
 		const { sub, wallet, emissions } = setup({
 			connect: () => deferred.promise,
-			release,
+			releaseAbandonedHandle,
 		});
 
 		const pending = wallet().connect();
@@ -297,7 +306,10 @@ describe("createInjectedWallets$", () => {
 		await settleMicrotasks();
 		expect(emissions.length).toBe(emitted);
 		expect(rememberedWalletIds()).toEqual([]);
-		expect(release).toHaveBeenCalledWith("late-handle", walletId);
+		expect(releaseAbandonedHandle).toHaveBeenCalledWith(
+			"late-handle",
+			walletId,
+		);
 	});
 
 	it("runs platform disconnect before clearing state and onDisconnected after", async () => {

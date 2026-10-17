@@ -45,11 +45,6 @@ export type WalletType = "injected" | "walletconnect";
 
 export type PolkadotAccountType = "sr25519" | "ed25519" | "ecdsa" | "ethereum";
 
-/**
- * SDK-free fields common to every wallet, regardless of platform. Platform
- * packages (`@kheopskit/core/<platform>`) extend this with SDK-typed fields
- * (the injected provider/extension/standard-wallet handle).
- */
 /** Options accepted by {@link BaseWallet.connect}. */
 export type ConnectOptions = {
 	/**
@@ -63,6 +58,11 @@ export type ConnectOptions = {
 	signal?: AbortSignal;
 };
 
+/**
+ * SDK-free fields common to every wallet, regardless of platform. Platform
+ * packages (`@kheopskit/core/<platform>`) extend this with SDK-typed fields
+ * (the injected provider/extension/standard-wallet handle).
+ */
 export type BaseWallet = {
 	id: WalletId;
 	platform: WalletPlatform;

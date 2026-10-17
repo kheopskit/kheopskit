@@ -172,14 +172,8 @@ describe("getKheopskit$ connect semantics", () => {
 		await vi.advanceTimersByTimeAsync(20);
 
 		const connecting = wallet().connect();
-		const fakeClockBefore = Date.now();
-		const startedAt = process.hrtime.bigint();
 		fake.releaseEnable();
 		await connecting;
-		const latencyMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
-		process.stdout.write(
-			`connect-to-resolve latency: ${latencyMs.toFixed(3)} ms wall clock, ${Date.now() - fakeClockBefore} ms fake clock\n`,
-		);
 
 		expect(wallet().isConnected).toBe(true);
 		expect(accountsOf(emissions.at(-1) as KheopskitState)).toEqual(

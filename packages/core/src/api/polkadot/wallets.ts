@@ -77,7 +77,7 @@ export const getPolkadotWallets$ = (
 				);
 			},
 			isUserRejection: isRefusalMessage,
-			release: (handle) => handle.disconnect(),
+			releaseAbandonedHandle: (handle) => handle.disconnect(),
 			buildWallet: ({ walletId, handle, isConnected, connect, disconnect }) => {
 				const { identifier } = parseWalletId(walletId);
 				const extInfo = POLKADOT_EXTENSIONS[identifier];

@@ -56,13 +56,9 @@ export type InjectedWalletsAdapter<
 	 * as the wallet's live handle until disconnect.
 	 */
 	connect: (source: TSource, walletId: WalletId) => Promise<THandle>;
-	/** Recognises the platform's rejection of a refused connect prompt. */
+	/** `true` maps the platform's rejection to `USER_REJECTED`; absent means never. */
 	isUserRejection?: (error: unknown) => boolean;
-	/**
-	 * Drops a handle whose connect resolved after the attempt was abandoned
-	 * (aborted, disconnected while pending, or torn down).
-	 */
-	release?: (handle: THandle, walletId: WalletId) => void;
+	releaseAbandonedHandle?: (handle: THandle, walletId: WalletId) => void;
 	/**
 	 * Optional platform disconnect call, awaited before local state clears so a
 	 * failed disconnect rejects without desyncing the connected list.
@@ -151,7 +147,7 @@ export const createInjectedWallets$ = <
 				).then(
 					(handle) => {
 						if (controller.signal.aborted) {
-							adapter.release?.(handle, walletId);
+							adapter.releaseAbandonedHandle?.(handle, walletId);
 							return;
 						}
 						setConnection(walletId, { status: "connected", handle });

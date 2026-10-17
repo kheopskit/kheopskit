@@ -102,8 +102,6 @@ export const getKheopskit$ = <
 		const isConnectedIn = (state: KheopskitState, walletId: WalletId) =>
 			state.wallets.some((w) => w.id === walletId && w.isConnected);
 
-		// The WalletConnect connector's connect() resolves when its modal opens,
-		// so waiting for isConnected there would hang when the user closes it.
 		const settleWithState = (
 			wallet: BaseWallet | WalletConnectWallet,
 		): BaseWallet | WalletConnectWallet =>
@@ -209,8 +207,6 @@ export const getKheopskit$ = <
 						isHydrating: wallets.isHydrating || accounts.isHydrating,
 					};
 				}),
-				// Coalesce before deduping so a synchronous burst that ends where it
-				// started is not re-emitted.
 				debounceTime(0, asapScheduler),
 				distinctUntilChanged(statesEqual),
 				tap((state) => {
