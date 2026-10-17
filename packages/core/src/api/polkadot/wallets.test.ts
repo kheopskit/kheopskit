@@ -1,8 +1,13 @@
 import { firstValueFrom } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveConfig } from "../config";
+import { getKheopskit$ } from "../kheopskit";
 import { createKheopskitStore } from "../store";
-import type { KheopskitConfig, WalletConnectConfig } from "../types";
+import type {
+	KheopskitConfig,
+	KheopskitState,
+	WalletConnectConfig,
+} from "../types";
 import { polkadot } from "./plugin";
 
 const { getInjectedExtensions, injected } = vi.hoisted(() => {
@@ -234,6 +239,139 @@ describe("polkadot connect abandoned after the grant", () => {
 		injected.names = ["test-extension"];
 		vi.advanceTimersByTime(200);
 		expect(emissions.at(-1)).toEqual([["polkadot:test-extension", false]]);
+		accountsSubscription.unsubscribe();
+		subscription.unsubscribe();
+	});
+});
+
+describe("polkadot accounts at connect", () => {
+	const alice = {
+		address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+		name: "Alice",
+		type: "sr25519" as const,
+	};
+	const settleMicrotasks = async () => {
+		for (let i = 0; i < 30; i++) await Promise.resolve();
+	};
+	const installExtension = (get: () => Promise<(typeof alice)[]>) => {
+		const subscribe = vi.fn(() => () => {});
+		window.injectedWeb3 = {
+			"test-extension": {
+				enable: async () => ({
+					accounts: { get, subscribe },
+					signer: { signPayload: vi.fn(), signRaw: vi.fn() },
+				}),
+			},
+		};
+		return { subscribe };
+	};
+	const walletsOf = (plugin: ReturnType<typeof polkadot>) => {
+		const store = createKheopskitStore();
+		const wallets$ = plugin.getWallets$({
+			store,
+			config: resolveConfig({ appName: "test", platforms: [plugin] }),
+		});
+		return { store, wallets$ };
+	};
+
+	beforeEach(() => {
+		localStorage.clear();
+	});
+
+	afterEach(() => {
+		delete window.injectedWeb3;
+		vi.useRealTimers();
+		injected.names = ["test-extension"];
+	});
+
+	it("lists the accounts in the emission that first shows the wallet connected", async () => {
+		let release: (accounts: (typeof alice)[]) => void = () => {};
+		installExtension(
+			() =>
+				new Promise((resolve) => {
+					release = resolve;
+				}),
+		);
+		const emissions: KheopskitState[] = [];
+		const subscription = getKheopskit$(
+			{ platforms: [polkadot()], hydrationGracePeriod: 0 },
+			{ store: createKheopskitStore() },
+		).subscribe((state) => emissions.push(state));
+		for (let i = 0; emissions.length === 0 && i < 20; i++)
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		const wallet = emissions.at(-1)?.wallets[0];
+		if (!wallet) throw new Error("no wallet");
+
+		const connecting = wallet.connect();
+		await settleMicrotasks();
+		expect(emissions.at(-1)?.wallets[0]?.isConnected).toBe(false);
+
+		release([alice]);
+		await connecting;
+
+		const addressesOf = (state: KheopskitState | undefined) =>
+			state?.accounts.map((account) => account.address);
+		const firstConnected = emissions.find((state) =>
+			state.wallets.some((w) => w.isConnected),
+		);
+		expect(addressesOf(firstConnected)).toEqual([alice.address]);
+		expect(addressesOf(emissions.at(-1))).toEqual([alice.address]);
+		subscription.unsubscribe();
+	});
+
+	it("rejects connect CONNECT_FAILED with the cause when accounts.get() rejects and does not remember the wallet", async () => {
+		const cause = new Error("accounts unavailable");
+		installExtension(() => Promise.reject(cause));
+		const { store, wallets$ } = walletsOf(polkadot());
+		const subscription = wallets$.subscribe();
+		const [wallet] = await firstValueFrom(wallets$);
+		if (!wallet) throw new Error("no wallet");
+
+		await expect(wallet.connect()).rejects.toMatchObject({
+			code: "CONNECT_FAILED",
+			cause,
+		});
+		expect((await firstValueFrom(wallets$)).map((w) => w.isConnected)).toEqual([
+			false,
+		]);
+		expect((await firstValueFrom(store.observable)).remembered ?? []).toEqual(
+			[],
+		);
+		subscription.unsubscribe();
+	});
+
+	it("aborts a connect whose extension leaves while accounts.get() pends", async () => {
+		vi.useFakeTimers();
+		let release: (accounts: (typeof alice)[]) => void = () => {};
+		const { subscribe } = installExtension(
+			() =>
+				new Promise((resolve) => {
+					release = resolve;
+				}),
+		);
+		const plugin = polkadot();
+		const { store, wallets$ } = walletsOf(plugin);
+		const emissions: [string, boolean][][] = [];
+		const subscription = wallets$.subscribe((wallets) =>
+			emissions.push(wallets.map((w) => [w.id, w.isConnected])),
+		);
+		const accountsSubscription = plugin.getAccounts$(wallets$).subscribe();
+		const [wallet] = await firstValueFrom(wallets$);
+		if (!wallet) throw new Error("no wallet");
+
+		const connect = wallet.connect();
+		await settleMicrotasks();
+		injected.names = [];
+		vi.advanceTimersByTime(100);
+
+		await expect(connect).rejects.toMatchObject({ code: "ABORTED" });
+		release([alice]);
+		await settleMicrotasks();
+		expect(subscribe).not.toHaveBeenCalled();
+		expect(emissions.at(-1)).toEqual([]);
+		expect((await firstValueFrom(store.observable)).remembered ?? []).toEqual(
+			[],
+		);
 		accountsSubscription.unsubscribe();
 		subscription.unsubscribe();
 	});

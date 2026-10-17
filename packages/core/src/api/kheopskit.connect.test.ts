@@ -370,15 +370,12 @@ describe("getKheopskit$ connect semantics", () => {
 		expect(frames).toEqual(
 			frames.map((frame) => ({
 				...frame,
-				accounts:
-					frame.isConnected && frame.accounts.length > 0
-						? [ALICE, BOB].sort()
-						: [],
+				accounts: frame.isConnected ? [ALICE, BOB].sort() : [],
 			})),
 		);
-		expect(
-			frames.filter((f) => f.isConnected && f.accounts.length > 0).length,
-		).toBeGreaterThanOrEqual(2);
+		expect(frames.filter((f) => f.isConnected).length).toBeGreaterThanOrEqual(
+			2,
+		);
 		expect(frames.filter((f) => !f.isConnected).length).toBeGreaterThanOrEqual(
 			2,
 		);
