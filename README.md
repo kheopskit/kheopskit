@@ -13,6 +13,8 @@ See [Kheopswap](https://github.com/kheopswap/kheopswap) (polkadot/ethereum) and 
 
 > **Upgrading from v3?** v4 moves platforms to plugins and makes platform SDKs (and WalletConnect) optional peer dependencies. See the [v4 migration guide](./packages/core/MIGRATING_TO_V4.md).
 
+> **Upgrading from v5?** v6 makes `connect()` shared, idempotent and abortable, types every rejection, adds wallet `status`, `isDiscovering`, `isPlaceholder` and `signRaw`, and moves WalletConnect to a plugin. See the [v6 migration guide](./packages/core/MIGRATING_TO_V6.md).
+
 ## Features
 
 - **Multi-wallet support**: Easily interact with Polkadot, Ethereum, and Solana wallets.
@@ -130,6 +132,8 @@ export const App = () => (
 );
 ```
 
+> **What `useWallets()` returns.** The whole state. `isDiscovering` is `true` until the page has loaded and the wallet list is complete; wait for it before you tell the user a wallet is missing. Each wallet has `status` (`disconnected`, `connecting` or `connected`) and `error`, so a button can show `Connecting…` without local state. While `isHydrating` is `true`, wallets and accounts restored from the cache carry `isPlaceholder: true` and no SDK handle. Check `!account.isPlaceholder` before you sign.
+
 > **Prefer the component directly?** Use `<KheopskitProvider config={{ platforms }}>` and recover platform-precise account types (e.g. `account.signer` on Solana, `account.client` on Ethereum) with a type argument — `useWallets<typeof platforms>()`. React context can't be generic, so the bare `useWallets()` returns the SDK-free base shapes. Pass a **referentially stable** `config` (module scope, `useMemo`, or `createKheopskit`); a new object each render recreates the store and re-subscribes.
 
 > **Reading a wallet's SDK handle?** `state.wallets` mixes injected wallets with the single, platform-less WalletConnect connector. Narrow with `isInjectedWallet(wallet)` (the complement of `isWalletConnectWallet`) to recover `wallet.platform`, `wallet.sourceId`, and the injected SDK handle (`provider` on Ethereum, `extension` on Polkadot, `wallet` on Solana).
@@ -196,7 +200,8 @@ const config = {
   autoReconnect: true,
 };
 
-// account.signer is bound to the plugin's `chain`
+// account.signer is bound to the plugin's `chain`; a cached placeholder has none
+if (account.isPlaceholder) return;
 const [signed] = await account.signer.modifyAndSignMessages([message]);
 
 // account.getSigner(chain) returns a signer bound to another cluster
@@ -303,6 +308,16 @@ function RootComponent() {
 
 **Cookie size limit (compact format)**: Cookie storage uses a compact JSON schema to stay under the ~4KB limit. As a rule of thumb, with 6 connected wallets you can fit about 30-40 accounts when most accounts do not include a name. If many accounts have names, expect closer to 25-30. When the cookie grows too large, browsers may reject it.
 
+## Wallet lifecycle
+
+On every page load kheopskit runs the same steps. The [core README](./packages/core/README.md#wallet-lifecycle) gives each rule with its numbers and source file.
+
+1. **Discovery.** Polkadot extensions are read from `window.injectedWeb3` at subscribe, 100, 300, 600 and 1100 ms later, and at `load` and 100 ms after. `isDiscovering` turns `false` after the `load` read. Nothing looks again later.
+2. **Hydration.** The first frame shows the previous visit's wallets and accounts from the cache as placeholders (`isPlaceholder: true`). `isHydrating` ends after the 500 ms grace period, the `load` read and every reconnect has settled, and at 3000 ms (`hydrationTimeout`) at the latest.
+3. **Reconnect.** Wallets the user connected last time reconnect, without a prompt while the site stays authorised, and show `status: "connecting"` meanwhile. A refusal forgets the wallet; other failures set `error`.
+4. **Connect.** `connect()` is shared between concurrent calls, resolves at once on a connected wallet, takes an `AbortSignal`, has no timeout, rejects with a typed `KheopskitError`, and resolves once the state shows the wallet connected.
+5. **Persistence.** `remembered` is written on every connect and disconnect. The wallet and account cache is written 1 second after hydration ends and the state stops changing, to `localStorage` or to a cookie with `ssrCookies`.
+
 ## Testing
 
 `@kheopskit/core/testing` provides a fake Polkadot extension, an in-memory
@@ -371,9 +386,9 @@ it("reconnects the wallet the user connected last time", async () => {
 });
 ```
 
-
 The `afterEach` above is the whole teardown. `uninstall()` removes the fake,
 unsubscribing stops kheopskit's timers, and `destroy()` ends the store's storage
 subscription. With fake timers, use the async `advanceTimersByTimeAsync` so the
-promises between timers run. See the
+promises between timers run. The fake records `enable()` and `signRaw` calls,
+not `signPayload` calls. See the
 [core README](packages/core/README.md#testing) for the full API.
