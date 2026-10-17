@@ -60,14 +60,12 @@ const installFakeExtension = () => {
 	];
 	const unsubscribe = vi.fn();
 	let onAccountsChanged: ((next: typeof accounts) => void) | undefined;
+	const subscribe = vi.fn((listener: (next: typeof accounts) => void) => {
+		onAccountsChanged = listener;
+		return unsubscribe;
+	});
 	const injected = {
-		accounts: {
-			get: async () => accounts,
-			subscribe: (listener: (next: typeof accounts) => void) => {
-				onAccountsChanged = listener;
-				return unsubscribe;
-			},
-		},
+		accounts: { get: async () => accounts, subscribe },
 		signer: {
 			signRaw: async () => ({ id: 1, signature: "0x" }),
 			signPayload: async () => ({ id: 1, signature: "0x" }),
@@ -85,6 +83,7 @@ const installFakeExtension = () => {
 	};
 	return {
 		enable,
+		subscribe,
 		unsubscribe,
 		releaseEnable: () => {
 			const resolve = pendingEnables.shift();
@@ -497,7 +496,8 @@ describe("getKheopskit$ connect semantics", () => {
 		expect(errorSpy).not.toHaveBeenCalled();
 		expect(warnSpy).not.toHaveBeenCalled();
 		expect(rememberedWalletIds()).toEqual([]);
-		expect(fake.unsubscribe).toHaveBeenCalledTimes(1);
+		expect(fake.subscribe).not.toHaveBeenCalled();
+		expect(fake.unsubscribe).not.toHaveBeenCalled();
 	});
 
 	it("a UI connect that aborts on unmount leaves a pending auto-reconnect to finish", async () => {

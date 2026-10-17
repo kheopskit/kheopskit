@@ -15,6 +15,7 @@ import type {
 } from "@kheopskit/core/internal";
 import type {
 	PolkadotAccount,
+	PolkadotInjectedWallet,
 	PolkadotWallet,
 	polkadot,
 } from "@kheopskit/core/polkadot";
@@ -42,6 +43,11 @@ type NoneAny<T extends readonly unknown[]> = T extends readonly [
 	: true;
 
 type Expect<T extends true> = T;
+
+type Equal<X, Y> =
+	(<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2
+		? true
+		: false;
 
 type Bound = ReturnType<typeof createKheopskit<readonly [KheopskitPlatform]>>;
 
@@ -74,4 +80,17 @@ export type InternalIsTyped = Expect<
 			ReturnType<typeof serializeWallet>,
 		]
 	>
+>;
+
+declare const polkadotWallet: PolkadotInjectedWallet;
+export const rawSignature = polkadotWallet.extension?.signer.signRaw({
+	address: "",
+	data: "",
+	type: "payload",
+});
+export type ReadonlyIsOptionalBoolean = Expect<
+	Equal<PolkadotAccount["readonly"], boolean | undefined>
+>;
+export type SignRawReturnsHex = Expect<
+	Equal<ReturnType<PolkadotAccount["signRaw"]>, Promise<`0x${string}`>>
 >;

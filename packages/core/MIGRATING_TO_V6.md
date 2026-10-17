@@ -6,7 +6,10 @@ stream shows a disconnected wallet still listing accounts. Until a fix tracked
 for 6.0.0 lands, an Ethereum wallet that reconnects while another connected
 Ethereum wallet's `eth_accounts` request is pending may show the accounts of
 its previous connection for as long as that request goes unanswered, and
-`connect()` may resolve on that emission.
+`connect()` may resolve on that emission. v6 also renames the store's
+remembered list, keeps the extension's account order, and changes how the
+Polkadot plugin talks to an extension: kheopskit calls `enable()` itself, keeps
+the raw object the extension returns, and exposes raw signing on every account.
 
 `@kheopskit/core`, `@kheopskit/react` and the repo release tag move to
 **`6.0.0`** together.
@@ -28,6 +31,11 @@ This guide grows with each v6 change. Each section covers one area.
 | Other connect failure | platform error passed through | `KheopskitError` `CONNECT_FAILED` with `cause` |
 | When `connect()` resolves | when the platform call returned | after `kheopskit$` emitted the wallet with `isConnected: true`; accounts a platform lists asynchronously (Ethereum `eth_accounts`) may follow in a later emission |
 | Intermediate emissions | a wallet could show connected with the previous connection's accounts for one frame | a synchronous burst is one emission; no emission shows a disconnected wallet still listing accounts. Until a fix tracked for 6.0.0 lands, an Ethereum wallet that reconnects while another connected Ethereum wallet's `eth_accounts` request is pending may show the accounts of its previous connection for as long as that request goes unanswered, and `connect()` may resolve on that emission. |
+| `wallet.extension` on a Polkadot wallet | pjs-signer's `InjectedExtension` (`getAccounts`, `subscribe`, `disconnect`) | the raw `enable()` result, typed `PolkadotInjected` (`accounts`, `signer`) |
+| Raw signing | `txCreator.signBytes(bytes)` only, hex with `type: "bytes"` | plus `account.signRaw(data, { type? })`, text or bytes |
+| `ethereum` accounts | signer built with type `ethereum`, 64-byte mock signature | signer built with `ecdsa`, 65-byte mock signature |
+| Extension account subscription | kept after disconnect | released on disconnect and on teardown |
+| `readonly`, `partOfPortfolio` (Talisman, its own origins) | present at runtime, not typed | typed on `PolkadotAccount` |
 
 ---
 
@@ -232,7 +240,127 @@ changed for another reason.
   injection order; kheopskit still orders wallets Talisman first, then by name.
   Delete it if that order is acceptable.
 
-## 3. Wallet status and reconnect
+---
+
+## 3. Polkadot: raw signing and the injected handle
+
+### `extension` is the raw `enable()` result
+
+`PolkadotInjectedWallet.extension` is no longer pjs-signer's
+`InjectedExtension`. It is the object `window.injectedWeb3[id].enable(appName)`
+resolved to, typed structurally as `PolkadotInjected`:
+
+```ts
+type PolkadotInjected = {
+  accounts: {
+    get(): Promise<PolkadotInjectedAccount[]>;
+    subscribe(cb: (accounts: PolkadotInjectedAccount[]) => void): () => void;
+  };
+  signer: { signPayload: SignPayload; signRaw(payload): Promise<{ id; signature }> };
+  metadata?: unknown;
+  provider?: unknown;
+};
+```
+
+`getAccounts()`, `subscribe()` and `disconnect()` are gone from it. Read
+accounts from `state.accounts`; kheopskit owns the subscription. As in v5,
+`connect()` reads `accounts.get()` before it resolves, so the emission that
+first shows the wallet connected already lists its accounts; the list then
+follows `accounts.subscribe`. The field is `undefined` while the wallet is
+disconnected and while `state.isHydrating` is `true`.
+
+```diff
+- const accounts = wallet.extension?.getAccounts() ?? [];
++ const accounts = state.accounts.filter((a) => a.walletId === wallet.id);
+```
+
+### `account.signRaw`
+
+Every Polkadot account has
+`signRaw(data: string | Uint8Array, options?: { type?: "bytes" | "payload" })`.
+It resolves the hex signature. A string is sent as text and a `Uint8Array` as
+`0x` hex. Injected accounts go through the extension's `signer.signRaw`,
+WalletConnect accounts through `polkadot_signMessage`.
+
+With no `options.type`, a string is sent as text with `type: "payload"` and a
+`Uint8Array` as `0x` hex with `type: "bytes"`. An explicit `options.type` is
+sent as given for either input. A hex-looking string is sent as text; pass a
+`Uint8Array` for bytes. From their sources: Talisman, polkadot.js, SubWallet
+and Nova ignore `type` and decode `data` by shape; Enkrypt reads it as the
+encoding of `data`, `"payload"` for UTF-8 text and `"bytes"` for hex, so it
+needs the value the derived default sends. Only Talisman was driven live.
+
+Talisman 3.11.0 opens its Sign In screen when the text parses as a SIWS
+message and its generic Sign Request screen otherwise, hex included. The
+screen follows the text `data`, not `type`: live receipts with the same text
+and both values show the same screen. The SIWS `Version` line must read `1.0.0`;
+Talisman's parser rejects `1` and falls back to the generic screen.
+
+```ts
+const signature = await account.signRaw(siwsMessage);
+```
+
+`txCreator.signBytes` is unchanged.
+
+### `ethereum` accounts sign as `ecdsa`
+
+For an account whose `type` is `"ethereum"`, kheopskit builds the `txCreator`
+(or `polkadotSigner` on polkadot-api v2) with the `ecdsa` signature type.
+pjs-signer's own map knows `ed25519`, `sr25519` and `ecdsa` only, so an
+`ethereum` type got a 64-byte mock signature where ecdsa needs 65. Fee
+estimation and dry runs for ethereum-format accounts no longer use the wrong
+length.
+
+### The account subscription is released
+
+v5 subscribed to the extension's account list and never unsubscribed. v6
+unsubscribes when the wallet disconnects and when the last `kheopskit$`
+subscriber leaves.
+
+### Untyped accounts are kept
+
+Accounts the extension lists without a `type` are now kept as `sr25519`. v5
+went through pjs-signer, which dropped them. `polkadot({ accountTypes })` is
+the only filter.
+
+### `connect()` rejects an incomplete extension
+
+`connect()` rejects with `CONNECT_FAILED`, and the wallet stays disconnected
+and unremembered, when the `enable()` result lacks `accounts.get`,
+`accounts.subscribe`, `signer.signPayload` or `signer.signRaw`, or when
+`accounts.get()` rejects. `cause` holds an `Error` whose message names the
+extension, for example `Unsupported extension: "talisman"`, or the extension's
+own error. An account kheopskit cannot build is skipped and the wallet's other
+accounts are listed.
+
+### `readonly` and `partOfPortfolio`
+
+Talisman adds these two fields to the accounts it shares with its own dapp
+origins: `readonly` marks a watch-only account that cannot sign, and
+`partOfPortfolio` a watch-only account that is part of the user's portfolio.
+They are typed on `PolkadotInjectedAccount` and `PolkadotAccount` as optional
+booleans and are absent for other origins and other wallets.
+
+### polkadot-api v2
+
+v2 still works. The account carries `polkadotSigner` instead of `txCreator`,
+and the fourth factory argument (the signature type) is ignored by
+`getPolkadotSignerFromPjs` at runtime.
+
+### What to delete in your app
+
+- A second `enable()` call made to reach `signer.signRaw` for a Sign-In With
+  Substrate message. Call `account.signRaw(message)`.
+- A hand-built `ecdsaTxCreator` for ethereum-format accounts, and a
+  `signatureTypeOf` helper that maps `ethereum` to `ecdsa`.
+- A memoised second `enable()` and a `pjsSignerOf` helper that rebuilds a pjs
+  signer from the raw extension. Use `account.txCreator`.
+- A `TalismanInjectedAccount` cast that adds `readonly` and `partOfPortfolio`.
+  They are on `PolkadotAccount`.
+
+---
+
+## 4. Wallet status and reconnect
 
 ### New fields
 

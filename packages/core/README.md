@@ -96,6 +96,22 @@ conclude that a wallet is missing. It is `false` from the first emission when yo
 subscribe after `load`, and always `true` on the server. It says nothing about
 wallets that inject after `load`.
 
+`account.signRaw(data, options?)` on a Polkadot account signs arbitrary data
+with the wallet's raw signing call and resolves the hex signature. A string is
+sent as text with `type: "payload"` and a `Uint8Array` as `0x` hex with
+`type: "bytes"`; an explicit `options.type` is sent as given for either input.
+A hex-looking string is sent as text, so pass a `Uint8Array` for bytes and a
+string for a Sign-In With Substrate message. Talisman opens its Sign In screen
+for a string that parses as a SIWS message (`Version: 1.0.0`) and a generic
+Sign Request screen for hex; the screen follows the text `data`, not `type`.
+Enkrypt reads `type` as the encoding of `data`, so it needs the value the
+derived default sends. On a connected Polkadot wallet, `wallet.extension` is the raw object
+`enable()` returned, typed as `PolkadotInjected`. Use it for extension calls
+kheopskit does not wrap. `connect()` reads `accounts.get()` before it resolves,
+so the emission that first shows the wallet connected already lists its
+accounts, and a rejected `accounts.get()` fails the connect with
+`CONNECT_FAILED`.
+
 ## Persisted store
 
 Kheopskit remembers which wallets the user connected and caches the last wallet

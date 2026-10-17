@@ -1,7 +1,10 @@
 export { type PolkadotPluginOptions, polkadot } from "./api/polkadot/plugin";
 export type {
 	PolkadotAccount,
+	PolkadotInjected,
+	PolkadotInjectedAccount,
 	PolkadotInjectedWallet,
+	PolkadotSignRawType,
 	PolkadotWallet,
 } from "./api/polkadot/types";
 export type { PolkadotAccountType } from "./api/types";
