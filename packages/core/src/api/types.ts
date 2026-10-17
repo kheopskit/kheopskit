@@ -113,10 +113,13 @@ export type BaseWallet = {
 	 *   emitted a state in which this wallet has `isConnected: true`, so the
 	 *   consumer-visible state already reflects the connect. On platforms that
 	 *   list accounts asynchronously (Ethereum `eth_accounts`), the accounts may
-	 *   arrive in a later emission; no emission shows a connected wallet with a
-	 *   previous connection's accounts, or a disconnected wallet still listing
-	 *   accounts. A `disconnect()` call made while it waits
-	 *   for that state rejects it with `ABORTED`. Once the last `kheopskit$`
+	 *   arrive in a later emission. No emission shows a disconnected wallet
+	 *   still listing accounts. Until a fix tracked for 6.0.0 lands, an
+	 *   Ethereum wallet that reconnects while another connected Ethereum
+	 *   wallet's `eth_accounts` request is pending may show the accounts of its
+	 *   previous connection for as long as that request goes unanswered, and
+	 *   `connect()` may resolve on that emission. A `disconnect()` call made
+	 *   while it waits for that state rejects it with `ABORTED`. Once the last `kheopskit$`
 	 *   subscriber has unsubscribed, a call on a wallet object from that
 	 *   subscription rejects with `ABORTED` without asking the platform.
 	 * - **Typed rejections.** A platform rejection is wrapped in a
