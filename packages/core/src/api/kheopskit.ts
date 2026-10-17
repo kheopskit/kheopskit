@@ -95,14 +95,20 @@ export const getKheopskit$ = <
 		const waiters = new Set<StateWaiter>();
 		const wrapped = new WeakMap<BaseWallet, BaseWallet>();
 
-		const isConnectedIn = (state: KheopskitState, walletId: WalletId) =>
-			state.wallets.some((w) => w.id === walletId && w.isConnected);
-
 		const abandon = (waiter: StateWaiter) => {
 			waiters.delete(waiter);
 			if (waiter.isConnected)
 				waiter.reject(abortedError(waiter.walletId, "connect"));
 			else waiter.resolve();
+		};
+
+		const settleIn = (waiter: StateWaiter, state: KheopskitState) => {
+			const wallet = state.wallets.find((w) => w.id === waiter.walletId);
+			if (!wallet) abandon(waiter);
+			else if (wallet.isConnected === waiter.isConnected) {
+				waiters.delete(waiter);
+				waiter.resolve();
+			}
 		};
 
 		const supersede = (walletId: WalletId, isConnected: boolean) => {
@@ -114,10 +120,9 @@ export const getKheopskit$ = <
 		const whenState = (walletId: WalletId, isConnected: boolean) =>
 			new Promise<void>((resolve, reject) => {
 				const waiter = { walletId, isConnected, resolve, reject };
-				if (latest && isConnectedIn(latest, walletId) === isConnected)
-					resolve();
-				else if (closed) abandon(waiter);
-				else waiters.add(waiter);
+				waiters.add(waiter);
+				if (latest) settleIn(waiter, latest);
+				if (closed && waiters.has(waiter)) abandon(waiter);
 			});
 
 		const settleWithState = (
@@ -254,12 +259,7 @@ export const getKheopskit$ = <
 				distinctUntilChanged(statesEqual),
 				tap((state) => {
 					latest = state;
-					for (const waiter of waiters) {
-						if (isConnectedIn(state, waiter.walletId) !== waiter.isConnected)
-							continue;
-						waiters.delete(waiter);
-						waiter.resolve();
-					}
+					for (const waiter of waiters) settleIn(waiter, state);
 				}),
 			)
 			.subscribe(subscriber);
