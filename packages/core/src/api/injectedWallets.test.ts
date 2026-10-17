@@ -196,23 +196,63 @@ describe("createInjectedWallets$", () => {
 		sub.unsubscribe();
 	});
 
-	it("a connect aborted by one sharer rejects every sharer and a fresh connect asks the platform again", async () => {
+	it("a sharer's abort rejects only its own promise; the attempt survives while another sharer remains", async () => {
+		const deferred = createDeferred<string>();
+		const connect = vi.fn(() => deferred.promise);
+		const releaseAbandonedHandle = vi.fn();
+		const { sub, wallet } = setup({ connect, releaseAbandonedHandle });
+
+		const controller = new AbortController();
+		const leaving = wallet().connect({ signal: controller.signal });
+		const staying = wallet().connect();
+		controller.abort();
+
+		expect(await settlementOf(leaving)).toBe("rejected");
+		await expect(leaving).rejects.toMatchObject({ code: "ABORTED", walletId });
+		expect(await settlementOf(staying)).toBe("pending");
+		expect(connect).toHaveBeenCalledTimes(1);
+
+		deferred.resolve("handle");
+		await expect(staying).resolves.toBeUndefined();
+		expect(wallet().isConnected).toBe(true);
+		expect(wallet().name).toBe("Fake handle");
+		expect(rememberedWalletIds()).toEqual([walletId]);
+		expect(releaseAbandonedHandle).not.toHaveBeenCalled();
+
+		sub.unsubscribe();
+	});
+
+	it("the attempt is abandoned once every signalled sharer has aborted, and a fresh connect asks the platform again", async () => {
 		const first = createDeferred<string>();
 		const second = createDeferred<string>();
 		const connect = vi
 			.fn<() => Promise<string>>()
 			.mockReturnValueOnce(first.promise)
 			.mockReturnValueOnce(second.promise);
-		const { sub, wallet } = setup({ connect });
+		const releaseAbandonedHandle = vi.fn();
+		const { sub, wallet } = setup({ connect, releaseAbandonedHandle });
 
-		const controller = new AbortController();
-		const sharerA = wallet().connect({ signal: controller.signal });
-		const sharerB = wallet().connect();
-		controller.abort();
+		const controllerA = new AbortController();
+		const controllerB = new AbortController();
+		const sharerA = wallet().connect({ signal: controllerA.signal });
+		const sharerB = wallet().connect({ signal: controllerB.signal });
+
+		controllerA.abort();
 		expect(await settlementOf(sharerA)).toBe("rejected");
+		expect(await settlementOf(sharerB)).toBe("pending");
+
+		controllerB.abort();
 		expect(await settlementOf(sharerB)).toBe("rejected");
-		await expect(sharerA).rejects.toMatchObject({ code: "ABORTED" });
-		await expect(sharerB).rejects.toMatchObject({ code: "ABORTED" });
+		await expect(sharerB).rejects.toMatchObject({ code: "ABORTED", walletId });
+
+		first.resolve("late-handle");
+		await settleMicrotasks();
+		expect(wallet().isConnected).toBe(false);
+		expect(rememberedWalletIds()).toEqual([]);
+		expect(releaseAbandonedHandle).toHaveBeenCalledWith(
+			"late-handle",
+			walletId,
+		);
 
 		const retry = wallet().connect();
 		expect(connect).toHaveBeenCalledTimes(2);

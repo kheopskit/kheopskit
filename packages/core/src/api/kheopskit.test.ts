@@ -37,10 +37,14 @@ const installFakeExtension = () => {
 		{ address: BOB, name: "Bob", type: "sr25519" },
 	];
 	const unsubscribe = vi.fn();
+	let onAccountsChanged: ((accounts: typeof accounts) => void) | undefined;
 	const injected = {
 		accounts: {
 			get: async () => accounts,
-			subscribe: () => unsubscribe,
+			subscribe: (listener: (accounts: typeof accounts) => void) => {
+				onAccountsChanged = listener;
+				return unsubscribe;
+			},
 		},
 		signer: {
 			signRaw: async () => ({ id: 1, signature: "0x" }),
@@ -65,19 +69,43 @@ const installFakeExtension = () => {
 			if (!resolve) throw new Error("no pending enable() to release");
 			resolve(injected);
 		},
+		changeAccounts: (next: typeof accounts) => {
+			if (!onAccountsChanged) throw new Error("no accounts subscription");
+			onAccountsChanged(next);
+		},
 		uninstall: () => {
 			delete (window as unknown as { injectedWeb3?: unknown }).injectedWeb3;
 		},
 	};
 };
 
-const config = (hydrationGracePeriod: number) => ({
+const config = (hydrationGracePeriod: number, autoReconnect = false) => ({
 	platforms: [polkadot({ accountTypes: ["sr25519" as const] })],
-	autoReconnect: false,
+	autoReconnect,
 	debug: false,
 	storageKey: "kheopskit",
 	hydrationGracePeriod,
 });
+
+const rememberedWalletIds = (): string[] =>
+	JSON.parse(localStorage.getItem("kheopskit") || "{}").autoReconnect ?? [];
+
+const cacheWallet = (
+	store: ReturnType<typeof createKheopskitStore>,
+	isConnected: boolean,
+) =>
+	store.setCachedState(
+		[
+			{
+				id: fakeWalletId,
+				platform: "polkadot",
+				type: "injected",
+				name: EXTENSION,
+				isConnected,
+			},
+		],
+		[],
+	);
 
 const collect = (
 	state$: ReturnType<typeof getKheopskit$>,
@@ -250,10 +278,195 @@ describe("getKheopskit$ connect semantics", () => {
 		expect(emissions.length).toBe(emitted);
 		expect(errorSpy).not.toHaveBeenCalled();
 		expect(warnSpy).not.toHaveBeenCalled();
-		expect(
-			JSON.parse(localStorage.getItem("kheopskit") || "{}").autoReconnect ?? [],
-		).toEqual([]);
+		expect(rememberedWalletIds()).toEqual([]);
 		expect(fake.unsubscribe).toHaveBeenCalledTimes(1);
+	});
+
+	it("a UI connect that aborts on unmount leaves a pending auto-reconnect to finish", async () => {
+		const store = createKheopskitStore();
+		store.addEnabledWalletId(fakeWalletId);
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+		const emissions: KheopskitState[] = [];
+		const { sub, wallet } = collect(
+			getKheopskit$(config(0, true), { store }),
+			emissions,
+		);
+		await settleMicrotasks();
+		expect(fake.enable).toHaveBeenCalledTimes(1);
+
+		const unmount = new AbortController();
+		const ui = wallet().connect({ signal: unmount.signal });
+		unmount.abort();
+		fake.releaseEnable();
+
+		expect(await settlementOf(ui)).toBe("rejected");
+		await expect(ui).rejects.toMatchObject({ code: "ABORTED" });
+		expect(wallet().isConnected).toBe(true);
+		expect(accountsOf(emissions.at(-1) as KheopskitState)).toEqual(
+			[ALICE, BOB].sort(),
+		);
+		expect(rememberedWalletIds()).toEqual([fakeWalletId]);
+		expect(fake.enable).toHaveBeenCalledTimes(1);
+		expect(fake.unsubscribe).not.toHaveBeenCalled();
+		expect(errorSpy).not.toHaveBeenCalled();
+
+		sub.unsubscribe();
+	});
+
+	it("connect on a wallet from a torn-down subscription rejects ABORTED without prompting", async () => {
+		const state = await firstValueFrom(
+			getKheopskit$(config(0), { store: createKheopskitStore() }),
+		);
+		const wallet = state.wallets.find((w) => w.id === fakeWalletId);
+		if (!wallet) throw new Error("fake wallet not in the first emission");
+
+		const connecting = wallet.connect();
+
+		expect(await settlementOf(connecting)).toBe("rejected");
+		await expect(connecting).rejects.toMatchObject({
+			code: "ABORTED",
+			walletId: fakeWalletId,
+		});
+		expect(fake.enable).not.toHaveBeenCalled();
+		expect(rememberedWalletIds()).toEqual([]);
+	});
+
+	it("teardown between the platform's answer and the wrapper's resumption still settles the connect", async () => {
+		const emissions: KheopskitState[] = [];
+		const { sub, wallet } = collect(
+			getKheopskit$(config(0), { store: createKheopskitStore() }),
+			emissions,
+		);
+		await settleMicrotasks();
+
+		const connecting = wallet().connect();
+		fake.releaseEnable();
+		while (!rememberedWalletIds().includes(fakeWalletId))
+			await Promise.resolve();
+		sub.unsubscribe();
+
+		expect(await settlementOf(connecting)).toBe("rejected");
+		await expect(connecting).rejects.toMatchObject({
+			code: "ABORTED",
+			walletId: fakeWalletId,
+		});
+	});
+
+	it("disconnect while a connect waits for the state rejects that connect", async () => {
+		const store = createKheopskitStore();
+		cacheWallet(store, false);
+		const emissions: KheopskitState[] = [];
+		const { sub, wallet } = collect(
+			getKheopskit$(config(500), { store }),
+			emissions,
+		);
+		await settleMicrotasks();
+
+		const connecting = wallet().connect();
+		fake.releaseEnable();
+		expect(await settlementOf(connecting)).toBe("pending");
+		expect(rememberedWalletIds()).toEqual([fakeWalletId]);
+
+		const disconnecting = wallet().disconnect();
+		expect(await settlementOf(disconnecting)).toBe("resolved");
+		expect(await settlementOf(connecting)).toBe("rejected");
+		await expect(connecting).rejects.toMatchObject({
+			code: "ABORTED",
+			walletId: fakeWalletId,
+		});
+		expect(wallet().isConnected).toBe(false);
+		expect(rememberedWalletIds()).toEqual([]);
+
+		sub.unsubscribe();
+	});
+
+	it("connect resolves a disconnect that waits for the state", async () => {
+		const store = createKheopskitStore();
+		cacheWallet(store, true);
+		const emissions: KheopskitState[] = [];
+		const { sub, wallet } = collect(
+			getKheopskit$(config(500), { store }),
+			emissions,
+		);
+		await settleMicrotasks();
+
+		const disconnecting = wallet().disconnect();
+		expect(await settlementOf(disconnecting)).toBe("pending");
+
+		const connecting = wallet().connect();
+		fake.releaseEnable();
+		expect(await settlementOf(connecting)).toBe("resolved");
+		expect(await settlementOf(disconnecting)).toBe("resolved");
+		expect(rememberedWalletIds()).toEqual([fakeWalletId]);
+
+		sub.unsubscribe();
+	});
+
+	it("teardown resolves a disconnect that waits for the state", async () => {
+		const store = createKheopskitStore();
+		cacheWallet(store, true);
+		const emissions: KheopskitState[] = [];
+		const { sub, wallet } = collect(
+			getKheopskit$(config(500), { store }),
+			emissions,
+		);
+		await settleMicrotasks();
+
+		const disconnecting = wallet().disconnect();
+		expect(await settlementOf(disconnecting)).toBe("pending");
+
+		sub.unsubscribe();
+		expect(await settlementOf(disconnecting)).toBe("resolved");
+	});
+
+	it("disconnect during hydration resolves only once the emitted state shows the wallet disconnected", async () => {
+		const store = createKheopskitStore();
+		cacheWallet(store, true);
+		const emissions: KheopskitState[] = [];
+		const { sub, wallet } = collect(
+			getKheopskit$(config(500), { store }),
+			emissions,
+		);
+		await settleMicrotasks();
+		expect(wallet().isConnected).toBe(true);
+
+		const disconnecting = wallet().disconnect();
+		expect(await settlementOf(disconnecting)).toBe("pending");
+		expect(wallet().isConnected).toBe(true);
+
+		await vi.advanceTimersByTimeAsync(3000);
+		expect(await settlementOf(disconnecting)).toBe("resolved");
+		expect(emissions.at(-1)?.isHydrating).toBe(false);
+		expect(wallet().isConnected).toBe(false);
+
+		sub.unsubscribe();
+	});
+
+	it("an accounts-only emission keeps the same wallet object and functions", async () => {
+		const emissions: KheopskitState[] = [];
+		const { sub, wallet } = collect(
+			getKheopskit$(config(0), { store: createKheopskitStore() }),
+			emissions,
+		);
+		await settleMicrotasks();
+
+		const connecting = wallet().connect();
+		fake.releaseEnable();
+		await connecting;
+		const connected = wallet();
+
+		fake.changeAccounts([{ address: ALICE, name: "Alice", type: "sr25519" }]);
+		await settleMicrotasks();
+
+		expect(accountsOf(emissions.at(-2) as KheopskitState)).toEqual(
+			[ALICE, BOB].sort(),
+		);
+		expect(accountsOf(emissions.at(-1) as KheopskitState)).toEqual([ALICE]);
+		expect(wallet()).toBe(connected);
+		expect(wallet().connect).toBe(connected.connect);
+		expect(wallet().disconnect).toBe(connected.disconnect);
+
+		sub.unsubscribe();
 	});
 });
 
