@@ -177,6 +177,68 @@ describe("polkadot wallet enable() result", () => {
 	);
 });
 
+describe("polkadot connect abandoned after the grant", () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		localStorage.clear();
+	});
+
+	afterEach(() => {
+		delete window.injectedWeb3;
+		vi.useRealTimers();
+		injected.names = ["test-extension"];
+	});
+
+	it("drops the handle without subscribing when the extension leaves before kheopskit processes the grant", async () => {
+		const subscribe = vi.fn(() => () => {});
+		const handle = {
+			accounts: { get: async () => [], subscribe },
+			signer: { signPayload: vi.fn(), signRaw: vi.fn() },
+		};
+		let grant: (injected: typeof handle) => void = () => {};
+		window.injectedWeb3 = {
+			"test-extension": {
+				enable: () =>
+					new Promise<typeof handle>((resolve) => {
+						grant = resolve;
+					}),
+			},
+		};
+		const plugin = polkadot();
+		const store = createKheopskitStore();
+		const wallets$ = plugin.getWallets$({
+			store,
+			config: resolveConfig({ appName: "test", platforms: [plugin] }),
+		});
+		const emissions: [string, boolean][][] = [];
+		const subscription = wallets$.subscribe((wallets) =>
+			emissions.push(wallets.map((w) => [w.id, w.isConnected])),
+		);
+		const accountsSubscription = plugin.getAccounts$(wallets$).subscribe();
+		const [wallet] = await firstValueFrom(wallets$);
+		if (!wallet) throw new Error("no wallet");
+
+		const connect = wallet.connect();
+		grant(handle);
+		injected.names = [];
+		vi.advanceTimersByTime(100);
+
+		await expect(connect).rejects.toMatchObject({ code: "ABORTED" });
+		for (let i = 0; i < 30; i++) await Promise.resolve();
+		expect(subscribe).not.toHaveBeenCalled();
+		expect(emissions.at(-1)).toEqual([]);
+		expect((await firstValueFrom(store.observable)).remembered ?? []).toEqual(
+			[],
+		);
+
+		injected.names = ["test-extension"];
+		vi.advanceTimersByTime(200);
+		expect(emissions.at(-1)).toEqual([["polkadot:test-extension", false]]);
+		accountsSubscription.unsubscribe();
+		subscription.unsubscribe();
+	});
+});
+
 describe("polkadot wallet discovery", () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
