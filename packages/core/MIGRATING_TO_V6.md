@@ -169,6 +169,10 @@ try {
   connection's accounts, a sibling's pending request delays nobody, a sibling's
   connect or disconnect neither re-reads nor resubscribes a wallet's accounts,
   and a Polkadot extension's `accounts.subscribe` runs once per connection.
+  One exception: the first value of a platform plugin's `getAccounts$`, called
+  directly with wallets that are already connected, waits until each of them
+  has answered. `kheopskit$` subscribes before any wallet is connected, so it
+  never waits.
 
 ### What to delete in your app
 
