@@ -6,7 +6,7 @@ import type {
 import type { Wallet as WalletStandardWallet } from "@wallet-standard/base";
 import type { WalletAccountId } from "../../utils/WalletAccountId";
 import type { WalletId } from "../../utils/WalletId";
-import type { BaseWallet } from "../types";
+import type { BaseWallet, Placeholder, PlaceholderWallet } from "../types";
 import type { SolanaChainId } from "./chains";
 
 /**
@@ -18,7 +18,8 @@ export type SolanaSigner = MessageModifyingSigner &
 	TransactionModifyingSigner &
 	TransactionSendingSigner;
 
-export type SolanaInjectedWallet = {
+type LiveSolanaInjectedWallet = {
+	isPlaceholder?: false;
 	platform: "solana";
 	type: "injected";
 	id: WalletId;
@@ -41,9 +42,17 @@ export type SolanaInjectedWallet = {
 	disconnect: BaseWallet["disconnect"];
 };
 
+export type SolanaInjectedWallet =
+	| LiveSolanaInjectedWallet
+	| PlaceholderWallet<
+			LiveSolanaInjectedWallet,
+			"sourceId" | "wallet" | "chains"
+	  >;
+
 export type SolanaWallet = SolanaInjectedWallet;
 
-export type SolanaAccount = {
+type LiveSolanaAccount = {
+	isPlaceholder?: false;
 	id: WalletAccountId;
 	platform: "solana";
 	/** Base58-encoded address. */
@@ -57,3 +66,7 @@ export type SolanaAccount = {
 	walletName: string;
 	walletId: WalletId;
 };
+
+export type SolanaAccount =
+	| LiveSolanaAccount
+	| Placeholder<LiveSolanaAccount, "signer" | "getSigner">;

@@ -1,3 +1,4 @@
+import { walletPendingError } from "../api/errors";
 import {
 	type BaseWallet,
 	type BaseWalletAccount,
@@ -30,30 +31,20 @@ const lookupWalletIcon = (platform: string, identifier: string): string => {
 };
 
 /**
- * Error thrown when trying to use a placeholder wallet that hasn't fully loaded yet.
- */
-class PendingWalletError extends Error {
-	constructor(walletId: string) {
-		super(
-			`Wallet ${walletId} is still loading. Wait for isHydrating to be false before calling connect/disconnect.`,
-		);
-		this.name = "PendingWalletError";
-	}
-}
-
-/**
  * Converts a CachedWallet to a placeholder wallet for SSR hydration display.
  *
  * The placeholder carries only the SDK-free {@link BaseWallet} fields; the real
  * wallet (with its injected provider/extension/standard-wallet handle) replaces
- * it once it loads. connect/disconnect throw until then.
+ * it once it loads. `kheopskit$` defers its `connect` to the live wallet; on a
+ * bare snapshot `connect` rejects with `WALLET_PENDING`.
  */
 export const hydrateWallet = (
 	cached: CachedWallet,
 ): BaseWallet | WalletConnectWallet => {
-	const throwPending = () => {
-		throw new PendingWalletError(cached.id);
+	const connect = async () => {
+		throw walletPendingError(cached.id);
 	};
+	const disconnect = async () => {};
 
 	// The platform-less WalletConnect connector. `appKit`/`platforms` are SDK
 	// state absent until the live connector loads (cast like other placeholder
@@ -66,9 +57,10 @@ export const hydrateWallet = (
 			name: cached.name,
 			icon: "",
 			status: cached.isConnected ? "connecting" : "disconnected",
+			isPlaceholder: true,
 			isConnected: false,
-			connect: throwPending,
-			disconnect: throwPending,
+			connect,
+			disconnect,
 		} as unknown as WalletConnectWallet;
 	}
 
@@ -81,9 +73,10 @@ export const hydrateWallet = (
 		name: cached.name,
 		icon: lookupWalletIcon(platform, identifier),
 		status: cached.isConnected ? "connecting" : "disconnected",
+		isPlaceholder: true,
 		isConnected: false,
-		connect: throwPending,
-		disconnect: throwPending,
+		connect,
+		disconnect,
 	};
 };
 
@@ -95,10 +88,11 @@ export const hydrateWallet = (
  * and the Polkadot key `type`. Those render immediately on reload (no blank →
  * value flicker) and match what the live account will report. Only the SDK
  * handles (`client`/`signer`/`txCreator`) are absent until the real account
- * replaces this placeholder; signing stays gated on `isHydrating` until then.
+ * replaces this placeholder.
  */
 export const hydrateAccount = (cached: CachedAccount): BaseWalletAccount => ({
 	id: cached.id as WalletAccountId,
+	isPlaceholder: true,
 	platform: cached.platform,
 	address: cached.address,
 	name: cached.name,

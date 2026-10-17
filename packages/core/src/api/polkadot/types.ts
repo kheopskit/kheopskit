@@ -4,9 +4,15 @@ import type {
 } from "polkadot-api/pjs-signer";
 import type { WalletAccountId } from "../../utils/WalletAccountId";
 import type { WalletId } from "../../utils/WalletId";
-import type { BaseWallet, PolkadotAccountType } from "../types";
+import type {
+	BaseWallet,
+	Placeholder,
+	PlaceholderWallet,
+	PolkadotAccountType,
+} from "../types";
 
-export type PolkadotInjectedWallet = {
+type LivePolkadotInjectedWallet = {
+	isPlaceholder?: false;
 	id: WalletId;
 	platform: "polkadot";
 	type: "injected";
@@ -26,6 +32,10 @@ export type PolkadotInjectedWallet = {
 	disconnect: BaseWallet["disconnect"];
 };
 
+export type PolkadotInjectedWallet =
+	| LivePolkadotInjectedWallet
+	| PlaceholderWallet<LivePolkadotInjectedWallet, "sourceId" | "extension">;
+
 export type PolkadotWallet = PolkadotInjectedWallet;
 
 /**
@@ -38,9 +48,19 @@ export type PolkadotWallet = PolkadotInjectedWallet;
  *
  * Per-platform signing surfaces differ: Ethereum exposes `client` (viem),
  * Solana `signer`/`getSigner(chain)`. The Polkadot signing surface is absent
- * while `state.isHydrating` is `true`.
+ * on a placeholder.
  */
-export type PolkadotAccount = Omit<InjectedPolkadotAccount, "type"> & {
+export type PolkadotAccount =
+	| LivePolkadotAccount
+	| Placeholder<LivePolkadotAccount, PolkadotSigningKey>;
+
+type PolkadotSigningKey = Exclude<
+	keyof InjectedPolkadotAccount,
+	"address" | "genesisHash" | "name" | "type"
+>;
+
+type LivePolkadotAccount = Omit<InjectedPolkadotAccount, "type"> & {
+	isPlaceholder?: false;
 	type: PolkadotAccountType;
 	id: WalletAccountId;
 	platform: "polkadot";
