@@ -79,7 +79,10 @@ export type BaseWallet = {
 	id: WalletId;
 	/** The platform whose registry listed the wallet. */
 	platform: WalletPlatform;
-	/** `"injected"` for a browser extension or Wallet Standard wallet. */
+	/**
+	 * `"injected"`, for a browser extension or Wallet Standard wallet. The
+	 * WalletConnect connector is the separate {@link WalletConnectWallet}.
+	 */
 	type: WalletType;
 	/** Display name, e.g. `Talisman`. */
 	name: string;
@@ -91,8 +94,9 @@ export type BaseWallet = {
 	 * connected. On `kheopskit$` its `connect()` waits for the live wallet and
 	 * connects that one, rejecting with `WALLET_PENDING` if hydration ends first
 	 * and `ABORTED` if its `signal` fires or the subscription ends. On
-	 * `getHydratedSnapshot` it rejects with `WALLET_PENDING`. Its `disconnect()` resolves at once. Set on every wallet
-	 * of `kheopskit$` and of the hydrated snapshot; plugins leave it unset.
+	 * `getHydratedSnapshot` it rejects with `WALLET_PENDING`. Its `disconnect()`
+	 * resolves at once. Set on every wallet of `kheopskit$` and of the hydrated
+	 * snapshot; plugins leave it unset.
 	 */
 	isPlaceholder?: boolean;
 	/**
@@ -194,11 +198,11 @@ export type BaseWalletAccount = {
 };
 
 type LiveWalletConnectWallet = {
-	/** `false` on the live connector. See {@link BaseWallet.isPlaceholder}. */
+	/** See {@link BaseWallet.isPlaceholder}. */
 	isPlaceholder?: false;
-	/** Always `"walletconnect"`. There is one connector, shared by every platform. */
+	/** `"walletconnect"`, the one connector shared by every platform. */
 	id: WalletId;
-	/** Always `"walletconnect"`. Narrow with {@link isWalletConnectWallet}. */
+	/** Narrow with {@link isWalletConnectWallet}. */
 	type: "walletconnect";
 	/**
 	 * Platforms (namespaces) the live session currently carries. Empty until
@@ -474,9 +478,10 @@ export type KheopskitConfig<
 	 *   settles as soon as it answers; its cached accounts leave the list when
 	 *   hydration ends.
 	 * - A failed reconnect ends that wallet's wait, even when the reconnect
-	 *   policy still permits a retry. A retry runs only on the next change to
-	 *   the wallet list (a wallet discovered or removed, or any wallet's status
-	 *   changing), which may never happen, so waiting for it would hold most failed reconnects until
+	 *   policy still permits a retry. A retry runs only when the wallet list or
+	 *   the remembered list next changes (a wallet discovered or removed, or any
+	 *   wallet's status, error or name changing), which may never happen, so
+	 *   waiting for it would hold most failed reconnects until
 	 *   `hydrationTimeout`. A retry that does run shows on the live wallet's
 	 *   `status`, not as a placeholder.
 	 * - A remembered wallet the user disconnects during or right after its
@@ -523,17 +528,16 @@ export type KheopskitState<
 	/**
 	 * Every discovered wallet, connected or not, then the WalletConnect
 	 * connector once AppKit has loaded, when `config.walletConnect` is set.
-	 * While `isHydrating` is `true`, also the cached placeholders. Sorted by platform
-	 * (Polkadot, Ethereum, Solana, WalletConnect), then Talisman first, then by
-	 * name.
+	 * While `isHydrating` is `true`, also the cached placeholders. Sorted by
+	 * platform (Polkadot, Ethereum, Solana, WalletConnect), then Talisman
+	 * first, then by name.
 	 */
 	wallets: (WalletOf<P[number]> | WalletConnectWallet)[];
 	/**
 	 * The accounts of every connected wallet. While `isHydrating` is `true`,
-	 * also the cached placeholders of wallets still reconnecting or whose
-	 * reconnect failed. Grouped by platform, then by
-	 * wallet (Talisman first, then by wallet name); inside a wallet, in the
-	 * order the wallet lists them.
+	 * also the cached placeholders of every wallet that has no live account
+	 * yet. Grouped by platform, then by wallet (Talisman first, then by wallet
+	 * name); inside a wallet, in the order the wallet lists them.
 	 */
 	accounts: AccountOf<P[number]>[];
 	/** The resolved config, with every default filled in. */

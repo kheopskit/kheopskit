@@ -61,7 +61,7 @@ export type PolkadotInjected = {
 };
 
 type LivePolkadotInjectedWallet = {
-	/** `false` on a live wallet. See {@link BaseWallet.isPlaceholder}. */
+	/** See {@link BaseWallet.isPlaceholder}. */
 	isPlaceholder?: false;
 	/** `polkadot:<extension id>`, e.g. `polkadot:talisman`. */
 	id: WalletId;
@@ -109,7 +109,8 @@ export type PolkadotWallet = PolkadotInjectedWallet;
  * The inherited fields are `address` (SS58, or 0x-hex for an `ethereum`
  * account, as the extension lists it), `name` (the account name in the
  * extension, when it has one) and `genesisHash` (the chain the account is
- * restricted to, `null` or absent when it is not).
+ * restricted to, `null` or absent when it is not). A WalletConnect account has
+ * `name` `<wallet name> Polkadot` and `genesisHash` `null`.
  *
  * The signing surface follows the installed polkadot-api version:
  * **`txCreator`** (a `TxCreator`) on v3+, **`polkadotSigner`** (a
@@ -133,9 +134,12 @@ type PolkadotSigningKey =
 	| "signRaw";
 
 type LivePolkadotAccount = Omit<InjectedPolkadotAccount, "type"> & {
-	/** `false` on a live account. See {@link BaseWalletAccount.isPlaceholder}. */
+	/** See {@link BaseWalletAccount.isPlaceholder}. */
 	isPlaceholder?: false;
-	/** Key type the extension reported; `sr25519` when it reported none. */
+	/**
+	 * Key type the extension reported, `sr25519` when it reported none. Always
+	 * `sr25519` for a WalletConnect account, which reports no key type.
+	 */
 	type: PolkadotAccountType;
 	/** `<walletId>::<address>`. */
 	id: WalletAccountId;
