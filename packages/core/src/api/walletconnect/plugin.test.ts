@@ -1,7 +1,12 @@
-import { firstValueFrom } from "rxjs";
+import { firstValueFrom, of } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WALLET_CONNECT_WALLET_ID } from "../../utils/WalletId";
-import type { PlatformContext, WalletConnectWallet } from "../types";
+import type {
+	KheopskitPlatform,
+	KheopskitState,
+	PlatformContext,
+	WalletConnectWallet,
+} from "../types";
 import type { WalletConnectOptions } from "./plugin";
 
 const options: WalletConnectOptions = {
@@ -295,6 +300,104 @@ describe("walletConnect().getWallet$ single AppKit instance", () => {
 		);
 
 		sub.unsubscribe();
+		resetAppKitCache();
+	});
+});
+
+describe("walletConnect() provider subscription lifetime through getKheopskit$", () => {
+	afterEach(() => {
+		vi.resetModules();
+		vi.restoreAllMocks();
+	});
+
+	const mockAppKit = () => {
+		const listeners = new Set<(p: Record<string, unknown>) => void>();
+		let providers: Record<string, unknown> = {};
+		const createAppKit = vi.fn(() => ({
+			chainNamespaces: ["polkadot"],
+			getProvider: (namespace: string) => providers[namespace],
+			subscribeProviders: (cb: (p: Record<string, unknown>) => void) => {
+				listeners.add(cb);
+				return () => {
+					listeners.delete(cb);
+				};
+			},
+			getWalletInfo: () => undefined,
+			open: vi.fn(() => Promise.resolve()),
+			disconnect: vi.fn(() => Promise.resolve()),
+		}));
+		vi.doMock("@reown/appkit/core", () => ({ createAppKit }));
+		return {
+			createAppKit,
+			listeners,
+			setProviders: (next: Record<string, unknown>) => {
+				providers = next;
+				for (const listener of listeners) listener(providers);
+			},
+		};
+	};
+
+	const fakePlatform: KheopskitPlatform = {
+		platform: "polkadot",
+		getWallets$: () => of([]),
+		getAccounts$: () => of([]),
+	};
+
+	const observe = async () => {
+		const { getKheopskit$ } = await import("../kheopskit");
+		const { createKheopskitStore } = await import("../store");
+		const { walletConnect, resetAppKitCache } = await import("./plugin");
+		resetAppKitCache();
+		const connector = (state: KheopskitState | undefined) =>
+			state?.wallets.find((w) => w.id === WALLET_CONNECT_WALLET_ID) as
+				| WalletConnectWallet
+				| undefined;
+		const mount = () => {
+			const states: KheopskitState[] = [];
+			const sub = getKheopskit$(
+				{ platforms: [fakePlatform], walletConnect: walletConnect(options) },
+				{ store: createKheopskitStore() },
+			).subscribe((s) => states.push(s));
+			return { sub, current: () => connector(states.at(-1)) };
+		};
+		return { mount, resetAppKitCache };
+	};
+
+	it("releases every provider subscription when the last subscriber leaves", async () => {
+		vi.resetModules();
+		const appKit = mockAppKit();
+		const { mount, resetAppKitCache } = await observe();
+
+		const { sub, current } = mount();
+		await vi.waitFor(() => expect(current()?.status).toBe("disconnected"));
+		expect(appKit.listeners.size).toBe(1);
+
+		sub.unsubscribe();
+		expect(appKit.listeners.size).toBe(0);
+
+		resetAppKitCache();
+	});
+
+	it("reuses the AppKit instance on remount and shows a connection made while unobserved", async () => {
+		vi.resetModules();
+		const appKit = mockAppKit();
+		const { mount, resetAppKitCache } = await observe();
+
+		const first = mount();
+		await vi.waitFor(() =>
+			expect(first.current()?.status).toBe("disconnected"),
+		);
+		first.sub.unsubscribe();
+
+		appKit.setProviders({ polkadot: {} });
+
+		const second = mount();
+		await vi.waitFor(() => expect(second.current()?.status).toBe("connected"));
+		expect(second.current()?.platforms).toEqual(["polkadot"]);
+		expect(appKit.createAppKit).toHaveBeenCalledTimes(1);
+		expect(appKit.listeners.size).toBe(1);
+
+		second.sub.unsubscribe();
 		resetAppKitCache();
 	});
 });

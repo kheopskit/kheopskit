@@ -98,6 +98,21 @@ describe("resolveConfig", () => {
 					"Raw WalletConnect options were removed in v6, see MIGRATING_TO_V6.md.",
 			);
 		});
+
+		it("throws INVALID_CONFIG on walletConnect: null", () => {
+			const call = () =>
+				resolveConfig({
+					platforms: [polkadot()],
+					walletConnect: null as never,
+				});
+
+			expect(call).toThrow(
+				expect.objectContaining({
+					name: "KheopskitError",
+					code: "INVALID_CONFIG",
+				}),
+			);
+		});
 	});
 
 	describe("immutability", () => {
