@@ -4,7 +4,8 @@ import {
 	getInjectedExtensions,
 	type InjectedExtension,
 } from "polkadot-api/pjs-signer";
-import { distinctUntilChanged, Observable, shareReplay } from "rxjs";
+import { distinctUntilChanged, Observable, shareReplay, skip } from "rxjs";
+import { pageLoaded$ } from "../../utils/pageLoad";
 import { POLKADOT_EXTENSIONS } from "../../utils/polkadotExtensions";
 import {
 	getWalletId,
@@ -45,9 +46,20 @@ const createWalletIdsPoller$ = () => {
 			timer = setTimeout(poll, intervals[index++] ?? 100);
 		}
 
+		let loadTimer: ReturnType<typeof setTimeout> | undefined;
+		const loadSub = pageLoaded$.pipe(skip(1)).subscribe(() => {
+			loadTimer = setTimeout(
+				() => subscriber.next(getInjectedWalletsIds()),
+				100,
+			);
+			subscriber.next(getInjectedWalletsIds());
+		});
+
 		return () => {
 			// Cancel any pending poll so it can't fire after unsubscribe.
 			if (timer !== undefined) clearTimeout(timer);
+			clearTimeout(loadTimer);
+			loadSub.unsubscribe();
 		};
 	}).pipe(
 		distinctUntilChanged<WalletId[]>(isEqual),

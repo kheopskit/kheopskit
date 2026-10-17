@@ -46,7 +46,7 @@ const WalletIcon: FC<{
 };
 
 export const Wallets = () => {
-	const { wallets, accounts } = useWallets();
+	const { wallets, accounts, isDiscovering } = useWallets();
 
 	return (
 		<AppBlock
@@ -54,6 +54,9 @@ export const Wallets = () => {
 			description="Lists all wallets installed on your browser"
 			codeUrl="https://github.com/kheopskit/kheopskit/blob/main/examples/nextjs-react/src/app/blocks/Wallets.tsx"
 		>
+			{isDiscovering && (
+				<p className="text-sm text-muted-foreground">Looking for wallets…</p>
+			)}
 			<Table>
 				<TableHeader>
 					<TableRow>

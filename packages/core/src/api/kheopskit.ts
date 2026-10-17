@@ -5,7 +5,10 @@ import {
 	filter,
 	map,
 	Observable,
+	of,
 	shareReplay,
+	switchMap,
+	take,
 	throttleTime,
 } from "rxjs";
 import {
@@ -15,6 +18,7 @@ import {
 import { serializeAccount, serializeWallet } from "../utils/hydrateState";
 import { getCachedIcon, setCachedIcons } from "../utils/iconCache";
 import { logObservable } from "../utils/logObservable";
+import { pageLoaded$ } from "../utils/pageLoad";
 import { sortAccounts } from "../utils/sortAccounts";
 import { sortWallets } from "../utils/sortWallets";
 import { getAccounts$ } from "./accounts";
@@ -148,13 +152,24 @@ export const getKheopskit$ = <
 		const subscription = combineLatest({
 			wallets: sharedWallets$,
 			accounts: sharedAccounts$,
+			isDiscovering: pageLoaded$.pipe(
+				switchMap((loaded) =>
+					loaded
+						? liveWallets$.pipe(
+								take(1),
+								map(() => false),
+							)
+						: of(true),
+				),
+			),
 		})
 			.pipe(
-				map(({ wallets, accounts }) => {
+				map(({ wallets, accounts, isDiscovering }) => {
 					if (kc.debug) {
 						console.debug("[kheopskit] hydration state", {
 							walletsHydrating: wallets.isHydrating,
 							accountsHydrating: accounts.isHydrating,
+							isDiscovering,
 							walletsConnected: wallets.items.filter((w) => w.isConnected)
 								.length,
 							walletsTotal: wallets.items.length,
@@ -169,6 +184,7 @@ export const getKheopskit$ = <
 						wallets: [...wallets.items].sort(sortWallets),
 						accounts: [...accounts.items].sort(sortAccounts),
 						isHydrating: wallets.isHydrating || accounts.isHydrating,
+						isDiscovering,
 					};
 				}),
 			)
@@ -304,6 +320,7 @@ const walletUiKey = (wallet: BaseWallet | WalletConnectWallet): string =>
  */
 const statesEqual = (a: KheopskitState, b: KheopskitState): boolean =>
 	a.isHydrating === b.isHydrating &&
+	a.isDiscovering === b.isDiscovering &&
 	a.wallets.length === b.wallets.length &&
 	a.accounts.length === b.accounts.length &&
 	a.wallets.every((w, i) => {
