@@ -118,7 +118,7 @@ describe("getPolkadotAccounts$", () => {
 		]);
 	});
 
-	it("returns no accounts and warns when allowlist is empty", async () => {
+	it("returns no accounts and warns that polkadot({ accountTypes }) is empty", async () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const wallet = createMockInjectedWallet([
 			{
@@ -136,7 +136,7 @@ describe("getPolkadotAccounts$", () => {
 
 		expect(accounts).toEqual([]);
 		expect(warnSpy).toHaveBeenCalledWith(
-			"[kheopskit] config.polkadotAccountTypes is empty; all Polkadot accounts will be filtered out.",
+			"[kheopskit] polkadot({ accountTypes }) is empty; all Polkadot accounts will be filtered out.",
 		);
 		warnSpy.mockRestore();
 	});
