@@ -313,6 +313,34 @@ describe("actions reach the live pipeline after an Activity hide stops it and a 
 		},
 	);
 
+	it("useWallet's connect during the gap rejects ABORTED when the provider is hidden again before the first emission", async () => {
+		const t = setup();
+		const api: { connect?: () => Promise<void> } = {};
+		const Caller = () => {
+			api.connect = t.instance.useWallet(fake.walletId)?.connect;
+			return null;
+		};
+		const app = providerUnderActivity(t.instance, <Caller />);
+		t.mount(app("visible"));
+		await t.settle();
+		act(() => root?.render(app("hidden")));
+		await t.settle();
+		act(() => root?.render(app("visible")));
+		record(t.outcomes)(api.connect?.() ?? Promise.reject("no wallet"));
+		act(() => root?.render(app("hidden")));
+		await t.settle();
+
+		expect({
+			outcomes: t.outcomes,
+			enableCalls: fake.enableCalls().length,
+			remembered: await t.remembered(),
+		}).toEqual({
+			outcomes: ["rejected:ABORTED"],
+			enableCalls: 0,
+			remembered: [],
+		});
+	});
+
 	it("useConnect's connect during the gap resolves without connecting when the component is hidden again first", async () => {
 		const t = setup();
 		const api: { connect?: () => Promise<void> } = {};

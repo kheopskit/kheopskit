@@ -174,4 +174,71 @@ describe("createExternalStore (React)", () => {
 			expect(listener).toHaveBeenLastCalledWith({ status: "complete" });
 		});
 	});
+
+	describe("whenLive", () => {
+		const outcome = async (promise: Promise<unknown>) => {
+			let settled: unknown = "pending";
+			promise.then((value) => {
+				settled = value;
+			});
+			for (let i = 0; i < 5; i++) await flushMicrotasks();
+			return settled;
+		};
+
+		it("resolves the running source's value", async () => {
+			const store = storeOf(new BehaviorSubject({ value: 1 }), { value: 0 });
+			store.subscribe(() => {});
+
+			expect(await store.whenLive()).toEqual({ value: 1 });
+		});
+
+		it("waits for a restarted source's first emission instead of serving the stopped run's value", async () => {
+			const subject = new Subject<{ value: number }>();
+			const store = storeOf(subject.asObservable(), { value: 0 });
+			const unsubscribe = store.subscribe(() => {});
+			subject.next({ value: 1 });
+			unsubscribe();
+			await flushMicrotasks();
+			store.subscribe(() => {});
+			const live = store.whenLive();
+			const beforeEmission = await outcome(live);
+			subject.next({ value: 2 });
+
+			expect({ beforeEmission, live: await live }).toEqual({
+				beforeEmission: "pending",
+				live: { value: 2 },
+			});
+		});
+
+		it("resolves undefined when no listener holds the source after a microtask", async () => {
+			const subject = new BehaviorSubject({ value: 1 });
+			const store = storeOf(subject.asObservable(), { value: 0 });
+			store.subscribe(() => {})();
+
+			expect(await store.whenLive()).toBeUndefined();
+			expect(subject.observed).toBe(false);
+		});
+
+		it("resolves undefined when the source is released before its first emission", async () => {
+			const subject = new Subject<{ value: number }>();
+			const store = storeOf(subject.asObservable(), { value: 0 });
+			const unsubscribe = store.subscribe(() => {});
+			const live = store.whenLive();
+			unsubscribe();
+
+			expect(await outcome(live)).toBeUndefined();
+		});
+
+		it("resolves undefined once the signal aborts while waiting", async () => {
+			const subject = new Subject<{ value: number }>();
+			const store = storeOf(subject.asObservable(), { value: 0 });
+			store.subscribe(() => {});
+			const controller = new AbortController();
+			const live = store.whenLive(controller.signal);
+			controller.abort();
+			subject.next({ value: 1 });
+
+			expect(await outcome(live)).toBeUndefined();
+		});
+	});
 });
