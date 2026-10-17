@@ -151,12 +151,7 @@ export const getKheopskit$ = <
 
 		// Get live wallets and accounts
 		const liveWallets$ = getWallets$(kc, store);
-		const liveAccounts$ = combineLatest([
-			liveWallets$,
-			getAccounts$(kc, liveWallets$),
-		]).pipe(
-			map(([wallets, accounts]) => accountsOfConnected(wallets, accounts)),
-		);
+		const liveAccounts$ = getAccounts$(kc, liveWallets$);
 
 		// Apply hydration buffer to wallets
 		const bufferedWallets$ = createHydrationBuffer(
@@ -357,16 +352,6 @@ const sessionRestoring = (
 	isWalletConnectWallet(live) &&
 	live.status === "disconnected" &&
 	cached.status === "connecting";
-
-const accountsOfConnected = (
-	wallets: (BaseWallet | WalletConnectWallet)[],
-	accounts: BaseWalletAccount[],
-): BaseWalletAccount[] => {
-	const connected = new Set(
-		wallets.filter((w) => w.isConnected).map((w) => w.id),
-	);
-	return accounts.filter((account) => connected.has(account.walletId));
-};
 
 const arraysEqual = (a: string[], b: string[]) =>
 	a.length === b.length && a.every((v, i) => v === b[i]);

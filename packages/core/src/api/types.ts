@@ -114,11 +114,9 @@ export type BaseWallet = {
 	 *   consumer-visible state already reflects the connect. On platforms that
 	 *   list accounts asynchronously (Ethereum `eth_accounts`), the accounts may
 	 *   arrive in a later emission. No emission shows a disconnected wallet
-	 *   still listing accounts. Until a fix tracked for 6.0.0 lands, an
-	 *   Ethereum wallet that reconnects while another connected Ethereum
-	 *   wallet's `eth_accounts` request is pending may show the accounts of its
-	 *   previous connection for as long as that request goes unanswered, and
-	 *   `connect()` may resolve on that emission. A `disconnect()` that
+	 *   still listing accounts, or a connected wallet listing the accounts of a
+	 *   previous connection. Another wallet's pending `eth_accounts` request
+	 *   never delays them. A `disconnect()` that
 	 *   completes while it waits for that state rejects it with `ABORTED`. If
 	 *   the platform's disconnect is still pending or refuses, it resolves once
 	 *   the state shows the wallet connected (today only Solana has a platform
