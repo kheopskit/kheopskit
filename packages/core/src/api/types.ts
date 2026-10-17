@@ -48,12 +48,14 @@ export type PolkadotAccountType = "sr25519" | "ed25519" | "ecdsa" | "ethereum";
 /** Options accepted by {@link BaseWallet.connect}. */
 export type ConnectOptions = {
 	/**
-	 * Ends the caller's wait. The pending promise rejects with a `KheopskitError`
-	 * of code `ABORTED`; a handle the platform hands back afterwards is released
-	 * and the wallet is neither connected nor remembered. The extension's own
-	 * prompt may stay open: nothing can withdraw it from the page. Kheopskit sets
-	 * no timeout of its own, because an extension prompt pends only while the
-	 * user has not answered it; pass `AbortSignal.timeout(ms)` to cap the wait.
+	 * Ends this caller's wait: its promise rejects with a `KheopskitError` of
+	 * code `ABORTED`. Other callers sharing the attempt keep waiting. Once no
+	 * caller waits any more, a handle the platform hands back afterwards is
+	 * released and the wallet is neither connected nor remembered. The
+	 * extension's own prompt may stay open: nothing can withdraw it from the
+	 * page. Kheopskit sets no timeout of its own, because an extension prompt
+	 * pends only while the user has not answered it; pass
+	 * `AbortSignal.timeout(ms)` to cap the wait.
 	 */
 	signal?: AbortSignal;
 };
@@ -74,16 +76,24 @@ export type BaseWallet = {
 	 * Connects the wallet.
 	 *
 	 * - **Shared in flight.** Concurrent calls on one wallet share a single
-	 *   pending promise and the platform is asked once. An abort through any
-	 *   sharer's `signal`, a `disconnect()` call, or the teardown of the last
-	 *   `kheopskit$` subscriber rejects every sharer with code `ABORTED`.
+	 *   platform attempt and the platform is asked once. Each call gets its own
+	 *   promise: aborting a caller's `signal` rejects only that caller with code
+	 *   `ABORTED`. The attempt itself is abandoned only when every caller that
+	 *   passed a signal has aborted and no caller without one joined, when
+	 *   `disconnect()` is called, or when the last `kheopskit$` subscriber
+	 *   unsubscribes; those reject every remaining caller with `ABORTED`.
 	 * - **Idempotent.** On a connected wallet it resolves at once without
 	 *   touching the platform.
 	 * - **Abortable.** See {@link ConnectOptions.signal}. There is no default
 	 *   timeout.
 	 * - **Settles with the state.** It resolves only after `kheopskit$` has
 	 *   emitted a state in which this wallet has `isConnected: true`, so the
-	 *   consumer-visible state already reflects the connect.
+	 *   consumer-visible state already reflects the connect. On platforms that
+	 *   list accounts asynchronously (Ethereum `eth_accounts`), the accounts may
+	 *   arrive in a later emission. A `disconnect()` call made while it waits
+	 *   for that state rejects it with `ABORTED`. Once the last `kheopskit$`
+	 *   subscriber has unsubscribed, a call on a wallet object from that
+	 *   subscription rejects with `ABORTED` without asking the platform.
 	 * - **Typed rejections.** A platform rejection is wrapped in a
 	 *   `KheopskitError` carrying the original error as `cause` and the
 	 *   `walletId`: `USER_REJECTED` when the user refused the prompt,

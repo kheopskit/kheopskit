@@ -37,11 +37,11 @@ const installFakeExtension = () => {
 		{ address: BOB, name: "Bob", type: "sr25519" },
 	];
 	const unsubscribe = vi.fn();
-	let onAccountsChanged: ((accounts: typeof accounts) => void) | undefined;
+	let onAccountsChanged: ((next: typeof accounts) => void) | undefined;
 	const injected = {
 		accounts: {
 			get: async () => accounts,
-			subscribe: (listener: (accounts: typeof accounts) => void) => {
+			subscribe: (listener: (next: typeof accounts) => void) => {
 				onAccountsChanged = listener;
 				return unsubscribe;
 			},

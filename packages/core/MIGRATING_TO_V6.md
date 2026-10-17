@@ -46,9 +46,10 @@ This guide grows with each v6 change. Each section covers one area.
 
 ### New codes
 
-- `ABORTED`: the pending `connect()` was abandoned. Its `signal` fired,
-  `disconnect()` was called while it pended, or the last `kheopskit$`
-  subscriber unsubscribed.
+- `ABORTED`: this `connect()` call was abandoned. Its `signal` fired,
+  `disconnect()` was called while it pended, the last `kheopskit$` subscriber
+  unsubscribed, or the wallet object came from a subscription that had
+  already ended.
 - `USER_REJECTED`: the user refused the wallet prompt. `cause` holds the
   platform error: an EIP-1193 error with `code: 4001` on Ethereum; on
   Polkadot the extension's own `Error`, for Talisman
@@ -79,9 +80,12 @@ try {
 
 ### New semantics
 
-- **One pending promise per wallet.** Concurrent `connect()` calls share it
-  and the platform is asked once. An abort through any sharer's `signal`
-  rejects every sharer.
+- **One platform attempt per wallet.** Concurrent `connect()` calls share it
+  and the platform is asked once. Each call still gets its own promise: an
+  abort through a caller's `signal` rejects that caller only. The attempt is
+  abandoned once every caller that passed a signal has aborted and no caller
+  without one joined, on `disconnect()`, or when the last `kheopskit$`
+  subscriber unsubscribes; those reject every remaining caller `ABORTED`.
 - **Resolution follows the state.** `connect()` resolves only after
   `kheopskit$` has emitted a state in which the wallet has
   `isConnected: true`; `disconnect()` after one with `isConnected: false`.
@@ -90,11 +94,18 @@ try {
   `isConnected`, not the account list.
 - **No default timeout.** A Polkadot extension prompt pends until the user
   answers it. Pass `AbortSignal.timeout(ms)` to cap the wait. Aborting ends
-  your wait; it cannot close the extension's own prompt. A handle the
-  extension returns afterwards is released, and the wallet is neither
-  connected nor remembered.
+  your wait; it cannot close the extension's own prompt. Once no caller waits
+  any more, a handle the extension returns afterwards is released, and the
+  wallet is neither connected nor remembered.
 - **`disconnect()` during a pending `connect()`** aborts the connect (its
-  promise rejects `ABORTED`) and resolves. It never waits for the prompt.
+  promise rejects `ABORTED`) and resolves. It never waits for the prompt. The
+  same holds when the connect has been granted by the platform and is still
+  waiting for `kheopskit$` to show it. In the other direction, `connect()`
+  resolves a `disconnect()` still waiting for the state, since that disconnect
+  did complete.
+- **Wallet objects are stable.** An emission that only changes accounts keeps
+  the same wallet object, with the same `connect` and `disconnect` functions,
+  so effects and memos keyed on them do not re-run.
 - **WalletConnect is unchanged.** The connector's `connect()` opens the modal
   and resolves once it is open; `isConnected` follows when the user approves.
 - **No throttle on the stream.** `throttleTime(16)` is replaced by a microtask
