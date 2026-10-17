@@ -18,7 +18,9 @@ import {
 	type FC,
 	Fragment,
 	type PropsWithChildren,
+	type ReactNode,
 	StrictMode,
+	useLayoutEffect,
 	useRef,
 } from "react";
 import { firstValueFrom, type Subscription } from "rxjs";
@@ -74,20 +76,23 @@ describe("useConnect", () => {
 				</>
 			);
 		};
-		const view = render(
+		const app = (children?: ReactNode) => (
 			<Wrapper>
 				<instance.KheopskitProvider>
 					<ConnectButton walletId={fake.walletId} />
+					{children}
 				</instance.KheopskitProvider>
-			</Wrapper>,
+			</Wrapper>
 		);
+		const view = render(app());
+		const renderInside = (children?: ReactNode) => view.rerender(app(children));
 		const settle = () => act(() => vi.advanceTimersByTimeAsync(5000));
 		await settle();
 		const walletStatus = () =>
 			latest?.wallets.find((wallet) => wallet.id === fake.walletId)?.status;
 		const remembered = async () =>
 			(await firstValueFrom(store.observable)).remembered ?? [];
-		return { view, outcomes, settle, walletStatus, remembered };
+		return { view, outcomes, settle, walletStatus, remembered, renderInside };
 	};
 
 	it("resolves a completed connect once the component renders it connected", async () => {
@@ -155,6 +160,72 @@ describe("useConnect", () => {
 			outcomes: ["resolved:connecting"],
 			status: "disconnected",
 			remembered: [],
+		});
+	});
+
+	const ConnectOnMount = ({ outcomes }: { outcomes: string[] }) => {
+		const { connect } = useConnect(fake.walletId);
+		useLayoutEffect(() => {
+			connect().then(
+				() => outcomes.push("resolved"),
+				(error: KheopskitError) => outcomes.push(`rejected:${error.code}`),
+			);
+		}, [connect, outcomes]);
+		return null;
+	};
+
+	it.each([
+		["", Fragment, ["resolved"]],
+		[" under StrictMode", StrictMode, ["resolved", "resolved"]],
+	])(
+		"aborts a connect started from a layout effect when the component unmounts%s",
+		async (_, Wrapper, expectedOutcomes) => {
+			const { settle, walletStatus, remembered, renderInside } = await setup(
+				"hold",
+				Wrapper,
+			);
+			const outcomes: string[] = [];
+
+			renderInside(<ConnectOnMount outcomes={outcomes} />);
+			await settle();
+			const statusBeforeUnmount = walletStatus();
+			renderInside();
+			await settle();
+			fake.resolveEnable();
+			await settle();
+
+			expect({
+				statusBeforeUnmount,
+				outcomes,
+				status: walletStatus(),
+				remembered: await remembered(),
+			}).toEqual({
+				statusBeforeUnmount: "connecting",
+				outcomes: expectedOutcomes,
+				status: "disconnected",
+				remembered: [],
+			});
+		},
+	);
+
+	it("connects from a layout effect under StrictMode", async () => {
+		const { settle, walletStatus, remembered, renderInside } = await setup(
+			"resolve",
+			StrictMode,
+		);
+		const outcomes: string[] = [];
+
+		renderInside(<ConnectOnMount outcomes={outcomes} />);
+		await settle();
+
+		expect({
+			outcomes,
+			status: walletStatus(),
+			remembered: await remembered(),
+		}).toEqual({
+			outcomes: ["resolved", "resolved"],
+			status: "connected",
+			remembered: ["polkadot:talisman"],
 		});
 	});
 
