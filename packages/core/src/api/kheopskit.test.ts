@@ -30,6 +30,7 @@ const { injected, walletConnect } = vi.hoisted(() => ({
 
 vi.mock("polkadot-api/pjs-signer", () => ({
 	getInjectedExtensions: () => injected.names,
+	getTxCreatorFromPjs: (address: string) => ({ address }),
 }));
 
 vi.mock("./wallets", () => ({
@@ -455,17 +456,21 @@ describe("getKheopskit$ placeholders", () => {
 		"5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
 		"5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
 	];
-	const extension = {
-		name: "talisman",
-		getAccounts: () =>
-			addresses.map((address) => ({
-				address,
-				type: "sr25519",
-				txCreator: { address },
-			})),
+	const injectedAccounts = addresses.map((address) => ({
+		address,
+		type: "sr25519" as const,
+	}));
+	const extensionListing = (accounts: {
+		get: () => Promise<typeof injectedAccounts>;
+		subscribe: (
+			callback: (list: typeof injectedAccounts) => void,
+		) => () => void;
+	}) => ({ accounts, signer: { signPayload: vi.fn(), signRaw: vi.fn() } });
+	const extension = extensionListing({
+		get: async () => injectedAccounts,
 		subscribe: () => () => {},
-		disconnect: vi.fn(),
-	};
+	});
+	const enable = vi.fn<() => Promise<unknown>>();
 
 	const seedStore = (isConnected: boolean) => {
 		const store = createKheopskitStore();
@@ -507,19 +512,15 @@ describe("getKheopskit$ placeholders", () => {
 		state?.wallets.find((w) => w.id === walletId);
 
 	const enableAfter = (ms: number) =>
-		vi
-			.mocked(connectInjectedExtension)
-			.mockImplementation(
-				() =>
-					new Promise((resolve) =>
-						setTimeout(() => resolve(extension as never), ms),
-					),
-			);
+		enable.mockImplementation(
+			() => new Promise((resolve) => setTimeout(() => resolve(extension), ms)),
+		);
 
 	beforeEach(async () => {
 		localStorage.clear();
 		vi.useFakeTimers();
-		vi.mocked(connectInjectedExtension).mockReset();
+		enable.mockReset();
+		window.injectedWeb3 = { talisman: { enable } } as never;
 		walletConnect.connector$ = new BehaviorSubject<WalletConnectWallet | null>(
 			null,
 		);
@@ -539,6 +540,7 @@ describe("getKheopskit$ placeholders", () => {
 		vi.useRealTimers();
 		vi.mocked(getWallets$).mockImplementation(() => of([]));
 		vi.mocked(getAccounts$).mockImplementation(() => of([]));
+		delete window.injectedWeb3;
 	});
 
 	describe("with the wallet injected", () => {
@@ -604,23 +606,14 @@ describe("getKheopskit$ placeholders", () => {
 		});
 
 		it("live accounts identical to their placeholders emit before hydration ends", async () => {
-			vi.mocked(connectInjectedExtension).mockImplementation(
-				async () =>
-					({
-						...extension,
-						getAccounts: () => [],
-						subscribe: (
-							callback: (
-								accounts: ReturnType<typeof extension.getAccounts>,
-							) => void,
-						) => {
-							const timeout = setTimeout(
-								() => callback(extension.getAccounts()),
-								200,
-							);
-							return () => clearTimeout(timeout);
-						},
-					}) as never,
+			enable.mockImplementation(async () =>
+				extensionListing({
+					get: async () => [],
+					subscribe: (callback) => {
+						const timeout = setTimeout(() => callback(injectedAccounts), 200);
+						return () => clearTimeout(timeout);
+					},
+				}),
 			);
 			const states = record(seedStore(true));
 			await vi.advanceTimersByTimeAsync(4000);
@@ -661,14 +654,14 @@ describe("getKheopskit$ placeholders", () => {
 				settledIn = states.at(-1);
 			});
 			await vi.advanceTimersByTimeAsync(200);
-			expect(connectInjectedExtension).not.toHaveBeenCalled();
+			expect(enable).not.toHaveBeenCalled();
 
 			injected.names = ["talisman"];
 			await fireLoad();
 			await vi.advanceTimersByTimeAsync(200);
 			await connecting;
 
-			expect(connectInjectedExtension).toHaveBeenCalledTimes(1);
+			expect(enable).toHaveBeenCalledTimes(1);
 			expect(walletIn(settledIn)).toMatchObject({
 				isPlaceholder: false,
 				status: "connected",
@@ -698,7 +691,7 @@ describe("getKheopskit$ placeholders", () => {
 			injected.names = ["talisman"];
 			await fireLoad();
 			await vi.advanceTimersByTimeAsync(200);
-			expect(connectInjectedExtension).not.toHaveBeenCalled();
+			expect(enable).not.toHaveBeenCalled();
 		});
 
 		it("rejects WALLET_PENDING when hydration ends without the wallet", async () => {
@@ -716,7 +709,7 @@ describe("getKheopskit$ placeholders", () => {
 
 			expect(await result).toMatchObject({ code: "WALLET_PENDING", walletId });
 			expect(rejectedIn?.isHydrating).toBe(false);
-			expect(connectInjectedExtension).not.toHaveBeenCalled();
+			expect(enable).not.toHaveBeenCalled();
 		});
 
 		it("rejects ABORTED without connecting when the consumer unsubscribes as the wallet goes live", async () => {

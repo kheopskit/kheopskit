@@ -331,7 +331,7 @@ describe("getPolkadotAccounts$", () => {
 			const [account] = await firstValueFrom(
 				getPolkadotAccounts$(of([wallet]), ["sr25519"]),
 			);
-			if (!account) throw new Error("no account");
+			if (!account || account.isPlaceholder) throw new Error("no account");
 
 			await expect(account.signRaw(data, options)).resolves.toBe("0xabcd");
 			expect(extension.signer.signRaw).toHaveBeenCalledTimes(1);
@@ -510,7 +510,7 @@ describe("getPolkadotAccounts$", () => {
 			const [account] = await firstValueFrom(
 				getPolkadotAccounts$(of([wallet]), ["sr25519"]),
 			);
-			if (!account) throw new Error("no account");
+			if (!account || account.isPlaceholder) throw new Error("no account");
 
 			await expect(account.signRaw("hello")).resolves.toBe("0xabcd");
 			expect(provider.client.request).toHaveBeenCalledWith({
