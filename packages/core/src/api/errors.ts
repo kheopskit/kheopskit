@@ -22,7 +22,8 @@ export type KheopskitErrorCode =
 	/**
 	 * `connect()` was called on a placeholder wallet restored from the cache:
 	 * on `kheopskit$`, hydration ended without kheopskit discovering that
-	 * wallet; on `getHydratedSnapshot`, always.
+	 * wallet; on `getHydratedSnapshot` and the React provider's initial
+	 * snapshot, always.
 	 */
 	| "WALLET_PENDING"
 	/** The wallet does not advertise a capability kheopskit needs to proceed. */

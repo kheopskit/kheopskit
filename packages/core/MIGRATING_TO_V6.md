@@ -329,11 +329,10 @@ if (account.isPlaceholder) return;
 await account.txCreator.signBytes(bytes);
 ```
 
-`"txCreator" in account` narrows too. A placeholder wallet is never connected
-(`isConnected: false`). A cached wallet that kheopskit has already discovered is
-not a placeholder: it carries its live handle and shows `status: "connecting"`
-while its reconnect is pending. Its cached accounts stay placeholders until the
-live accounts replace them.
+A placeholder wallet is never connected (`isConnected: false`). A cached wallet
+that kheopskit has already discovered is not a placeholder: it carries its live
+handle and shows `status: "connecting"` while its reconnect is pending. Its
+cached accounts stay placeholders until the live accounts replace them.
 
 Plugins never set the flag: kheopskit sets it on every item it emits, so a
 custom plugin's wallet and account types type it as `isPlaceholder?: false`.

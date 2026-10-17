@@ -77,7 +77,9 @@ A placeholder wallet's `connect()` waits for kheopskit to discover the live
 wallet and connects that one. It rejects with `WALLET_PENDING` if hydration
 ends first, and with `ABORTED` if its `signal` fires while it waits. Its
 `disconnect()` resolves at once. No item is a placeholder once `isHydrating`
-is `false`.
+is `false`. In React, the provider's initial snapshot, shown until the first
+stream emission, has no stream to wait on, so a placeholder's `connect()` from
+it rejects with `WALLET_PENDING` at once.
 
 `wallet.connect()` and `wallet.disconnect()` are safe to call straight from UI
 code. Concurrent `connect()` calls on one wallet share one platform attempt, so
