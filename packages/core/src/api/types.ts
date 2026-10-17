@@ -381,9 +381,10 @@ export type KheopskitConfig<
 	/**
 	 * Minimum time in milliseconds the cached placeholders are shown after a
 	 * reload, so the wallet list does not flash while extensions inject and
-	 * remembered wallets reconnect. Hydration goes on past it until discovery
-	 * and the remembered reconnects settled, and never past
-	 * {@link KheopskitConfig.hydrationTimeout}, which wins when it is shorter.
+	 * remembered wallets reconnect. Hydration goes on past it until the rule
+	 * documented on {@link KheopskitConfig.hydrationTimeout} ends it, and that
+	 * timeout wins over a longer grace period. The old cap of six times this
+	 * value is gone, so an app that raises it sets `hydrationTimeout` as well.
 	 *
 	 * `0` disables placeholders: `isHydrating` is `false` from the first
 	 * emission.
@@ -394,14 +395,27 @@ export type KheopskitConfig<
 	/**
 	 * Upper bound in milliseconds on {@link KheopskitState.isHydrating}.
 	 *
-	 * Hydration ends as soon as the grace period elapsed, discovery settled
-	 * ({@link KheopskitState.isDiscovering} is `false`) and every cached
-	 * connected wallet the reconnect rule accepts is settled: connected with
-	 * its accounts read, failed with `error` set, disconnected with no attempt
-	 * due, or absent from the discovered wallets. When this elapses first,
-	 * hydration ends anyway and a wallet whose reconnect is still pending
-	 * stays `connecting`. A prompt the extension opens for a revoked site
-	 * holds hydration until the user answers or this elapses.
+	 * `isHydrating` turns `false` once `hydrationGracePeriod` has elapsed,
+	 * discovery has ended ({@link KheopskitState.isDiscovering} is `false`),
+	 * and every wallet that hydrated as `connecting` has settled. A wallet has
+	 * settled when it is absent from the discovered wallets, connected with at
+	 * least one live account or with no cached accounts, disconnected with
+	 * `error` set, or disconnected and not remembered when hydration began. At
+	 * `hydrationTimeout` hydration ends whatever is pending, and a wallet whose
+	 * reconnect is still pending stays `connecting`.
+	 *
+	 * - Discovery ends only after the page fires `load`, so a page with a cache
+	 *   hydrates until `load` even when no wallet reconnects.
+	 * - A wallet that reconnects without sharing any account with the site
+	 *   holds hydration, and shows its cached accounts, until
+	 *   `hydrationTimeout`.
+	 * - A failed reconnect ends that wallet's wait. A later automatic retry
+	 *   shows on the live wallet's `status`, not as a placeholder.
+	 * - A remembered wallet the user disconnects during or right after its
+	 *   reconnect holds hydration, and shows its cached accounts, until
+	 *   `hydrationTimeout`.
+	 * - A prompt the extension opens for a revoked site holds hydration until
+	 *   the user answers or `hydrationTimeout` elapses.
 	 *
 	 * @default 3000
 	 */

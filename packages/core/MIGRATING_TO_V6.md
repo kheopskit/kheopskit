@@ -27,7 +27,7 @@ This guide grows with each v6 change. Each section covers one area.
 | Refused prompt | the extension's plain `Error` | `KheopskitError` `USER_REJECTED` with `cause` |
 | Other connect failure | platform error passed through | `KheopskitError` `CONNECT_FAILED` with `cause` |
 | When `connect()` resolves | when the platform call returned | after `kheopskit$` emitted the wallet with `isConnected: true`; accounts a platform lists asynchronously (Ethereum `eth_accounts`) may follow in a later emission |
-| Hydration end | `isHydrating` stays `true` until every cached connected wallet reconnected, capped at six times the grace period | `isHydrating` ends when the grace period elapsed, discovery settled and every remembered wallet settled, capped by `hydrationTimeout` (default 3000 ms) |
+| Hydration end | `isHydrating` stays `true` until every cached connected wallet reconnected, capped at six times the grace period | `isHydrating` ends once the grace period has elapsed, discovery has ended and every wallet that hydrated as `connecting` has settled, or at `hydrationTimeout` (default 3000 ms) |
 | Cache during a slow reconnect | a reconnect slower than the persistence debounce wrote `isConnected: false` and no accounts | a wallet still `connecting` keeps its previous cached entry and accounts |
 | Intermediate emissions | a wallet could show connected with the previous connection's accounts for one frame | a synchronous burst is one emission; no emission shows a disconnected wallet still listing accounts. Until a fix tracked for 6.0.0 lands, an Ethereum wallet that reconnects while another connected Ethereum wallet's `eth_accounts` request is pending may show the accounts of its previous connection for as long as that request goes unanswered, and `connect()` may resolve on that emission. |
 
@@ -310,26 +310,38 @@ so the snapshot applies the same reconnect rule as the live stream.
 hydrationTimeout: number // default 3000
 ```
 
-The upper bound in milliseconds on `isHydrating`. It replaces the implicit cap
-of six times `hydrationGracePeriod`. `hydrationGracePeriod` is now only the
-minimum time placeholders are shown; `0` still disables them.
+The upper bound in milliseconds on `isHydrating`. `hydrationGracePeriod` is now
+only the minimum time placeholders are shown; `0` still disables them.
+`hydrationTimeout` replaces the old cap of six times `hydrationGracePeriod` and
+wins over a longer grace period, so an app that raised `hydrationGracePeriod`
+sets `hydrationTimeout` as well. To keep the old cap, set it to six times the
+grace period.
 
 ### New end rule
 
-`isHydrating` turns `false` as soon as all of these hold: the grace period
-elapsed, `isDiscovering` is `false`, and every cached connected wallet the
-reconnect rule accepts is settled. A wallet is settled when it is connected
-with its accounts read, failed with `error` set, no longer remembered, or
-absent from the discovered wallets. When `hydrationTimeout` elapses first,
-hydration ends anyway; a reconnect still pending goes on past hydration end
-with `status: "connecting"` visible.
+`isHydrating` turns `false` once `hydrationGracePeriod` has elapsed, discovery
+has ended (`isDiscovering` is `false`), and every wallet that hydrated as
+`connecting` has settled. A wallet has settled when it is absent from the
+discovered wallets, connected with at least one live account or with no cached
+accounts, disconnected with `error` set, or disconnected and not remembered
+when hydration began. At `hydrationTimeout` hydration ends whatever is pending,
+and a wallet whose reconnect is still pending stays `connecting`.
 
-In practice: with the extension removed, hydration ends at the grace period
-(500 ms by default) instead of 3 s. With `autoReconnect: false` it ends at the
-grace period. A remembered wallet whose site authorisation was revoked opens a
-prompt on reload; `isHydrating` then stays `true` until the user answers or
-`hydrationTimeout` elapses, once. After a refusal the wallet is forgotten and
-the next reload shows no prompt and hydrates at the grace period.
+- Discovery ends only after the page fires `load`, so a page with a cache
+  hydrates until `load` even when no wallet reconnects.
+- A wallet that reconnects without sharing any account with the site holds
+  hydration, and shows its cached accounts, until `hydrationTimeout`.
+- A failed reconnect ends that wallet's wait. A later automatic retry shows on
+  the live wallet's `status`, not as a placeholder.
+- A remembered wallet the user disconnects during or right after its reconnect
+  holds hydration, and shows its cached accounts, until `hydrationTimeout`.
+- A prompt the extension opens for a revoked site holds hydration until the
+  user answers or `hydrationTimeout` elapses. After a refusal the wallet is
+  forgotten, so the next load opens no prompt.
+
+In practice, with the extension removed or with `autoReconnect: false`,
+hydration ends once the grace period has elapsed and the page has loaded,
+instead of at 3 s.
 
 ### Persistence guarantee
 
