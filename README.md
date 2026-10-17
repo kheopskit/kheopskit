@@ -302,3 +302,78 @@ function RootComponent() {
 **Cookie attributes**: Kheopskit uses `SameSite=Lax`, `Secure` (on HTTPS), `path=/`, and 1-year expiry.
 
 **Cookie size limit (compact format)**: Cookie storage uses a compact JSON schema to stay under the ~4KB limit. As a rule of thumb, with 6 connected wallets you can fit about 30-40 accounts when most accounts do not include a name. If many accounts have names, expect closer to 25-30. When the cookie grows too large, browsers may reject it.
+
+## Testing
+
+`@kheopskit/core/testing` provides a fake Polkadot extension, an in-memory
+storage and helpers to seed a previous session, for vitest or jest. A test that
+checks a remembered wallet reconnects:
+
+```ts
+import {
+  createKheopskitStore,
+  getKheopskit$,
+  type KheopskitState,
+  type KheopskitStore,
+} from "@kheopskit/core";
+import { polkadot } from "@kheopskit/core/polkadot";
+import {
+  cachedAccountOf,
+  cachedWalletOf,
+  createFakePolkadotExtension,
+  createMemoryStorage,
+  type FakePolkadotExtension,
+} from "@kheopskit/core/testing";
+import type { Subscription } from "rxjs";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+
+const alice = {
+  address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+  name: "Alice",
+  type: "sr25519" as const,
+};
+
+let talisman: FakePolkadotExtension;
+let store: KheopskitStore;
+let subscription: Subscription;
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  talisman = createFakePolkadotExtension({ name: "talisman", accounts: [alice] });
+  store = createKheopskitStore({ storage: createMemoryStorage() });
+});
+
+afterEach(() => {
+  talisman.uninstall();
+  subscription.unsubscribe();
+  store.destroy();
+  vi.useRealTimers();
+});
+
+it("reconnects the wallet the user connected last time", async () => {
+  const wallet = cachedWalletOf(talisman.walletId, "Talisman");
+  store.rememberWallet(talisman.walletId);
+  store.setCachedState([wallet], [cachedAccountOf(wallet, alice.address, alice.name)]);
+
+  let state: KheopskitState | undefined;
+  subscription = getKheopskit$({ platforms: [polkadot()] }, { store }).subscribe(
+    (next) => {
+      state = next;
+    },
+  );
+  await vi.advanceTimersByTimeAsync(1000);
+
+  expect(talisman.enableCalls()).toHaveLength(1);
+  expect(state?.wallets.map((w) => [w.id, w.isConnected])).toEqual([
+    ["polkadot:talisman", true],
+  ]);
+  expect(state?.accounts.map((a) => a.name)).toEqual(["Alice"]);
+});
+```
+
+
+The `afterEach` above is the whole teardown. `uninstall()` removes the fake,
+unsubscribing stops kheopskit's timers, and `destroy()` ends the store's storage
+subscription. With fake timers, use the async `advanceTimersByTimeAsync` so the
+promises between timers run. See the
+[core README](packages/core/README.md#testing) for the full API.
