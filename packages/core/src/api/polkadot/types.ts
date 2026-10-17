@@ -19,6 +19,8 @@ export type PolkadotInjectedWallet = {
 	extension: InjectedExtension | undefined;
 	name: string;
 	icon: string;
+	status: BaseWallet["status"];
+	error?: BaseWallet["error"];
 	isConnected: boolean;
 	connect: BaseWallet["connect"];
 	disconnect: BaseWallet["disconnect"];

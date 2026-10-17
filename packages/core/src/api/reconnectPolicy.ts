@@ -1,38 +1,42 @@
+import type { BaseWallet, KheopskitConfig } from "./types";
+
 /**
  * Bookkeeping for wallet auto-reconnect attempts.
  *
- * Tracks wallets currently reconnecting (to avoid duplicate concurrent
- * attempts) and those already reconnected (so we don't fight a later manual
- * disconnect). A failed attempt is retried when the wallet next re-emits
- * (e.g. a late-injecting extension that isn't ready on first sight), but only
- * up to `maxAttempts`: a wallet whose connect() keeps rejecting (a permission
- * permanently denied, a buggy provider) must not be re-attempted on every
- * wallets$ emission — the stream re-emits frequently (polkadot polling,
- * mipd/wallet-standard register events).
+ * One attempt runs per wallet at a time, a wallet that reconnected is left
+ * alone (so a later manual disconnect is not fought), a wallet the user refused
+ * is never asked again in this subscription, and a wallet whose connect keeps
+ * failing (a permission permanently denied, a buggy provider) is retried on
+ * later emissions only up to `maxAttempts`.
  */
 export type ReconnectPolicyOptions = {
 	/** @default 3 */
 	maxAttempts?: number;
 };
 
+type ReconnectAttemptState =
+	| { kind: "pending" }
+	| { kind: "reconnected" }
+	| { kind: "refused" }
+	| { kind: "failed"; attempts: number };
+
 export const createReconnectPolicy = ({
 	maxAttempts = 3,
 }: ReconnectPolicyOptions = {}) => {
-	const reconnecting = new Set<string>();
-	const reconnected = new Set<string>();
-	const failedAttempts = new Map<string, number>();
+	const states = new Map<string, ReconnectAttemptState>();
 
-	const shouldAttempt = (walletId: string): boolean =>
-		!reconnecting.has(walletId) &&
-		!reconnected.has(walletId) &&
-		(failedAttempts.get(walletId) ?? 0) < maxAttempts;
+	const shouldAttempt = (walletId: string): boolean => {
+		const state = states.get(walletId);
+		if (!state) return true;
+		return state.kind === "failed" && state.attempts < maxAttempts;
+	};
 
 	/**
 	 * Runs `connect` under the policy. Resolves `false` without connecting when
-	 * an attempt is already in flight, the wallet already reconnected, or it
-	 * exhausted its attempts; resolves `true` on success. A rejection from
-	 * `connect` is recorded as a failed attempt and rethrown for the caller to
-	 * report.
+	 * an attempt is already in flight, the wallet already reconnected, the user
+	 * refused it, or it exhausted its attempts; resolves `true` on success. A
+	 * rejection from `connect` is recorded as a failed attempt and rethrown for
+	 * the caller to report.
 	 */
 	const attempt = async (
 		walletId: string,
@@ -40,19 +44,33 @@ export const createReconnectPolicy = ({
 	): Promise<boolean> => {
 		if (!shouldAttempt(walletId)) return false;
 
-		reconnecting.add(walletId);
+		const before = states.get(walletId);
+		states.set(walletId, { kind: "pending" });
 		try {
 			await connect();
-			reconnected.add(walletId);
-			failedAttempts.delete(walletId);
+			states.set(walletId, { kind: "reconnected" });
 			return true;
 		} catch (err) {
-			failedAttempts.set(walletId, (failedAttempts.get(walletId) ?? 0) + 1);
+			const attempts = before?.kind === "failed" ? before.attempts + 1 : 1;
+			states.set(walletId, { kind: "failed", attempts });
 			throw err;
-		} finally {
-			reconnecting.delete(walletId);
 		}
 	};
 
-	return { shouldAttempt, attempt };
+	/** Marks a wallet the user refused: no later emission re-attempts it. */
+	const refuse = (walletId: string) => {
+		states.set(walletId, { kind: "refused" });
+	};
+
+	return { shouldAttempt, attempt, refuse };
 };
+
+/**
+ * The reconnect rule as one function, so the first-frame placeholder and the
+ * live attempt evaluate the same `autoReconnect` the same way.
+ */
+export const reconnectAccepts = (
+	autoReconnect: KheopskitConfig["autoReconnect"],
+	wallet: BaseWallet,
+): boolean =>
+	typeof autoReconnect === "function" ? autoReconnect(wallet) : autoReconnect;

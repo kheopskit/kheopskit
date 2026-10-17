@@ -7,16 +7,16 @@ import {
 	shareReplay,
 } from "rxjs";
 import type { WalletId } from "../utils/WalletId";
-import { abortedError, toConnectError } from "./errors";
+import { abortedError, type KheopskitError, toConnectError } from "./errors";
 import type { KheopskitStore } from "./store";
-import type { BaseWallet, ConnectOptions } from "./types";
+import type { BaseWallet, ConnectOptions, WalletStatus } from "./types";
 
 /**
  * Compare two wallet arrays by their relevant properties (not functions).
  * Shared by every platform's injected-wallets stream.
  */
 const walletsEqual = <
-	W extends Pick<BaseWallet, "id" | "isConnected" | "name">,
+	W extends Pick<BaseWallet, "id" | "status" | "error" | "name">,
 >(
 	a: W[],
 	b: W[],
@@ -25,7 +25,8 @@ const walletsEqual = <
 	return a.every(
 		(w, i) =>
 			w.id === b[i]?.id &&
-			w.isConnected === b[i]?.isConnected &&
+			w.status === b[i]?.status &&
+			w.error === b[i]?.error &&
 			w.name === b[i]?.name,
 	);
 };
@@ -75,6 +76,8 @@ export type InjectedWalletsAdapter<
 		walletId: WalletId;
 		/** Live connection handle; `undefined` while disconnected. */
 		handle: THandle | undefined;
+		status: WalletStatus;
+		error: KheopskitError | undefined;
 		isConnected: boolean;
 		connect: (options?: ConnectOptions) => Promise<void>;
 		disconnect: () => Promise<void>;
@@ -92,7 +95,8 @@ type Connecting = {
 
 type Connection<THandle> =
 	| Connecting
-	| { status: "connected"; handle: THandle; disconnecting?: Promise<void> };
+	| { status: "connected"; handle: THandle; disconnecting?: Promise<void> }
+	| { status: "disconnected"; error: KheopskitError };
 
 const join = (
 	connecting: Connecting,
@@ -180,14 +184,16 @@ export const createInjectedWallets$ = <
 					(error) => {
 						connecting.answered = true;
 						if (controller.signal.aborted) return;
-						setConnection(walletId, undefined);
-						reject(
-							toConnectError(
-								error,
-								walletId,
-								adapter.isUserRejection ?? (() => false),
-							),
+						const connectError = toConnectError(
+							error,
+							walletId,
+							adapter.isUserRejection ?? (() => false),
 						);
+						setConnection(walletId, {
+							status: "disconnected",
+							error: connectError,
+						});
+						reject(connectError);
 					},
 				);
 			});
@@ -250,7 +256,8 @@ export const createInjectedWallets$ = <
 
 		const disconnect = (source: TSource, walletId: WalletId): Promise<void> => {
 			const current = connections$.value.get(walletId);
-			if (!current) return Promise.resolve();
+			if (!current || current.status === "disconnected")
+				return Promise.resolve();
 			if (current.status === "connecting") {
 				current.abort();
 				return Promise.resolve();
@@ -291,6 +298,11 @@ export const createInjectedWallets$ = <
 							source,
 							walletId,
 							handle: connected?.handle,
+							status: connection?.status ?? "disconnected",
+							error:
+								connection?.status === "disconnected"
+									? connection.error
+									: undefined,
 							isConnected: connected !== undefined,
 							connect: (options) => connect(source, walletId, options),
 							disconnect: () => disconnect(source, walletId),

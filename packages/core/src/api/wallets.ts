@@ -1,5 +1,6 @@
 import {
 	combineLatest,
+	distinctUntilChanged,
 	filter,
 	map,
 	mergeMap,
@@ -10,7 +11,8 @@ import {
 } from "rxjs";
 import { sortWallets } from "../utils/sortWallets";
 import { getWalletConnectWallet$ } from "./appKit";
-import { createReconnectPolicy } from "./reconnectPolicy";
+import { KheopskitError } from "./errors";
+import { createReconnectPolicy, reconnectAccepts } from "./reconnectPolicy";
 import type { KheopskitStore } from "./store";
 import type {
 	BaseWallet,
@@ -18,6 +20,7 @@ import type {
 	PlatformContext,
 	WalletConnectWallet,
 } from "./types";
+import { isInjectedWallet } from "./types";
 
 export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 	// lock the list of wallets to auto reconnect on first call
@@ -54,21 +57,40 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 
 		const reconnectPolicy = createReconnectPolicy();
 
-		const subAutoReconnect = combineLatest([wallets$, rememberedWalletIds$])
+		const reconnect = async (wallet: BaseWallet) => {
+			try {
+				await reconnectPolicy.attempt(wallet.id, () => wallet.connect());
+			} catch (err) {
+				if (err instanceof KheopskitError && err.code === "USER_REJECTED") {
+					store.forgetWallet(wallet.id);
+					reconnectPolicy.refuse(wallet.id);
+				}
+				if (config.debug)
+					console.debug("[kheopskit] reconnect of %s failed", wallet.id, err);
+			}
+		};
+
+		const subAutoReconnect = combineLatest([
+			wallets$.pipe(distinctUntilChanged(sameDiscovery)),
+			rememberedWalletIds$,
+		])
 			.pipe(
-				filter(([, walletIds]) => config.autoReconnect && !!walletIds?.length),
+				filter(
+					([, walletIds]) =>
+						config.autoReconnect !== false && walletIds.length > 0,
+				),
 				mergeMap(([wallets, walletIds]) =>
-					wallets.filter((wallet) => walletIds?.includes(wallet.id)),
+					wallets
+						.filter(isInjectedWallet)
+						.filter((wallet) => walletIds.includes(wallet.id)),
+				),
+				filter(
+					(wallet) =>
+						wallet.status === "disconnected" &&
+						reconnectAccepts(config.autoReconnect, wallet),
 				),
 			)
-			.subscribe(async (wallet) => {
-				if (wallet.isConnected) return;
-				try {
-					await reconnectPolicy.attempt(wallet.id, () => wallet.connect());
-				} catch (err) {
-					console.error("Failed to reconnect wallet %s", wallet.id, { err });
-				}
-			});
+			.subscribe(reconnect);
 
 		const subWallets = wallets$.subscribe(subscriber);
 
@@ -78,3 +100,20 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 		};
 	}).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
 };
+
+/**
+ * A reconnect is re-attempted when discovery changes (a wallet appears, is
+ * renamed, connects or disconnects), not when an attempt's own `connecting`
+ * or `error` transition re-emits the list.
+ */
+const sameDiscovery = (
+	a: (BaseWallet | WalletConnectWallet)[],
+	b: (BaseWallet | WalletConnectWallet)[],
+): boolean =>
+	a.length === b.length &&
+	a.every(
+		(w, i) =>
+			w.id === b[i]?.id &&
+			w.isConnected === b[i]?.isConnected &&
+			w.name === b[i]?.name,
+	);

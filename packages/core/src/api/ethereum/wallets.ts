@@ -58,6 +58,8 @@ export const getEthereumWallets$ = (store: KheopskitStore) =>
 		buildWallet: ({
 			source: pd,
 			walletId,
+			status,
+			error,
 			isConnected,
 			connect,
 			disconnect,
@@ -68,6 +70,8 @@ export const getEthereumWallets$ = (store: KheopskitStore) =>
 			name: pd.info.name,
 			icon: pd.info.icon,
 			provider: pd.provider as EIP1193Provider,
+			status,
+			error,
 			isConnected,
 			sourceId: pd.info.rdns,
 			connect,

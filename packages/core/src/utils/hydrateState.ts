@@ -65,7 +65,8 @@ export const hydrateWallet = (
 			platforms: [],
 			name: cached.name,
 			icon: "",
-			isConnected: cached.isConnected,
+			status: cached.isConnected ? "connecting" : "disconnected",
+			isConnected: false,
 			connect: throwPending,
 			disconnect: throwPending,
 		} as unknown as WalletConnectWallet;
@@ -79,7 +80,8 @@ export const hydrateWallet = (
 		type: cached.type,
 		name: cached.name,
 		icon: lookupWalletIcon(platform, identifier),
-		isConnected: cached.isConnected,
+		status: cached.isConnected ? "connecting" : "disconnected",
+		isConnected: false,
 		connect: throwPending,
 		disconnect: throwPending,
 	};

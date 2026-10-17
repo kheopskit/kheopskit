@@ -80,7 +80,7 @@ export const getKheopskit$ = <
 
 	// Get cached state for hydration (same snapshot the React provider builds)
 	const { wallets: cachedWallets, accounts: cachedAccounts } =
-		getHydratedSnapshot(store, kc.platforms, { icons: true });
+		getHydratedSnapshot(store, kc, { icons: true });
 
 	if (kc.debug && cachedWallets.length > 0) {
 		console.debug("[kheopskit] hydrating from cache:", {
@@ -94,6 +94,9 @@ export const getKheopskit$ = <
 		let closed = false;
 		const waiters = new Set<StateWaiter>();
 		const wrapped = new WeakMap<BaseWallet, BaseWallet>();
+		// Wallets whose live stream has reported a connect attempt (or its
+		// failure): from then on their placeholder stops bridging `connecting`.
+		const attempted = new Set<WalletId>();
 
 		const isConnectedIn = (state: KheopskitState, walletId: WalletId) =>
 			state.wallets.some((w) => w.id === walletId && w.isConnected);
@@ -160,25 +163,35 @@ export const getKheopskit$ = <
 			liveWallets$,
 			kc.hydrationGracePeriod,
 			(w) => w.id,
-			// Hydration converges when all cached-connected wallets are connected in live
+			// Hydration converges when every placeholder still reconnecting is connected in live
 			(liveWallets, cached) => {
-				const cachedConnectedIds = new Set(
-					cached.filter((w) => w.isConnected).map((w) => w.id),
+				const reconnectingIds = new Set(
+					cached.filter((w) => w.status === "connecting").map((w) => w.id),
 				);
-				if (cachedConnectedIds.size === 0) return true;
-				return [...cachedConnectedIds].every((id) =>
+				if (reconnectingIds.size === 0) return true;
+				return [...reconnectingIds].every((id) =>
 					liveWallets.some((w) => w.id === id && w.isConnected),
 				);
 			},
-			// Merge: prefer cached isConnected state but get icon from cache or live
-			(live, cached) => ({
-				...cached,
-				// Priority: cached icon > localStorage cache > live icon
-				icon: cached.icon || getCachedIcon(cached.id) || live.icon,
-				// Use live wallet's connect/disconnect functions
-				connect: live.connect,
-				disconnect: live.disconnect,
-			}),
+			(live, cached) => {
+				if (live.status !== "disconnected" || live.error)
+					attempted.add(live.id);
+				const status =
+					cached.status === "connecting" && !attempted.has(live.id)
+						? "connecting"
+						: live.status;
+				return {
+					...cached,
+					status,
+					isConnected: status === "connected",
+					error: live.error,
+					// Priority: cached icon > localStorage cache > live icon
+					icon: cached.icon || getCachedIcon(cached.id) || live.icon,
+					// Use live wallet's connect/disconnect functions
+					connect: live.connect,
+					disconnect: live.disconnect,
+				};
+			},
 			// Transform cached-only items: add icon from localStorage cache
 			(cached) => ({
 				...cached,
@@ -403,7 +416,7 @@ const walletPersistKey = (wallet: BaseWallet | WalletConnectWallet): string =>
  * connect without isConnected flipping).
  */
 const walletUiKey = (wallet: BaseWallet | WalletConnectWallet): string =>
-	`${walletPersistKey(wallet)}|${wallet.icon}|${walletPlatforms(wallet)}`;
+	`${walletPersistKey(wallet)}|${wallet.status}|${wallet.error?.code ?? ""}|${wallet.icon}|${walletPlatforms(wallet)}`;
 
 /**
  * Equality check for KheopskitState to prevent unnecessary emissions. Compares
