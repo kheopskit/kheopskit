@@ -295,11 +295,9 @@ export const createInjectedWallets$ = <
 			return disconnecting;
 		};
 
-		const sub = combineLatest([
-			adapter.sources$.pipe(tap(abortConnectsOfSourcesThatLeft)),
-			connections$,
-		])
+		const sub = combineLatest([adapter.sources$, connections$])
 			.pipe(
+				tap(([sources]) => abortConnectsOfSourcesThatLeft(sources)),
 				map(([sources, connections]) =>
 					sources.map((source): TWallet => {
 						const walletId = adapter.getWalletId(source);
