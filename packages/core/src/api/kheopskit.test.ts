@@ -798,6 +798,27 @@ describe("getKheopskit$ hydration end", () => {
 			});
 		});
 
+		it("a reconnect that fails after a kept write is written live", async () => {
+			enableRejectsAfter("talisman", 2500, new Error("boom"));
+			const store = createKheopskitStore();
+			cacheConnected(store, talisman, cachedTalismanAccounts);
+			const calls = writes(store);
+			const states = subscribe({ hydrationGracePeriod: 0 }, store);
+
+			await vi.advanceTimersByTimeAsync(2499);
+			expect(calls.at(-1)).toEqual({
+				wallets: [{ id: talisman, isConnected: true }],
+				accounts: cachedTalismanAccounts.map(cached),
+			});
+
+			await vi.advanceTimersByTimeAsync(1 + 1000);
+			expect(walletIn(states, talisman)?.error?.code).toBe("CONNECT_FAILED");
+			expect(calls.at(-1)).toEqual({
+				wallets: [{ id: talisman, isConnected: false }],
+				accounts: [],
+			});
+		});
+
 		it("a wallet the user connects while another reconnect is still pending is persisted", async () => {
 			injected.names = ["talisman", "subwallet-js"];
 			enableNeverAnswers("talisman");
