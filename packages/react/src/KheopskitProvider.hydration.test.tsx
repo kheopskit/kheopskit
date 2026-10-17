@@ -319,7 +319,7 @@ describe("KheopskitProvider snapshots under an autoReconnect predicate", () => {
 		const ssrCookies = `kheopskit=${encodeURIComponent(JSON.stringify(cachedState))}`;
 		// biome-ignore lint/suspicious/noDocumentCookie: necessary for test setup
 		document.cookie = ssrCookies;
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(cachedState));
+		seedCache(cachedState.cachedWallets, cachedState.cachedAccounts);
 		const withCookies = (
 			<KheopskitProvider config={config} ssrCookies={ssrCookies}>
 				<WalletsConsumer />

@@ -199,9 +199,10 @@ describe("createFakePolkadotExtension", () => {
 		const [wallet] = await firstValueFrom(wallets$);
 		await wallet?.connect();
 		const [account] = await firstValueFrom(accounts$);
+		if (!account || account.isPlaceholder) throw new Error("no account");
 
 		await expect(
-			account?.signRaw(new Uint8Array([1, 255]), { type: "bytes" }),
+			account.signRaw(new Uint8Array([1, 255]), { type: "bytes" }),
 		).resolves.toBe(FAKE_SIGNATURE);
 		expect(fake.signRawCalls()).toEqual([
 			{ address: alice.address, data: "0x01ff", type: "bytes" },
