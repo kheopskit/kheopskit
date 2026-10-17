@@ -116,7 +116,7 @@ export type BaseWallet = {
 	 * surface or retry. Once the last `kheopskit$` subscriber has unsubscribed,
 	 * a call on a wallet object from that subscription rejects with `ABORTED`
 	 * without asking the platform and without changing the remembered list. A
-	 * `disconnect()` started before that point still completes: the wallet was
+	 * `disconnect()` started before that point still settles: the wallet was
 	 * forgotten when it was called, and nothing else is written once the
 	 * subscription has ended.
 	 */
