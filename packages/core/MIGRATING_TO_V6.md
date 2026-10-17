@@ -2,11 +2,8 @@
 
 v6 tightens the wallet connection contract. `connect()` and `disconnect()` are
 safe to call from UI code, rejections are typed, and no emission of the state
-stream shows a disconnected wallet still listing accounts. Until a fix tracked
-for 6.0.0 lands, an Ethereum wallet that reconnects while another connected
-Ethereum wallet's `eth_accounts` request is pending may show the accounts of
-its previous connection for as long as that request goes unanswered, and
-`connect()` may resolve on that emission. v6 also renames the store's
+stream shows a disconnected wallet still listing accounts or a connected wallet
+listing the accounts of a previous connection. v6 also renames the store's
 remembered list, keeps the extension's account order, and changes how the
 Polkadot plugin talks to an extension: kheopskit calls `enable()` itself, keeps
 the raw object the extension returns, and exposes raw signing on every account.
@@ -30,7 +27,8 @@ This guide grows with each v6 change. Each section covers one area.
 | Refused prompt | the extension's plain `Error` | `KheopskitError` `USER_REJECTED` with `cause` |
 | Other connect failure | platform error passed through | `KheopskitError` `CONNECT_FAILED` with `cause` |
 | When `connect()` resolves | when the platform call returned | after `kheopskit$` emitted the wallet with `isConnected: true`; accounts a platform lists asynchronously (Ethereum `eth_accounts`) may follow in a later emission |
-| Intermediate emissions | a wallet could show connected with the previous connection's accounts for one frame | a synchronous burst is one emission; no emission shows a disconnected wallet still listing accounts. Until a fix tracked for 6.0.0 lands, an Ethereum wallet that reconnects while another connected Ethereum wallet's `eth_accounts` request is pending may show the accounts of its previous connection for as long as that request goes unanswered, and `connect()` may resolve on that emission. |
+| Intermediate emissions | a wallet could show connected with the previous connection's accounts for one frame | a synchronous burst is one emission; no emission shows a disconnected wallet still listing accounts or a connected wallet listing a previous connection's accounts |
+| Account streams | one read per platform, re-run for every wallet of the platform whenever any wallet changes | one stream per wallet connection, started empty; a sibling's connect or disconnect leaves it alone and its pending request delays nobody |
 | `wallet.extension` on a Polkadot wallet | pjs-signer's `InjectedExtension` (`getAccounts`, `subscribe`, `disconnect`) | the raw `enable()` result, typed `PolkadotInjected` (`accounts`, `signer`) |
 | Raw signing | `txCreator.signBytes(bytes)` only, hex with `type: "bytes"` | plus `account.signRaw(data, { type? })`, text or bytes |
 | `ethereum` accounts | signer built with type `ethereum`, 64-byte mock signature | signer built with `ecdsa`, 65-byte mock signature |
@@ -110,11 +108,8 @@ try {
   authorised wallet may share zero accounts, and on platforms that list
   accounts asynchronously (Ethereum `eth_accounts`) the accounts may arrive in
   a later emission. What holds for every emission is that none shows a
-  disconnected wallet still listing accounts. Until a fix tracked for 6.0.0
-  lands, an Ethereum wallet that reconnects while another connected Ethereum
-  wallet's `eth_accounts` request is pending may show the accounts of its
-  previous connection for as long as that request goes unanswered, and
-  `connect()` may resolve on that emission.
+  disconnected wallet still listing accounts or a connected wallet listing the
+  accounts of a previous connection.
 - **No default timeout.** A Polkadot extension prompt pends until the user
   answers it. Pass `AbortSignal.timeout(ms)` to cap your wait for the platform's
   answer. The wait for the state after a grant is not capped. Aborting ends
@@ -154,16 +149,22 @@ try {
   and resolves once it is open; `isConnected` follows when the user approves.
 - **No throttle on the stream.** `throttleTime(16)` is replaced by a microtask
   coalesce: a synchronous burst (wallets, then accounts) becomes one emission,
-  so no emission shows a disconnected wallet still listing accounts. Until a
-  fix tracked for 6.0.0 lands, an Ethereum wallet that reconnects while another
-  connected Ethereum wallet's `eth_accounts` request is pending may show the
-  accounts of its previous connection for as long as that request goes
-  unanswered, and `connect()` may resolve on that emission. A wallet's
+  so no emission shows a disconnected wallet still listing accounts. A wallet's
   accounts leave the state in the same emission that shows it disconnected,
-  even while another wallet's accounts are being re-read. Accounts a platform
-  lists asynchronously (Ethereum `eth_accounts`) may arrive in a later
+  even while another wallet's `eth_accounts` request is pending. Accounts a
+  platform lists asynchronously (Ethereum `eth_accounts`) may arrive in a later
   emission. The first emission can arrive one microtask after subscribe.
   `KheopskitProvider` still paints the cached snapshot synchronously.
+- **One account stream per wallet connection.** v5 read every wallet of a
+  platform together and re-read them all whenever any wallet connected or
+  disconnected, so one wallet's slow `eth_accounts` held back the others, a
+  reconnecting wallet could show the accounts of its previous connection until
+  a sibling answered, and `connect()` could resolve on that emission. v6 starts
+  one stream per wallet when it connects, empty, and ends it when the wallet
+  disconnects. No emission shows a connected wallet listing a previous
+  connection's accounts, a sibling's pending request delays nobody, a sibling's
+  connect or disconnect neither re-reads nor resubscribes a wallet's accounts,
+  and a Polkadot extension's `accounts.subscribe` runs once per connection.
 
 ### What to delete in your app
 
