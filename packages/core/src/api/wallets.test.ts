@@ -354,7 +354,9 @@ describe("getWallets$ auto-reconnect", () => {
 			: Promise.resolve("none");
 		await flush();
 		expect(attempts).toHaveLength(1);
-		answer(attempts[0]);
+		const [attempt] = attempts;
+		if (!attempt) throw new Error("no pending attempt");
+		answer(attempt);
 		await flush();
 
 		sources$.next([{ id: walletA }, { id: walletB }]);
