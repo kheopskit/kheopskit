@@ -39,8 +39,6 @@ const walletsEqual = <
  * @typeParam TSource - a wallet as the platform's registry reports it
  * @typeParam TWallet - the platform's wallet type
  * @typeParam THandle - live connection handle retained while connected
- *   (Polkadot keeps the `PolkadotInjected` object `enable()` returned;
- *   platforms with no handle use void)
  */
 export type InjectedWalletsAdapter<
 	TSource,
@@ -52,9 +50,8 @@ export type InjectedWalletsAdapter<
 	/** Stable wallet id for a registry entry. */
 	getWalletId: (source: TSource) => WalletId;
 	/**
-	 * Platform connect call (e.g. `injectedWeb3[name].enable(appName)`,
-	 * `eth_requestAccounts`, `standard:connect`). The resolved value is retained
-	 * as the wallet's live handle until disconnect.
+	 * Platform connect call. The resolved value is retained as the wallet's
+	 * live handle until disconnect.
 	 */
 	connect: (source: TSource, walletId: WalletId) => Promise<THandle>;
 	/**

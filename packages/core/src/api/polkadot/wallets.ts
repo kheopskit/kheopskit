@@ -13,8 +13,11 @@ import type { KheopskitStore } from "../store";
 import type { KheopskitConfig } from "../types";
 import type { PolkadotInjected, PolkadotInjectedWallet } from "./types";
 
-type EnableResult = Omit<PolkadotInjected, "signer"> & {
+type EnableResult = {
+	accounts: Partial<PolkadotInjected["accounts"]>;
 	signer: Partial<PolkadotInjected["signer"]>;
+	metadata?: unknown;
+	provider?: unknown;
 };
 
 type InjectedWeb3Window = {

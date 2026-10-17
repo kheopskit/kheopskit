@@ -29,11 +29,9 @@ export type PolkadotInjectedAccount = {
 
 /**
  * The object `window.injectedWeb3[id].enable(appName)` resolved to, typed
- * structurally (pjs-signer does not export its type). `connect()` rejects an
- * extension whose result lacks any of `accounts.get`, `accounts.subscribe`,
- * `signer.signPayload` or `signer.signRaw`, so a connected wallet's handle
- * always has them. `metadata` and `provider` are the optional members of
- * `@polkadot/extension-inject`'s `Injected`, left untyped here.
+ * structurally (pjs-signer does not export its type). `metadata` and
+ * `provider` are the optional members of `@polkadot/extension-inject`'s
+ * `Injected`, left untyped here.
  */
 export type PolkadotInjected = {
 	accounts: {
