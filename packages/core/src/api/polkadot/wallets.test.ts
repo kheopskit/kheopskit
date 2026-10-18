@@ -420,3 +420,121 @@ describe("polkadot wallet discovery", () => {
 		expect(reads).toBe(readsAtUnsubscribe);
 	});
 });
+
+describe("polkadot connect retried while the first enable() pends", () => {
+	const walletOf = async () => {
+		const plugin = polkadot();
+		const store = createKheopskitStore({ storage: createMemoryStorage() });
+		const wallets$ = plugin.getWallets$({
+			store,
+			config: resolveConfig({ appName: "test", platforms: [plugin] }),
+		});
+		const subscription = wallets$.subscribe();
+		const [wallet] = await firstValueFrom(wallets$);
+		if (!wallet) throw new Error("no wallet");
+		const remembered = async () =>
+			(await firstValueFrom(store.observable)).remembered ?? [];
+		const isConnected = async () =>
+			(await firstValueFrom(wallets$))[0]?.isConnected;
+		return { wallet, subscription, remembered, isConnected };
+	};
+
+	const abandonFirstConnect = async (
+		wallet: Awaited<ReturnType<typeof walletOf>>["wallet"],
+	) => {
+		const controller = new AbortController();
+		const first = wallet.connect({ signal: controller.signal });
+		controller.abort();
+		await expect(first).rejects.toMatchObject({ code: "ABORTED" });
+	};
+
+	it("joins the pending enable() and connects when the first prompt is approved", async () => {
+		const fake = install({ name: "test-extension", enable: "hold" });
+		const { wallet, subscription, remembered, isConnected } = await walletOf();
+
+		await abandonFirstConnect(wallet);
+		const retry = wallet.connect();
+		fake.resolveEnable();
+		await retry;
+
+		expect(fake.enableCalls()).toHaveLength(1);
+		expect(await isConnected()).toBe(true);
+		expect(await remembered()).toEqual([fake.walletId]);
+		subscription.unsubscribe();
+	});
+
+	it("joins the pending enable() and stays disconnected when the first prompt is rejected", async () => {
+		const fake = install({ name: "test-extension", enable: "hold" });
+		const { wallet, subscription, remembered, isConnected } = await walletOf();
+
+		await abandonFirstConnect(wallet);
+		const retry = wallet.connect();
+		fake.rejectEnable();
+
+		await expect(retry).rejects.toMatchObject({ code: "USER_REJECTED" });
+		expect(fake.enableCalls()).toHaveLength(1);
+		expect(await isConnected()).toBe(false);
+		expect(await remembered()).toEqual([]);
+		subscription.unsubscribe();
+	});
+
+	it("joins the pending enable() after a disconnect() while it pends", async () => {
+		const fake = install({ name: "test-extension", enable: "hold" });
+		const { wallet, subscription, isConnected } = await walletOf();
+
+		const first = wallet.connect();
+		await wallet.disconnect();
+		await expect(first).rejects.toMatchObject({ code: "ABORTED" });
+		const retry = wallet.connect();
+		fake.resolveEnable();
+		await retry;
+
+		expect(fake.enableCalls()).toHaveLength(1);
+		expect(await isConnected()).toBe(true);
+		subscription.unsubscribe();
+	});
+
+	it("does not read Talisman's accounts before its first prompt is approved", async () => {
+		let authorised = false;
+		let approve: () => void = () => {};
+		const handle = {
+			accounts: {
+				get: async () => {
+					if (!authorised)
+						throw new Error(
+							"Site http://localhost:3000 has not been authorised for Talisman yet",
+						);
+					return [];
+				},
+				subscribe: () => () => {},
+			},
+			signer: { signPayload: vi.fn(), signRaw: vi.fn() },
+		};
+		let prompts = 0;
+		window.injectedWeb3 = {
+			"test-extension": {
+				enable: () =>
+					prompts++ === 0
+						? new Promise<typeof handle>((resolve) => {
+								approve = () => {
+									authorised = true;
+									resolve(handle);
+								};
+							})
+						: Promise.resolve(handle),
+			},
+		};
+		const { wallet, subscription, isConnected } = await walletOf();
+
+		await abandonFirstConnect(wallet);
+		const retry = wallet.connect();
+		for (let i = 0; i < 30; i++) await Promise.resolve();
+		approve();
+		await retry;
+
+		expect(prompts).toBe(1);
+		expect(await isConnected()).toBe(true);
+		subscription.unsubscribe();
+		delete window.injectedWeb3;
+	});
+});
