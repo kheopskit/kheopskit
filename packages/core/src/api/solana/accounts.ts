@@ -43,6 +43,7 @@ const getInjectedWalletAccounts$ = (
 						signer: createInjectedSolanaSigner(standardWallet, account, chain),
 						getSigner: (c) =>
 							createInjectedSolanaSigner(standardWallet, account, c),
+						name: account.label,
 						walletName: wallet.name,
 						walletId: wallet.id,
 					}),

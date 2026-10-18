@@ -201,7 +201,11 @@ export type BaseWalletAccount = {
 	platform: WalletPlatform;
 	/** Base58 (Solana), SS58 (Polkadot) or 0x-hex (Ethereum) address. */
 	address: string;
-	/** Friendly account name, when the wallet exposes one (e.g. Polkadot). */
+	/**
+	 * Friendly account name, when the wallet exposes one: the extension's
+	 * account name on Polkadot, the Wallet Standard `label` on Solana. Always
+	 * `undefined` on Ethereum.
+	 */
 	name?: string;
 	/** `name` of the wallet that lists the account. */
 	walletName: string;

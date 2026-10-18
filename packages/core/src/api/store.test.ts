@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createKheopskitStore } from "../api/store";
+import { hydrateAccount, serializeAccount } from "../utils/hydrateState";
 import { parseCookie, type SyncableStorage } from "../utils/storage";
+import type { WalletAccountId } from "../utils/WalletAccountId";
 import type { WalletId } from "../utils/WalletId";
 import type { KheopskitStoreData } from "./types";
 
@@ -266,6 +268,42 @@ describe("createKheopskitStore", () => {
 
 			expect(cached.accounts).toHaveLength(1);
 			expect(cached.accounts[0]?.polkadotAccountType).toBe("ethereum");
+		});
+
+		it("restores a solana account name through compact cookie storage", () => {
+			const kstore = createKheopskitStore({ ssrCookies: "" });
+			kstore.setCachedState(
+				[
+					{
+						id: "solana:Phantom" as WalletId,
+						platform: "solana",
+						type: "injected",
+						name: "Phantom",
+						isConnected: true,
+					},
+				],
+				[
+					serializeAccount({
+						id: "solana:Phantom::So11111111111111111111111111111111111111112" as WalletAccountId,
+						platform: "solana",
+						address: "So11111111111111111111111111111111111111112",
+						name: "Account 1",
+						walletId: "solana:Phantom" as WalletId,
+						walletName: "Phantom",
+					}),
+				],
+			);
+
+			const kstoreReloaded = createKheopskitStore({
+				ssrCookies: document.cookie,
+			});
+			const accounts = kstoreReloaded
+				.getCachedState()
+				.accounts.map(hydrateAccount);
+
+			expect(accounts.map((a) => [a.platform, a.name])).toEqual([
+				["solana", "Account 1"],
+			]);
 		});
 
 		it("reads legacy compact account entries without polkadotAccountType", () => {
