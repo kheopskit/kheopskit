@@ -438,7 +438,7 @@ describe("KheopskitProvider hydration end", () => {
 		vi.useRealTimers();
 	});
 
-	it("isHydrating ends without a reconnect when autoReconnect is false", async () => {
+	it("isHydrating ends without a reconnect when autoReconnect is false, once discovery ends with the wallet absent", async () => {
 		const store = createKheopskitStore();
 		const talisman = cachedWalletOf("polkadot:talisman", "Talisman");
 		store.rememberWallet(talisman.id);
@@ -458,7 +458,7 @@ describe("KheopskitProvider hydration end", () => {
 			</KheopskitProvider>,
 		);
 
-		await act(() => vi.advanceTimersByTimeAsync(499));
+		await act(() => vi.advanceTimersByTimeAsync(1099));
 		expect(screen.getByTestId("is-hydrating")).toHaveTextContent("true");
 		expect(screen.getByTestId("wallet-status")).toHaveTextContent(
 			"polkadot:talisman:disconnected:false",

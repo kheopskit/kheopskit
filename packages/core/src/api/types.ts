@@ -343,6 +343,13 @@ export type WalletConnectPlugin = {
 export type PlatformContext = {
 	store: KheopskitStore;
 	config: KheopskitConfig;
+	/**
+	 * Moments to re-read a registry that has no announce event. Emits at
+	 * subscribe and on a tail restarted at window `load`, and completes when
+	 * discovery ends, at which point {@link KheopskitState.isDiscovering} turns
+	 * `false`.
+	 */
+	registryReads$?: Observable<void>;
 };
 
 /**
@@ -478,19 +485,21 @@ export type KheopskitConfig<
 	/**
 	 * Upper bound in milliseconds on {@link KheopskitState.isHydrating}.
 	 *
-	 * `isHydrating` turns `false` once `hydrationGracePeriod` has elapsed,
-	 * discovery has ended ({@link KheopskitState.isDiscovering} is `false`),
-	 * and every wallet that hydrated as `connecting` has settled. A wallet has
-	 * settled when it is absent from the discovered wallets, connected once its
-	 * account list has been read (an empty list counts) or connected with no
-	 * cached accounts, disconnected with `error` set, or disconnected and not
-	 * remembered when hydration began. At `hydrationTimeout` hydration ends
-	 * whatever is pending, and a wallet whose reconnect is still pending stays
-	 * `connecting`.
+	 * `isHydrating` turns `false` once `hydrationGracePeriod` has elapsed and
+	 * every cached wallet has settled. A cached wallet missing from the
+	 * discovered wallets settles when discovery ends
+	 * ({@link KheopskitState.isDiscovering} is `false`). A discovered one
+	 * settles at once unless it hydrated as `connecting`. Then it settles when
+	 * connected once its account list has been read (an empty list counts) or
+	 * connected with no cached accounts, disconnected with `error` set, or
+	 * disconnected and not remembered when hydration began. At
+	 * `hydrationTimeout` hydration ends whatever is pending, and a wallet whose
+	 * reconnect is still pending stays `connecting`.
 	 *
-	 * - Discovery ends only after the page fires `load`, so a page with a cache
-	 *   hydrates until `load` or `hydrationTimeout`, whichever comes first,
-	 *   even when no wallet reconnects.
+	 * - When every cached wallet is discovered and settled, hydration ends at
+	 *   the grace period, without waiting for `load`. A cached wallet that has
+	 *   not appeared holds hydration until discovery ends, 1100 ms after `load`
+	 *   or after subscribe, whichever is later, or until `hydrationTimeout`.
 	 * - A wallet that reconnects without sharing any account with the site
 	 *   settles as soon as it answers; its cached accounts leave the list when
 	 *   hydration ends.
@@ -569,16 +578,14 @@ export type KheopskitState<
 	/**
 	 * Whether wallet discovery may still be incomplete.
 	 *
-	 * `true` when the subscription started before `document.readyState` was
-	 * `"complete"`. It turns `false` in the first emission after `window` fired
-	 * `load` and the Polkadot registry (`window.injectedWeb3`) was read again,
-	 * so that emission already lists every extension injected by `load`. When the
-	 * subscription starts after `load`, it is `false` from the first emission.
-	 * Always `true` on the server.
+	 * `true` until the Polkadot registry (`window.injectedWeb3`) read window
+	 * ends, 1100 ms after `load` or after subscribe, whichever is later. The
+	 * emission that turns it `false` lists every Polkadot extension injected
+	 * by then. A wallet that injects later is not listed until the next
+	 * subscription. Always `true` on the server.
 	 *
-	 * This rests on wallets injecting `injectedWeb3` before `load`. It says
-	 * nothing about wallets that inject after `load`. Ethereum (EIP-6963) and
-	 * Solana (Wallet Standard) registries are event-driven and need no re-read.
+	 * Ethereum (EIP-6963) and Solana (Wallet Standard) registries are
+	 * event-driven and need no re-read.
 	 */
 	isDiscovering: boolean;
 };

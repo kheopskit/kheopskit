@@ -89,7 +89,7 @@ describe("isDiscovering turns false only once no scheduled registry read remains
 		fireLoad();
 		await vi.advanceTimersByTimeAsync(50);
 		injectTalisman();
-		await vi.advanceTimersByTimeAsync(1_000);
+		await vi.advanceTimersByTimeAsync(2_000);
 
 		expect(frames.at(-1)?.wallets).toEqual([TALISMAN]);
 		expect(firstSettledFrame()).toMatchObject({ wallets: [TALISMAN] });
@@ -104,9 +104,23 @@ describe("isDiscovering turns false only once no scheduled registry read remains
 		expect(frames.at(-1)?.wallets).toEqual([TALISMAN]);
 		expect(firstSettledFrame()).toMatchObject({ wallets: [TALISMAN] });
 	});
+
+	it("subscribed before load, injected just before the load + 1100 ms read", async () => {
+		subscribe("interactive");
+		await vi.advanceTimersByTimeAsync(1_500);
+		fireLoad();
+		await vi.advanceTimersByTimeAsync(1_099);
+		injectTalisman();
+		await vi.advanceTimersByTimeAsync(1_000);
+
+		expect(firstSettledFrame()).toMatchObject({
+			at: 2_600,
+			wallets: [TALISMAN],
+		});
+	});
 });
 
-describe("a wallet injected after the last scheduled read is still listed", () => {
+describe("the registry is read until 1100 ms after load or subscribe, whichever is later", () => {
 	it("subscribed at 0, load at 1500 ms, injected at 1700 ms", async () => {
 		subscribe("interactive");
 		await vi.advanceTimersByTimeAsync(1_500);
@@ -118,13 +132,21 @@ describe("a wallet injected after the last scheduled read is still listed", () =
 		expect(frames.at(-1)?.wallets).toEqual([TALISMAN]);
 	});
 
-	it("subscribed after load, injected at 1200 ms", async () => {
+	it("subscribed after load, a wallet injected after the 1100 ms read is not listed", async () => {
 		subscribe("complete");
-		await vi.advanceTimersByTimeAsync(1_200);
+		await vi.advanceTimersByTimeAsync(1_100);
 		injectTalisman();
 		await vi.advanceTimersByTimeAsync(5_000);
 
-		expect(frames.at(-1)?.wallets).toEqual([TALISMAN]);
+		expect(frames.at(-1)).toMatchObject({
+			at: 1_100,
+			isDiscovering: false,
+			wallets: [],
+		});
+		expect(frames.filter((f) => f.at < 1_100).length).toBeGreaterThan(0);
+		expect(
+			frames.map((f) => ({ at: f.at, isDiscovering: f.isDiscovering })),
+		).toEqual(frames.map((f) => ({ at: f.at, isDiscovering: f.at < 1_100 })));
 	});
 
 	it("a remembered wallet injected at 1700 ms reconnects", async () => {

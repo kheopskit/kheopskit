@@ -22,7 +22,11 @@ import type {
 } from "./types";
 import { isInjectedWallet } from "./types";
 
-export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
+export const getWallets$ = (
+	config: KheopskitConfig,
+	store: KheopskitStore,
+	registryReads$?: Observable<void>,
+) => {
 	// lock the list of wallets to auto reconnect on first call
 	const rememberedWalletIds$ = store.observable.pipe(
 		map((s) => s.remembered ?? []),
@@ -31,7 +35,7 @@ export const getWallets$ = (config: KheopskitConfig, store: KheopskitStore) => {
 	);
 
 	return new Observable<(BaseWallet | WalletConnectWallet)[]>((subscriber) => {
-		const ctx: PlatformContext = { config, store };
+		const ctx: PlatformContext = { config, store, registryReads$ };
 		const observables = config.platforms.map((plugin) =>
 			plugin.getWallets$(ctx),
 		);
