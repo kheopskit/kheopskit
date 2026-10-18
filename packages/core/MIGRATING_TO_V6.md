@@ -64,7 +64,8 @@ Each section ends with the app code it makes redundant. In short:
   read window now runs until 1100 ms after `load` or after subscribe,
   whichever is later. Wait for `isDiscovering` to turn `false` (section 8).
 - Connect dedup wrappers, such as a `requestOnce` or `connectOnce` map keyed by
-  wallet id (section 1).
+  wallet id (section 1). An app that calls `connect()` in reaction to state
+  must then skip a wallet whose `error.code` is `USER_REJECTED`.
 - `auditTime(20)` or `debounceTime(20)` placed after `kheopskit$` to skip the
   stale intermediate state (section 1).
 - Refusal detection by `error.name === "Error"` or by message text. Branch on
@@ -154,7 +155,9 @@ try {
   no caller without one joined, on `disconnect()`, or when the last `kheopskit$`
   subscriber unsubscribes; those reject every remaining caller `ABORTED`.
 - **Resolution follows the state.** `connect()` resolves once `kheopskit$` has
-  emitted a state in which the wallet has `isConnected: true`. `disconnect()`
+  emitted a state in which the wallet has `isConnected: true`. An injected
+  wallet's refused or failed `connect()` rejects after `kheopskit$` has
+  emitted the wallet `disconnected` with that `error`. `disconnect()`
   first waits for the platform's disconnect, when the platform has one, then
   resolves once a state shows `isConnected: false`, or once a later
   `connect()`, the wallet leaving the list or the end of the subscription
@@ -240,7 +243,12 @@ try {
 ### What to delete in your app
 
 - Dedup wrappers around `connect()`, such as a `requestOnce` or `connectOnce`
-  map keyed by wallet id.
+  map keyed by wallet id. Kheopskit shares only concurrent calls. A refused
+  attempt has ended when its `USER_REJECTED` state is emitted, so a
+  `connect()` made in reaction to that state asks the extension again. An app
+  that connects from state skips a wallet whose `error.code` is
+  `USER_REJECTED`. The map used to hide this, because its entry outlived the
+  emission.
 - `auditTime(20)` or `debounceTime(20)` placed after `kheopskit$` to skip the
   stale intermediate state.
 - Treating `WALLET_ALREADY_CONNECTED` as success and swallowing
