@@ -71,7 +71,7 @@ const Wallets = () => {
 			))}
 			{accounts.map((account) => (
 				<p key={account.id}>
-					[{account.platform}] {account.address}
+					[{account.platform}] {account.name ?? account.address}
 				</p>
 			))}
 		</>
