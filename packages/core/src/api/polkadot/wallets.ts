@@ -80,15 +80,19 @@ const enableExtension = async (
 	return injected;
 };
 
-const connectExtension = async (identifier: string, appName: string) => {
+const connectExtension = (
+	identifier: string,
+	appName: string,
+): Promise<PolkadotInjected> => {
 	const entry = (globalThis as InjectedWeb3Window).injectedWeb3?.[identifier];
-	if (!entry) throw new Error(`Unavailable extension: "${identifier}"`);
+	if (!entry)
+		return Promise.reject(new Error(`Unavailable extension: "${identifier}"`));
 	const pending = pendingConnects.get(entry);
 	if (pending) return pending;
-	const connecting = enableExtension(identifier, entry, appName).finally(() =>
-		pendingConnects.delete(entry),
-	);
+	const connecting = enableExtension(identifier, entry, appName);
 	pendingConnects.set(entry, connecting);
+	const settle = () => pendingConnects.delete(entry);
+	connecting.then(settle, settle);
 	return connecting;
 };
 
