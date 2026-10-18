@@ -122,9 +122,7 @@ const Content = () => {
 						<SelectContent>
 							{accounts.map((account) => (
 								<SelectItem key={account.id} value={account.id}>
-									[{account.walletName}]{" "}
-									{(account.platform === "polkadot" && account.name) ||
-										account.address}
+									[{account.walletName}] {account.name || account.address}
 								</SelectItem>
 							))}
 						</SelectContent>
@@ -139,9 +137,7 @@ const Content = () => {
 						<SelectContent>
 							{accounts.map((account) => (
 								<SelectItem key={account.id} value={account.id}>
-									[{account.walletName}]{" "}
-									{(account.platform === "polkadot" && account.name) ||
-										account.address}
+									[{account.walletName}] {account.name || account.address}
 								</SelectItem>
 							))}
 						</SelectContent>
