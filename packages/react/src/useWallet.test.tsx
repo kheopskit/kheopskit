@@ -165,6 +165,7 @@ describe("useWallet and useAccount", () => {
 		expect(phases["a account renamed"]?.allWallets).toEqual([
 			"",
 			"a:disconnected,b:disconnected",
+			"a:disconnected,b:disconnected",
 			"a:disconnected,b:connecting",
 			"a:disconnected,b:connected",
 			"a:connecting,b:connected",

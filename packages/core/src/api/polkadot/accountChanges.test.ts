@@ -90,12 +90,13 @@ const start = () => {
 	return { store, emissions, subscription, wallet };
 };
 
-const untilWallets = async (emissions: KheopskitState[], count: number) => {
-	for (let i = 0; i < 50; i++) {
-		if ((emissions.at(-1)?.wallets.length ?? 0) >= count) return;
+const untilDiscovered = async (emissions: KheopskitState[], count: number) => {
+	for (let i = 0; i < 300; i++) {
+		const last = emissions.at(-1);
+		if (last && !last.isDiscovering && last.wallets.length >= count) return;
 		await tick(5);
 	}
-	throw new Error("wallets never appeared");
+	throw new Error("discovery never ended with the wallets listed");
 };
 
 const install = (a: Replay, b: Replay) => {
@@ -128,7 +129,7 @@ describe("a Polkadot account change after connect survives another wallet", () =
 		async (replay) => {
 			const { a } = install(replay, replay);
 			const h = start();
-			await untilWallets(h.emissions, 2);
+			await untilDiscovered(h.emissions, 2);
 			await h.wallet("polkadot:a").connect();
 			await tick(20);
 			a.change([ALICE]);
@@ -156,7 +157,7 @@ describe("a Polkadot account change after connect survives another wallet", () =
 		async (replay) => {
 			const { a } = install(replay, replay);
 			const h = start();
-			await untilWallets(h.emissions, 2);
+			await untilDiscovered(h.emissions, 2);
 			await h.wallet("polkadot:a").connect();
 			await tick(20);
 			a.change([ALICE, BOB, DAVE]);

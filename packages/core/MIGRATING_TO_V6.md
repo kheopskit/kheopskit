@@ -48,8 +48,8 @@ This guide grows with each v6 change. Each section covers one area.
 | Test kit | none; apps fake `injectedWeb3` themselves | `@kheopskit/core/testing` | [6](#6-test-kit) |
 | Placeholder SDK handles | typed as present, `undefined` at runtime while hydrating | absent from the placeholder type; narrow on `isPlaceholder` | [7](#7-placeholders-carry-isplaceholder) |
 | `connect()` on a placeholder | throws `PendingWalletError` | waits for the live wallet, or rejects `WALLET_PENDING` | [7](#7-placeholders-carry-isplaceholder) |
-| Hydration end | `isHydrating` stays `true` until every cached connected wallet reconnected, capped at six times the grace period | `isHydrating` ends once the grace period has elapsed, discovery has ended and every wallet that hydrated as `connecting` has settled, or at `hydrationTimeout` (default 3000 ms) | [8](#8-discovery-hydration-end-and-persistence) |
-| Discovery at page load | the Polkadot registry was read at 0, 100, 300, 600 and 1100 ms after subscribe only | read again at `load` and 100 ms later; `state.isDiscovering` says whether that read has landed | [8](#8-discovery-hydration-end-and-persistence) |
+| Hydration end | `isHydrating` stays `true` until every cached connected wallet reconnected, capped at six times the grace period | `isHydrating` ends once the grace period has elapsed and every cached wallet has settled, or at `hydrationTimeout` (default 3000 ms); a cached wallet not yet discovered settles when discovery ends | [8](#8-discovery-hydration-end-and-persistence) |
+| Discovery at page load | the Polkadot registry was read at 0, 100, 300, 600 and 1100 ms after subscribe only | read at subscribe and at `load`, then 100, 300, 600 and 1100 ms after each; `state.isDiscovering` is `true` until the last read, 1100 ms after `load` or after subscribe, whichever is later, and while a WalletConnect connector loads | [8](#8-discovery-hydration-end-and-persistence) |
 | Cache during a slow reconnect | a reconnect slower than the persistence debounce wrote `isConnected: false` and no accounts | a wallet still `connecting` keeps its previous cached entry and accounts | [8](#8-discovery-hydration-end-and-persistence) |
 | React instance and hooks | `createKheopskit` returns a provider and `useWallets`/`useAccounts`; reaching one wallet means reading the whole state; unmounting the provider leaves the pipeline running | `createKheopskit` also returns `kheopskit$` and `store`; `useWallet`, `useAccount` and `useConnect` read one item; unmounting the provider stops the pipeline | [9](#9-kheopskitreact-one-shared-instance-and-wallet-hooks) |
 
@@ -59,10 +59,13 @@ This guide grows with each v6 change. Each section covers one area.
 
 Each section ends with the app code it makes redundant. In short:
 
-- A page-load gate that waits a fixed delay before concluding that a wallet is
-  missing. Wait for `isDiscovering` to turn `false` (section 8).
+- A gate that delays subscribing until `load`, and a fixed grace after it
+  before concluding that a wallet is missing. Both are redundant, because the
+  read window now runs until 1100 ms after `load` or after subscribe,
+  whichever is later. Wait for `isDiscovering` to turn `false` (section 8).
 - Connect dedup wrappers, such as a `requestOnce` or `connectOnce` map keyed by
-  wallet id (section 1).
+  wallet id (section 1). An app that calls `connect()` in reaction to state
+  must then skip a wallet whose `error.code` is `USER_REJECTED`.
 - `auditTime(20)` or `debounceTime(20)` placed after `kheopskit$` to skip the
   stale intermediate state (section 1).
 - Refusal detection by `error.name === "Error"` or by message text. Branch on
@@ -152,7 +155,9 @@ try {
   no caller without one joined, on `disconnect()`, or when the last `kheopskit$`
   subscriber unsubscribes; those reject every remaining caller `ABORTED`.
 - **Resolution follows the state.** `connect()` resolves once `kheopskit$` has
-  emitted a state in which the wallet has `isConnected: true`. `disconnect()`
+  emitted a state in which the wallet has `isConnected: true`. An injected
+  wallet's refused or failed `connect()` rejects after `kheopskit$` has
+  emitted the wallet `disconnected` with that `error`. `disconnect()`
   first waits for the platform's disconnect, when the platform has one, then
   resolves once a state shows `isConnected: false`, or once a later
   `connect()`, the wallet leaving the list or the end of the subscription
@@ -238,7 +243,12 @@ try {
 ### What to delete in your app
 
 - Dedup wrappers around `connect()`, such as a `requestOnce` or `connectOnce`
-  map keyed by wallet id.
+  map keyed by wallet id. Kheopskit shares only concurrent calls. A refused
+  attempt has ended when its `USER_REJECTED` state is emitted, so a
+  `connect()` made in reaction to that state asks the extension again. An app
+  that connects from state skips a wallet whose `error.code` is
+  `USER_REJECTED`. The map used to hide this, because its entry outlived the
+  emission.
 - `auditTime(20)` or `debounceTime(20)` placed after `kheopskit$` to skip the
   stale intermediate state.
 - Treating `WALLET_ALREADY_CONNECTED` as success and swallowing
@@ -676,19 +686,19 @@ has no live stream behind it, `connect()` rejects `WALLET_PENDING`.
 
 ### New state field: `isDiscovering`
 
-`KheopskitState.isDiscovering` is new and required. It is `true` until the page
-has fired `load` and kheopskit has read `window.injectedWeb3` again, so the
-emission that turns it `false` already lists every Polkadot extension injected
-by then. It is `false` from the first emission when you subscribe after
-`load`, and always `true` on the server.
+`KheopskitState.isDiscovering` is new and required. It is `true` until the
+last read of `window.injectedWeb3`, 1100 ms after `load` or after subscribe,
+whichever is later, so the emission that turns it `false` already lists every
+Polkadot extension injected before that read. With `config.walletConnect`, it
+also waits for the connector to load. It is always `true` on the server.
 
-Kheopskit now reads the Polkadot registry at `load` and 100 ms after `load`, on
-top of the reads at subscribe and 100, 300, 600 and 1100 ms after it. An
-extension that injects after the 1100 ms read but before `load` is listed
-without a reload. Nothing reads the registry after the last of these reads. A
-wallet that injects after `load` is listed only when a read still runs after
-it, the one 100 ms after `load` or a subscribe read still pending, so its
-discovery is not guaranteed.
+Kheopskit reads the Polkadot registry at subscribe and 100, 300, 600 and
+1100 ms after it, as in 5.x. At `load` it starts the same schedule again, and
+drops the subscribe reads still pending. An extension that injects after the
+1100 ms read but before `load`, or up to 1100 ms after `load`, is listed
+without a reload. A wallet that injects after the last read is not listed
+until the next subscription. On the server kheopskit reads once and sets no
+timer.
 
 A state literal or test mock typed as `KheopskitState` must add the field:
 
@@ -702,8 +712,10 @@ A state literal or test mock typed as `KheopskitState` must add the field:
   };
 ```
 
-Hydration now also waits for discovery. With a cache, `isHydrating` stays
-`true` until `load` or `hydrationTimeout`, whichever comes first. A
+Hydration waits for discovery only while a cached wallet has not been
+discovered. When every cached wallet injects early, `isHydrating` ends at the
+grace period without waiting for `load`. A cached wallet that has not appeared
+holds it until discovery ends or `hydrationTimeout`, whichever comes first. A
 `hydrationGracePeriod` of `0` still turns hydration off in `kheopskit$`. Under
 `KheopskitProvider`, the first render still shows the cached placeholders with
 `isHydrating: true` until the first emission.
@@ -724,14 +736,15 @@ grace period.
 
 ### New end rule
 
-`isHydrating` turns `false` once `hydrationGracePeriod` has elapsed, discovery
-has ended (`isDiscovering` is `false`), and every wallet that hydrated as
-`connecting` has settled. A wallet has settled when it is absent from the
-discovered wallets, connected once its account list has been read (an empty
-list counts) or connected with no cached accounts, disconnected with `error`
-set, or disconnected and not remembered when hydration began. At
-`hydrationTimeout` hydration ends whatever is pending, and a wallet whose
-reconnect is still pending stays `connecting`.
+`isHydrating` turns `false` once `hydrationGracePeriod` has elapsed and every
+cached wallet has settled. A cached wallet missing from the discovered wallets
+settles when discovery ends (`isDiscovering` is `false`). A discovered one
+settles at once unless it hydrated as `connecting`. Then it settles when
+connected once its account list has been read (an empty list counts) or
+connected with no cached accounts, disconnected with `error` set, or
+disconnected and not remembered when hydration began. At `hydrationTimeout`
+hydration ends whatever is pending, and a wallet whose reconnect is still
+pending stays `connecting`.
 
 "Its account list has been read" relies on a signal the built-in plugins send.
 A custom `KheopskitPlatform` plugin, or a wrapper that pipes a built-in
@@ -739,9 +752,8 @@ plugin's `getAccounts$`, does not send it. Such a wallet settles on its first
 listed account, as in 5.x, and a reconnected wallet with cached accounts that
 now lists none holds hydration until `hydrationTimeout`.
 
-- Discovery ends only after the page fires `load`, so a page with a cache
-  hydrates until `load` or `hydrationTimeout`, whichever comes first, even
-  when no wallet reconnects.
+- When every cached wallet is discovered and settled, hydration ends at the
+  grace period, without waiting for `load`.
 - A wallet that reconnects without sharing any account with the site settles
   as soon as it answers; its cached accounts leave the list when hydration
   ends.
@@ -757,9 +769,11 @@ now lists none holds hydration until `hydrationTimeout`.
   user answers or `hydrationTimeout` elapses. After a refusal the wallet is
   forgotten, so the next load opens no prompt.
 
-In practice, with the extension removed or with `autoReconnect: false`,
-hydration no longer runs to 3 s. It ends once the grace period has elapsed and
-the page has loaded, or at `hydrationTimeout` if that comes first.
+In practice, hydration no longer runs to 3 s. With `autoReconnect: false` and
+the extension installed, it ends at the grace period. With the extension
+removed, it ends when discovery ends, 1100 ms after `load` or after subscribe,
+whichever is later (or once a WalletConnect connector has loaded, if later),
+or at `hydrationTimeout` if that comes first.
 
 ### Persistence guarantee
 

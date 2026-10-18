@@ -857,7 +857,7 @@ describe("getKheopskit$ connect semantics", () => {
 			message: `[kheopskit] connect of wallet ${engineWalletId} was aborted`,
 		});
 
-		await vi.advanceTimersByTimeAsync(500);
+		await vi.advanceTimersByTimeAsync(1_100);
 		expect(emissions.at(-1)?.isHydrating).toBe(false);
 		expect(emissions.at(-1)?.wallets).toEqual([]);
 
@@ -891,7 +891,7 @@ describe("getKheopskit$ connect semantics", () => {
 		expect(rememberedWalletIds()).toEqual([engineWalletId]);
 
 		sources$.next([]);
-		await vi.advanceTimersByTimeAsync(500);
+		await vi.advanceTimersByTimeAsync(1_100);
 		expect(emissions.at(-1)?.isHydrating).toBe(false);
 		expect(emissions.at(-1)?.wallets).toEqual([]);
 		expect(rememberedWalletIds()).toEqual([engineWalletId]);

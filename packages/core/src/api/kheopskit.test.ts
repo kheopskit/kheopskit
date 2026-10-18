@@ -143,16 +143,17 @@ describe("getKheopskit$ discovery", () => {
 		vi.useRealTimers();
 	});
 
-	it("isDiscovering is true before load and false after", async () => {
+	it("isDiscovering is true until 1100 ms after load and false after", async () => {
 		setReadyState("interactive");
 		const states = recordStates();
 
 		await vi.advanceTimersByTimeAsync(1200);
+		await fireLoad();
+		await vi.advanceTimersByTimeAsync(1099);
 		expect(states.length).toBeGreaterThan(0);
 		expect(states.map((s) => s.isDiscovering)).not.toContain(false);
 
-		await fireLoad();
-		await vi.advanceTimersByTimeAsync(20);
+		await vi.advanceTimersByTimeAsync(1);
 		expect(states.at(-1)?.isDiscovering).toBe(false);
 	});
 
@@ -163,18 +164,22 @@ describe("getKheopskit$ discovery", () => {
 		await vi.advanceTimersByTimeAsync(1200);
 		install({ name: "talisman" });
 		await fireLoad();
-		await vi.advanceTimersByTimeAsync(20);
+		await vi.advanceTimersByTimeAsync(1100);
 
 		const settled = states.find((s) => s.isDiscovering === false);
 		expect(settled?.wallets.map((w) => w.id)).toEqual(["polkadot:talisman"]);
 	});
 
-	it("isDiscovering is false from the first emission when subscribed after load", async () => {
+	it("isDiscovering is true until 1100 ms after subscribe when subscribed after load", async () => {
 		setReadyState("complete");
 		const states = recordStates();
 
-		await vi.advanceTimersByTimeAsync(20);
-		expect(states[0]?.isDiscovering).toBe(false);
+		await vi.advanceTimersByTimeAsync(1099);
+		expect(states.length).toBeGreaterThan(0);
+		expect(states.map((s) => s.isDiscovering)).not.toContain(false);
+
+		await vi.advanceTimersByTimeAsync(1);
+		expect(states.at(-1)?.isDiscovering).toBe(false);
 	});
 });
 
@@ -217,7 +222,8 @@ describe("getKheopskit$ discovery while the WalletConnect connector loads", () =
 		await vi.advanceTimersByTimeAsync(1200);
 		install({ name: "talisman" });
 		await fireLoad();
-		await vi.advanceTimersByTimeAsync(20);
+		await vi.advanceTimersByTimeAsync(1100);
+		expect(states.map((s) => s.isDiscovering)).not.toContain(false);
 		connector$.next(null);
 		await vi.advanceTimersByTimeAsync(20);
 
@@ -852,7 +858,7 @@ describe("getKheopskit$ hydration end", () => {
 		expect(fake.enableCalls()).toEqual([]);
 	});
 
-	it("hydration ends when discovery settles and the remembered wallet is absent", async () => {
+	it("hydration ends when discovery ends and the remembered wallet is absent", async () => {
 		setReadyState("interactive");
 		const store = memoryStore();
 		cacheConnected(store, talisman, cachedTalismanAccounts);
@@ -860,21 +866,55 @@ describe("getKheopskit$ hydration end", () => {
 
 		await vi.advanceTimersByTimeAsync(300);
 		await fireLoad();
-		expect(await hydratingAt(states, 199)).toBe(true);
+		expect(await hydratingAt(states, 1099)).toBe(true);
 		expect(await hydratingAt(states, 1)).toBe(false);
 		expect(states.at(-1)?.wallets).toEqual([]);
 		expect(states.at(-1)?.accounts).toEqual([]);
 	});
 
-	it("hydration ends at load when discovery settles after the grace period and the remembered wallet is absent", async () => {
-		setReadyState("interactive");
+	it("hydration ends at the grace period when it outlasts discovery and the remembered wallet is absent", async () => {
 		const store = memoryStore();
 		cacheConnected(store, talisman, cachedTalismanAccounts);
+		const states = subscribe({ hydrationGracePeriod: 1500 }, store);
+
+		expect(await hydratingAt(states, 1499)).toBe(true);
+		expect(await hydratingAt(states, 1)).toBe(false);
+	});
+
+	it("hydration ends at the grace period, before load, when the cached wallet is injected and has reconnected", async () => {
+		setReadyState("interactive");
+		install({ name: "talisman", accounts: [ALICE] });
+		const store = memoryStore();
+		cacheConnected(store, talisman, cachedTalismanAccounts);
+		const states = subscribe({ hydrationGracePeriod: 500 }, store);
+
+		expect(await hydratingAt(states, 499)).toBe(true);
+		expect(await hydratingAt(states, 1)).toBe(false);
+		expect(states.at(-1)?.isDiscovering).toBe(true);
+		expect(walletIn(states, talisman)?.status).toBe("connected");
+		expect(states.at(-1)?.accounts.map((a) => a.address)).toEqual([
+			ALICE.address,
+		]);
+	});
+
+	it("a cached disconnected wallet that never appears holds hydration until discovery ends", async () => {
+		const store = memoryStore();
+		store.setCachedState(
+			[
+				{
+					...cachedWalletOf("polkadot:subwallet-js", "SubWallet"),
+					isConnected: false,
+				},
+			],
+			[],
+		);
 		const states = subscribe({ hydrationGracePeriod: 200 }, store);
 
-		expect(await hydratingAt(states, 300)).toBe(true);
-		await fireLoad();
+		expect(await hydratingAt(states, 1099)).toBe(true);
+		expect(states.at(-1)?.isDiscovering).toBe(true);
 		expect(await hydratingAt(states, 1)).toBe(false);
+		expect(states.at(-1)?.isDiscovering).toBe(false);
+		expect(states.at(-1)?.wallets).toEqual([]);
 	});
 
 	it("hydration goes on past load while the wallet discovered at load reconnects", async () => {

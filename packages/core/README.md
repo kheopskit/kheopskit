@@ -110,6 +110,7 @@ implements them.
 ### Discovery
 
 Source: [`api/polkadot/wallets.ts`](https://github.com/kheopskit/kheopskit/blob/main/packages/core/src/api/polkadot/wallets.ts),
+[`utils/registryReads.ts`](https://github.com/kheopskit/kheopskit/blob/main/packages/core/src/utils/registryReads.ts),
 [`utils/pageLoad.ts`](https://github.com/kheopskit/kheopskit/blob/main/packages/core/src/utils/pageLoad.ts),
 [`api/kheopskit.ts`](https://github.com/kheopskit/kheopskit/blob/main/packages/core/src/api/kheopskit.ts).
 
@@ -117,16 +118,15 @@ Polkadot extensions register themselves on `window.injectedWeb3` and send no
 event, so kheopskit reads that registry on a fixed schedule:
 
 - At subscribe, then 100, 300, 600 and 1100 ms after subscribe.
-- When `window` fires `load`, and again 100 ms after `load`. A subscription
-  that starts after `load` skips these two reads.
+- When `window` fires `load`, then 100, 300, 600 and 1100 ms after `load`. The
+  subscribe reads still pending at `load` are dropped. A subscription that
+  starts after `load` has only the subscribe reads.
 
-Nothing reads the registry after the last of these reads. A wallet that
-injects after `load` is listed only when a read still runs after it, the one
-100 ms after `load` or a subscribe read still pending, so its discovery is not
-guaranteed. Wallets inject `injectedWeb3` while the page loads, so a wallet
-that injects after the last read is not listed until the next subscription,
-usually the next page load. Kheopskit has no
-`refreshWallets()` and does not read again on focus or on connect.
+The read window ends 1100 ms after `load` or after subscribe, whichever is
+later. Nothing reads the registry after that, so a wallet that injects later
+is not listed until the next subscription, usually the next page load.
+Kheopskit has no `refreshWallets()` and does not read again on focus or on
+connect. On the server it reads once and sets no timer.
 
 Ethereum (EIP-6963, through `mipd`) and Solana (Wallet Standard) wallets
 announce themselves with events, so those lists update whenever a wallet
@@ -134,19 +134,19 @@ announces or unregisters.
 
 `state.isDiscovering` tells you whether the list may still grow:
 
-- `true` when the subscription started before `document.readyState` was
-  `"complete"`.
-- It turns `false` in the first emission after `load` in which the registry was
-  read again. That emission already lists every extension injected by `load`.
-  Wait for it before you conclude that a wallet is missing.
-- `false` from the first emission when you subscribe after `load`.
+- `true` until the read window ends, 1100 ms after `load` or after subscribe,
+  whichever is later, and while a WalletConnect connector loads.
+- It turns `false` in the emission of the last read, or once the
+  WalletConnect connector has loaded if that comes later. That emission lists
+  every Polkadot extension injected before the last read. Wait for it before
+  you conclude that a wallet is missing.
 - Always `true` on the server.
 
-It says nothing about wallets that inject after `load`. In the end-to-end test
-`e2e/tests/discovery-at-load.spec.ts`, an extension injected 1500 ms after the
-first read and before `load` showed in the wallet list 16.2 ms after `load` on
-vite-react, and 15.8 to 18.3 ms across the three example apps (the test's
-limit is 300 ms).
+In the end-to-end test `e2e/tests/discovery-at-load.spec.ts`, an extension
+injected 1500 ms after the first read and before `load` showed in the wallet
+list 23.9 ms after `load` on vite-react, and 13.1 to 23.9 ms across the three
+example apps (the test's limit is 300 ms). The "Looking for wallets…" status
+went away 1114 to 1124 ms after `load`.
 
 ### Hydration
 
@@ -190,13 +190,14 @@ its `connect()` joins that reconnect. A Polkadot wallet's `extension` stays
 `isHydrating` turns `false` once all three hold:
 
 1. `hydrationGracePeriod` has elapsed (default 500 ms).
-2. Discovery has ended (`isDiscovering` is `false`), so a page with a cache
-   hydrates until `load` or `hydrationTimeout`, whichever comes first.
-3. Every wallet that hydrated as `connecting` has settled. A wallet has
-   settled when it is absent from the discovered wallets, connected once its
-   account list has been read (an empty list counts) or connected with no
-   cached accounts, disconnected with `error` set, or disconnected and not
-   remembered when hydration began.
+2. Every cached wallet has been discovered, or discovery has ended
+   (`isDiscovering` is `false`). When every cached wallet injects early,
+   hydration does not wait for `load`. A cached wallet that has not appeared
+   holds it until discovery ends.
+3. Every discovered wallet that hydrated as `connecting` has settled. It has
+   settled when connected once its account list has been read (an empty list
+   counts) or connected with no cached accounts, disconnected with `error`
+   set, or disconnected and not remembered when hydration began.
 
 At `hydrationTimeout` (default 3000 ms) hydration ends whatever is pending, and
 a wallet whose reconnect is still pending stays `connecting`. The timeout wins
@@ -673,15 +674,19 @@ fail.
 
 ### Design choices
 
-- Kheopskit does not look for wallets that inject after `load`, and has no
-  `refreshWallets()`. Wallets inject at page load, and a rescan would add
-  timers and states for a case no supported wallet produces.
+- Kheopskit stops reading the Polkadot registry when the read window ends, and
+  has no `refreshWallets()`. Wallets inject at page load, and a permanent
+  watcher would add timers and states for a case no supported wallet produces.
 - No `walletsReady` promise. It would be a second surface for the one fact
   `isDiscovering` carries.
-- No longer fixed poll. Any duration is still a guess about how long a page
-  takes to boot, and wallets inject before `load`.
-- Discovery does not end at the last scheduled read (1100 ms). On a warm load
-  that is slower than `load`, for no gain.
+- The read window restarts at `load` instead of running a longer poll from
+  subscribe. Its coverage after `load` then no longer depends on when the app
+  subscribes.
+- Discovery ends with the last read, 1100 ms after `load` (or once a
+  WalletConnect connector has loaded, if later), not at `load`, so a wallet
+  that injects shortly after `load` is listed before `isDiscovering` turns
+  `false`.
+  Hydration waits for that end only while a cached wallet is missing.
 - `remembered` is read once at subscribe. A live read would make a connect in
   one tab connect every open tab, with no matching disconnect.
 - No `persist: false` option. The `autoReconnect` predicate covers "do not

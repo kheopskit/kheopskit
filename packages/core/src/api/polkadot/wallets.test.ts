@@ -368,7 +368,7 @@ describe("polkadot wallet discovery", () => {
 			.subscribe((wallets) => onWallets(wallets.map((w) => w.id)));
 	};
 
-	it("reads injectedWeb3 again at window load", () => {
+	it("reads injectedWeb3 again at window load and until 1100 ms after it", () => {
 		const emissions: string[][] = [];
 		const subscription = subscribeToWallets((ids) => emissions.push(ids));
 
@@ -377,18 +377,19 @@ describe("polkadot wallet discovery", () => {
 		window.dispatchEvent(new Event("load"));
 		expect(emissions.at(-1)).toEqual(["polkadot:at-load"]);
 
-		install({ name: "load-plus-100" });
-		vi.advanceTimersByTime(100);
+		vi.advanceTimersByTime(1099);
+		install({ name: "load-plus-1100" });
+		vi.advanceTimersByTime(1);
 		expect(emissions.at(-1)).toEqual([
 			"polkadot:at-load",
-			"polkadot:load-plus-100",
+			"polkadot:load-plus-1100",
 		]);
 
 		install({ name: "too-late" });
 		vi.advanceTimersByTime(60_000);
 		expect(emissions.at(-1)).toEqual([
 			"polkadot:at-load",
-			"polkadot:load-plus-100",
+			"polkadot:load-plus-1100",
 		]);
 
 		subscription.unsubscribe();

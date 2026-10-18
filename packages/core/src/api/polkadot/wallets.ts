@@ -1,8 +1,8 @@
 import { isEqual } from "lodash-es";
 import { getInjectedExtensions } from "polkadot-api/pjs-signer";
-import { distinctUntilChanged, Observable, shareReplay, skip } from "rxjs";
-import { pageLoaded$ } from "../../utils/pageLoad";
+import { distinctUntilChanged, map, type Observable } from "rxjs";
 import { POLKADOT_EXTENSIONS } from "../../utils/polkadotExtensions";
+import { createRegistryReads$ } from "../../utils/registryReads";
 import {
 	getWalletId,
 	parseWalletId,
@@ -101,61 +101,20 @@ const getInjectedWalletsIds = () =>
 		? []
 		: getInjectedExtensions().map((name) => getWalletId("polkadot", name));
 
-// Create a polling observable that starts immediately and polls at intervals
-const createWalletIdsPoller$ = () => {
-	return new Observable<WalletId[]>((subscriber) => {
-		// Emit immediately on subscribe
-		subscriber.next(getInjectedWalletsIds());
-
-		// Poll at shorter intervals initially, then slow down
-		const intervals = [100, 200, 300, 500];
-		let index = 0;
-		let timer: ReturnType<typeof setTimeout> | undefined;
-
-		const poll = () => {
-			subscriber.next(getInjectedWalletsIds());
-			if (index < intervals.length) {
-				const delay = intervals[index++];
-				timer = setTimeout(poll, delay);
-			}
-		};
-
-		// Start polling after first immediate emission
-		if (intervals.length > 0) {
-			timer = setTimeout(poll, intervals[index++] ?? 100);
-		}
-
-		let loadTimer: ReturnType<typeof setTimeout> | undefined;
-		const loadSub = pageLoaded$.pipe(skip(1)).subscribe(() => {
-			loadTimer = setTimeout(
-				() => subscriber.next(getInjectedWalletsIds()),
-				100,
-			);
-			subscriber.next(getInjectedWalletsIds());
-		});
-
-		return () => {
-			// Cancel any pending poll so it can't fire after unsubscribe.
-			if (timer !== undefined) clearTimeout(timer);
-			clearTimeout(loadTimer);
-			loadSub.unsubscribe();
-		};
-	}).pipe(
-		distinctUntilChanged<WalletId[]>(isEqual),
-		shareReplay({ refCount: true, bufferSize: 1 }),
-	);
-};
-
 // The shared WalletConnect connector is emitted once by core (see
 // `getWallets$`), not per platform — so this returns only injected wallets.
 export const getPolkadotWallets$ = (
 	store: KheopskitStore,
 	config: Pick<KheopskitConfig, "appName" | "walletConnect">,
+	registryReads$: Observable<void> = createRegistryReads$(),
 ) =>
 	createInjectedWallets$<WalletId, PolkadotInjectedWallet, PolkadotInjected>(
 		store,
 		{
-			sources$: createWalletIdsPoller$(),
+			sources$: registryReads$.pipe(
+				map(getInjectedWalletsIds),
+				distinctUntilChanged<WalletId[]>(isEqual),
+			),
 			getWalletId: (walletId) => walletId,
 			connect: (walletId) =>
 				connectExtension(

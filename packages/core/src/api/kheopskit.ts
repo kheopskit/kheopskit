@@ -1,15 +1,16 @@
 import {
 	asapScheduler,
 	combineLatest,
+	concat,
 	debounceTime,
 	distinctUntilChanged,
 	filter,
+	ignoreElements,
 	map,
 	Observable,
 	of,
 	shareReplay,
 	startWith,
-	switchMap,
 	take,
 	tap,
 } from "rxjs";
@@ -20,7 +21,7 @@ import {
 import { serializeAccount, serializeWallet } from "../utils/hydrateState";
 import { getCachedIcon, setCachedIcons } from "../utils/iconCache";
 import { logObservable } from "../utils/logObservable";
-import { pageLoaded$ } from "../utils/pageLoad";
+import { createRegistryReads$ } from "../utils/registryReads";
 import { sortAccounts } from "../utils/sortAccounts";
 import { sortWallets } from "../utils/sortWallets";
 import type { WalletId } from "../utils/WalletId";
@@ -195,26 +196,24 @@ export const getKheopskit$ = <
 			return settled;
 		};
 
-		// Get live wallets and accounts
-		const liveWallets$ = getWallets$(kc, store);
+		const registryReads$ = createRegistryReads$().pipe(
+			shareReplay({ bufferSize: 1, refCount: true }),
+		);
+		const liveWallets$ = getWallets$(kc, store, registryReads$);
 		const accountFrames$ = getAccounts$(kc, liveWallets$);
 		const liveAccounts$ = accountFrames$.pipe(
 			map(({ accounts }) => accounts.map(asLive)),
 		);
 
-		const isDiscovering$ = pageLoaded$.pipe(
-			switchMap((loaded) =>
-				loaded
-					? liveWallets$.pipe(
-							take(1),
-							map(() => false),
-						)
-					: of(true),
+		const isDiscovering$ = concat(
+			of(true),
+			registryReads$.pipe(ignoreElements()),
+			liveWallets$.pipe(
+				take(1),
+				map(() => false),
 			),
-			shareReplay({ bufferSize: 1, refCount: true }),
-		);
+		).pipe(shareReplay({ bufferSize: 1, refCount: true }));
 
-		const reconnecting = cachedWallets.filter((w) => w.status === "connecting");
 		const hydrationSettled$ = combineLatest([
 			liveWallets$,
 			accountFrames$.pipe(startWith(noAnswerYet)),
@@ -224,18 +223,20 @@ export const getKheopskit$ = <
 				take(1),
 			),
 		]).pipe(
-			map(
-				([wallets, { accounts, answered }, isDiscovering, remembered]) =>
-					!isDiscovering &&
-					reconnecting.every((cached) =>
-						reconnectSettled(cached, {
-							wallets,
+			map(([wallets, { accounts, answered }, isDiscovering, remembered]) =>
+				cachedWallets.every((cached) => {
+					const wallet = wallets.find((w) => w.id === cached.id);
+					if (!wallet) return !isDiscovering;
+					return (
+						cached.status !== "connecting" ||
+						reconnectSettled(cached, wallet, {
 							accounts,
 							answered,
 							cachedAccounts,
 							remembered,
-						}),
-					),
+						})
+					);
+				}),
 			),
 			debounceTime(0, asapScheduler),
 			distinctUntilChanged(),
@@ -432,14 +433,12 @@ const noAnswerYet: AccountsFrame = { accounts: [], answered: [] };
  */
 const reconnectSettled = (
 	cached: BaseWallet | WalletConnectWallet,
+	wallet: BaseWallet | WalletConnectWallet,
 	live: AccountsFrame & {
-		wallets: (BaseWallet | WalletConnectWallet)[];
 		cachedAccounts: BaseWalletAccount[];
 		remembered: WalletId[];
 	},
 ): boolean => {
-	const wallet = live.wallets.find((w) => w.id === cached.id);
-	if (!wallet) return true;
 	const status = sessionRestoring(wallet, cached)
 		? "connecting"
 		: wallet.status;
