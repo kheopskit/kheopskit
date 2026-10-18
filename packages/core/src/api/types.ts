@@ -345,9 +345,10 @@ export type PlatformContext = {
 	config: KheopskitConfig;
 	/**
 	 * Moments to re-read a registry that has no announce event. Emits at
-	 * subscribe and on a tail restarted at window `load`, and completes when
-	 * discovery ends, at which point {@link KheopskitState.isDiscovering} turns
-	 * `false`.
+	 * subscribe and on a tail restarted at window `load`, and completes after
+	 * the last read. {@link KheopskitState.isDiscovering} turns `false` on the
+	 * first wallet list after that, which waits for a WalletConnect connector
+	 * still loading.
 	 */
 	registryReads$?: Observable<void>;
 };
@@ -498,8 +499,9 @@ export type KheopskitConfig<
 	 *
 	 * - When every cached wallet is discovered and settled, hydration ends at
 	 *   the grace period, without waiting for `load`. A cached wallet that has
-	 *   not appeared holds hydration until discovery ends, 1100 ms after `load`
-	 *   or after subscribe, whichever is later, or until `hydrationTimeout`.
+	 *   not appeared holds hydration until discovery ends (1100 ms after `load`
+	 *   or after subscribe, whichever is later, or later while a WalletConnect
+	 *   connector loads), or until `hydrationTimeout`.
 	 * - A wallet that reconnects without sharing any account with the site
 	 *   settles as soon as it answers; its cached accounts leave the list when
 	 *   hydration ends.

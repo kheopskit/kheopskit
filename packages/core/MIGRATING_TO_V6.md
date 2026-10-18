@@ -49,7 +49,7 @@ This guide grows with each v6 change. Each section covers one area.
 | Placeholder SDK handles | typed as present, `undefined` at runtime while hydrating | absent from the placeholder type; narrow on `isPlaceholder` | [7](#7-placeholders-carry-isplaceholder) |
 | `connect()` on a placeholder | throws `PendingWalletError` | waits for the live wallet, or rejects `WALLET_PENDING` | [7](#7-placeholders-carry-isplaceholder) |
 | Hydration end | `isHydrating` stays `true` until every cached connected wallet reconnected, capped at six times the grace period | `isHydrating` ends once the grace period has elapsed and every cached wallet has settled, or at `hydrationTimeout` (default 3000 ms); a cached wallet not yet discovered settles when discovery ends | [8](#8-discovery-hydration-end-and-persistence) |
-| Discovery at page load | the Polkadot registry was read at 0, 100, 300, 600 and 1100 ms after subscribe only | read at subscribe and at `load`, then 100, 300, 600 and 1100 ms after each; `state.isDiscovering` is `true` until the last read, 1100 ms after `load` or after subscribe, whichever is later | [8](#8-discovery-hydration-end-and-persistence) |
+| Discovery at page load | the Polkadot registry was read at 0, 100, 300, 600 and 1100 ms after subscribe only | read at subscribe and at `load`, then 100, 300, 600 and 1100 ms after each; `state.isDiscovering` is `true` until the last read, 1100 ms after `load` or after subscribe, whichever is later, and while a WalletConnect connector loads | [8](#8-discovery-hydration-end-and-persistence) |
 | Cache during a slow reconnect | a reconnect slower than the persistence debounce wrote `isConnected: false` and no accounts | a wallet still `connecting` keeps its previous cached entry and accounts | [8](#8-discovery-hydration-end-and-persistence) |
 | React instance and hooks | `createKheopskit` returns a provider and `useWallets`/`useAccounts`; reaching one wallet means reading the whole state; unmounting the provider leaves the pipeline running | `createKheopskit` also returns `kheopskit$` and `store`; `useWallet`, `useAccount` and `useConnect` read one item; unmounting the provider stops the pipeline | [9](#9-kheopskitreact-one-shared-instance-and-wallet-hooks) |
 
@@ -772,8 +772,8 @@ now lists none holds hydration until `hydrationTimeout`.
 In practice, hydration no longer runs to 3 s. With `autoReconnect: false` and
 the extension installed, it ends at the grace period. With the extension
 removed, it ends when discovery ends, 1100 ms after `load` or after subscribe,
-whichever is later, or at
-`hydrationTimeout` if that comes first.
+whichever is later (or once a WalletConnect connector has loaded, if later),
+or at `hydrationTimeout` if that comes first.
 
 ### Persistence guarantee
 

@@ -135,7 +135,7 @@ announces or unregisters.
 `state.isDiscovering` tells you whether the list may still grow:
 
 - `true` until the read window ends, 1100 ms after `load` or after subscribe,
-  whichever is later.
+  whichever is later, and while a WalletConnect connector loads.
 - It turns `false` in the emission of the last read, or once the
   WalletConnect connector has loaded if that comes later. That emission lists
   every Polkadot extension injected before the last read. Wait for it before
@@ -682,8 +682,10 @@ fail.
 - The read window restarts at `load` instead of running a longer poll from
   subscribe. Its coverage after `load` then no longer depends on when the app
   subscribes.
-- Discovery ends 1100 ms after `load`, not at `load`, so a wallet that injects
-  shortly after `load` is listed before `isDiscovering` turns `false`.
+- Discovery ends with the last read, 1100 ms after `load` (or once a
+  WalletConnect connector has loaded, if later), not at `load`, so a wallet
+  that injects shortly after `load` is listed before `isDiscovering` turns
+  `false`.
   Hydration waits for that end only while a cached wallet is missing.
 - `remembered` is read once at subscribe. A live read would make a connect in
   one tab connect every open tab, with no matching disconnect.

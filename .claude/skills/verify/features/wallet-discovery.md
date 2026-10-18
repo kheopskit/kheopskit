@@ -9,7 +9,7 @@ When the playground loads, the Wallets table lists every wallet that Kheopskit d
 - `discovery-solana` lists each Wallet Standard wallet under platform `solana`.
 - `discovery-walletconnect` shows a single `WalletConnect` row with platform `—` when a project ID is configured.
 - `discovery-count` shows `0` accounts for every wallet that is not connected.
-- `discovery-settled` shows `Looking for wallets…` above the table until the page fires `load`, then hides it. A Polkadot extension that injects before `load` but after the subscribe-anchored poll (0 to 1100 ms) is listed within a few frames of `load`, without a reload.
+- `discovery-settled` shows `Looking for wallets…` above the table until the last registry read, 1100 ms after `load` or after subscribe, whichever is later (later while a WalletConnect connector loads), then hides it. A Polkadot extension that injects before `load` but after the subscribe reads (0 to 1100 ms) is listed within a few frames of `load`, without a reload.
 
 ## How to get to it (user POV)
 
@@ -38,7 +38,7 @@ Preconditions:
 ```
 
 - **Race.** The init script `e2e/mocks/late-wallet.js` injects `late-mock-wallet` 1500 ms after kheopskit's first `injectedWeb3` read, and inserts an image at `DOMContentLoaded`. The spec holds that image until the injection has happened, so `load` always fires after it. The injection is timed from that first read, not from `DOMContentLoaded`, because nextjs-react and tanstack-start subscribe 200 to 350 ms after `DOMContentLoaded`, which leaves too little margin past the 1100 ms poll.
-- **Expected end state.** `Looking for wallets…` is visible until the last registry read, 1100 ms after `load`, and hidden after. The `late-mock-wallet` row appears no later than 300 ms after `load`.
+- **Expected end state.** With no WalletConnect project ID (as in e2e), `Looking for wallets…` is visible until the last registry read, 1100 ms after `load`, and hidden after. The `late-mock-wallet` row appears no later than 300 ms after `load`.
 - **Proof.** The spec attaches `discovery-timestamps.json` (registry reads, injection, `load`, first row frame, status shown and hidden) and logs the `load`-to-row delay.
 
 ## Gotchas
