@@ -56,7 +56,7 @@ jobs:
         env:
           HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
-          PR_NUMBER=$(echo "$HEAD_COMMIT_MESSAGE" | sed -n 's/^Version Packages (#\([0-9]*\)).*/\1/p')
+          PR_NUMBER=$(echo "$HEAD_COMMIT_MESSAGE" | sed -n '1s/^Version Packages.* (#\([0-9][0-9]*\))$/\1/p')
           if [ -z "$PR_NUMBER" ]; then
             echo "No PR number found in commit message: $HEAD_COMMIT_MESSAGE"
             exit 1
@@ -69,7 +69,9 @@ jobs:
           CLEAN_BODY=$(echo "$BODY" | sed -E '1,/^# [Rr]eleases[[:space:]]*$/d')
           # Remove the section about the root package (## kheopskit ... until next ## or end of file)
           CLEAN_BODY=$(echo "$CLEAN_BODY" | awk '/^## kheopskit(@[0-9A-Za-z.-]+)?/ {skip=1} /^## / && !/^## kheopskit(@[0-9A-Za-z.-]+)?/ {skip=0} !skip')
-          echo "$CLEAN_BODY" | gh release create "v$VERSION" --title "v$VERSION" --target "$GITHUB_SHA" --notes-file -
+          PRERELEASE=()
+          if [[ "$VERSION" == *-* ]]; then PRERELEASE=(--prerelease); fi
+          echo "$CLEAN_BODY" | gh release create "v$VERSION" --title "v$VERSION" --target "$GITHUB_SHA" "${PRERELEASE[@]}" --notes-file -
         env:
           PR_NUMBER: ${{ steps.pr_number.outputs.number }}
           VERSION: ${{ steps.get_version.outputs.version }}
