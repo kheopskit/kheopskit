@@ -6,7 +6,12 @@
 		"useIgnoreFile": true
 	},
 	"files": {
-		"includes": ["**", "!**/routeTree.gen.ts", "!.papi/descriptors"]
+		"includes": [
+			"**",
+			"!**/routeTree.gen.ts",
+			"!.papi/descriptors",
+			"!.changeset/pre.json"
+		]
 	},
 	"assist": {
 		"actions": {

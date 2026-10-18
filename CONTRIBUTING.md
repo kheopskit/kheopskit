@@ -67,6 +67,10 @@ When you're ready to release, merge the "Version Packages" PR. This triggers the
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### Release candidates
+
+`pnpm changeset pre enter rc` writes `.changeset/pre.json`; merging it to `main` puts `main` in pre mode. The release PR is then titled "Version Packages (rc)" and versions the packages `X.Y.Z-rc.0`, `-rc.1` and so on. Merging it publishes them under the npm `rc` dist-tag, so `latest` does not move, and creates a GitHub prerelease. Testers install with `pnpm add @kheopskit/core@rc @kheopskit/react@rc`. `pnpm changeset pre exit` ends pre mode, and the next release PR versions the final `X.Y.Z` on `latest`. While in pre mode, `main` cannot release anything else, and the root `publish` script must not be used, since it publishes under `latest`.
+
 ### Notes
 
 - If you merge multiple PRs with changesets before merging the "Version Packages" PR, they will all be batched into a single release.
