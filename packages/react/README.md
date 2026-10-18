@@ -97,10 +97,11 @@ const { wallets, isHydrating } = useWallets();
 const accounts = useAccounts();
 ```
 
-Every account has an optional `name`, so `account.name ?? account.address`
+Every account has an optional `name`, so `account.name || account.address`
 typechecks on the whole union. Polkadot accounts get the name the extension
 lists. Solana accounts get the wallet's `label` when it provides one. Ethereum
-accounts never have a name.
+accounts never have a name. A wallet can report an empty name, which `||`
+replaces with the address.
 
 ### Without the factory
 

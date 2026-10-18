@@ -404,9 +404,9 @@ name.
 Every account has an optional `name`. On Polkadot it is the account name the
 extension lists. On Solana it is the Wallet Standard `label`, when the wallet
 provides one. On Ethereum it is always `undefined`, because EIP-1193 and
-EIP-6963 expose no account name. `account.name ?? account.address` gives a
-display label on every platform. A cached placeholder keeps the `name` of the
-account it stands for.
+EIP-6963 expose no account name. A wallet can report an empty name, so
+`account.name || account.address` gives a display label on every platform. A
+cached placeholder keeps the `name` of the account it stands for.
 
 ### Persistence
 
