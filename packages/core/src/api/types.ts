@@ -59,12 +59,14 @@ export type ConnectOptions = {
 	 * with a `KheopskitError` of code `ABORTED`. An abort after the platform
 	 * has granted the connect changes nothing, and a Polkadot extension counts
 	 * as granted only once its account list has been read. Other callers
-	 * sharing the attempt keep waiting. Once no caller waits any more,
-	 * kheopskit drops a handle the platform hands back afterwards without
-	 * revoking the platform's grant, and the wallet is neither connected nor
-	 * remembered. The
-	 * extension's own prompt may stay open: nothing can withdraw it from the
-	 * page. Kheopskit sets no timeout of its own, because an extension prompt
+	 * sharing the attempt keep waiting. The extension's own prompt may stay
+	 * open: nothing can withdraw it from the page. A Polkadot `connect()`
+	 * started while that prompt is open waits for it instead of asking again,
+	 * and connects with the handle it answers. Once no caller waits any more
+	 * and no later `connect()` joined that prompt, kheopskit drops a handle
+	 * the platform hands back afterwards without revoking the platform's
+	 * grant, and the wallet is neither connected nor remembered. Kheopskit
+	 * sets no timeout of its own, because an extension prompt
 	 * pends only while the user has not answered it; pass
 	 * `AbortSignal.timeout(ms)` to cap the wait.
 	 */

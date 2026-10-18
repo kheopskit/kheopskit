@@ -52,14 +52,48 @@ export const latestAccounts = new WeakMap<
 	PolkadotInjectedAccount[]
 >();
 
-const connectExtension = async (identifier: string, appName: string) => {
-	const entry = (globalThis as InjectedWeb3Window).injectedWeb3?.[identifier];
-	if (!entry) throw new Error(`Unavailable extension: "${identifier}"`);
+type InjectedWeb3Entry = NonNullable<
+	NonNullable<InjectedWeb3Window["injectedWeb3"]>[string]
+>;
+
+/**
+ * The connect each extension is still answering. An extension keeps its
+ * prompt open after kheopskit abandons the attempt, and a second `enable()`
+ * meanwhile fails (polkadot-js: "Pending authorisation request already
+ * exists") or resolves unauthorised (Talisman), so a new attempt joins this
+ * one instead.
+ */
+const pendingConnects = new WeakMap<
+	InjectedWeb3Entry,
+	Promise<PolkadotInjected>
+>();
+
+const enableExtension = async (
+	identifier: string,
+	entry: InjectedWeb3Entry,
+	appName: string,
+) => {
 	const injected = await entry.enable(appName);
 	if (!isPolkadotInjected(injected))
 		throw new Error(`Unsupported extension: "${identifier}"`);
 	latestAccounts.set(injected, await injected.accounts.get());
 	return injected;
+};
+
+const connectExtension = (
+	identifier: string,
+	appName: string,
+): Promise<PolkadotInjected> => {
+	const entry = (globalThis as InjectedWeb3Window).injectedWeb3?.[identifier];
+	if (!entry)
+		return Promise.reject(new Error(`Unavailable extension: "${identifier}"`));
+	const pending = pendingConnects.get(entry);
+	if (pending) return pending;
+	const connecting = enableExtension(identifier, entry, appName);
+	pendingConnects.set(entry, connecting);
+	const settle = () => pendingConnects.delete(entry);
+	connecting.then(settle, settle);
+	return connecting;
 };
 
 const getInjectedWalletsIds = () =>

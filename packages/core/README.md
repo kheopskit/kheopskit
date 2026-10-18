@@ -314,7 +314,8 @@ code:
   last `kheopskit$` subscriber unsubscribes. An abort after the platform
   granted the connect changes nothing, and a Polkadot extension counts as
   granted only once its account list has been read. Aborting cannot close the
-  extension's own prompt.
+  extension's own prompt, so a Polkadot `connect()` started while it is open
+  waits for that prompt instead of asking again.
 - **No default timeout.** An extension prompt pends only while the user has
   not answered it, so kheopskit sets no timeout. Pass `AbortSignal.timeout(ms)`
   to cap the wait.
