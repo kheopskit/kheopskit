@@ -172,10 +172,13 @@ try {
 - **No default timeout.** A Polkadot extension prompt pends until the user
   answers it. Pass `AbortSignal.timeout(ms)` to cap your wait for the platform's
   answer. The wait for the state after a grant is not capped. Aborting ends
-  your wait; it cannot close the extension's own prompt. Once no caller waits
-  any more, kheopskit drops a handle the extension returns afterwards without
-  revoking the extension's grant, and the wallet is neither connected nor
-  remembered.
+  your wait; it cannot close the extension's own prompt. A `connect()` started
+  while that prompt is open, after an abort or a `disconnect()`, waits for the
+  same prompt instead of asking the extension again, and connects with the
+  handle it returns. Once no caller waits any more and no later `connect()`
+  joined that prompt, kheopskit drops a handle the extension returns
+  afterwards without revoking the extension's grant, and the wallet is
+  neither connected nor remembered.
 - **A wallet that disappears.** A `connect()` whose wallet leaves the list (an
   extension removed, a Wallet Standard wallet unregistered) before the platform
   grants it rejects `ABORTED`. Granted first, it resolves and the wallet stays
