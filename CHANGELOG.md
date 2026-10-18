@@ -1,5 +1,20 @@
 # kheopskit
 
+## 6.0.0-rc.2
+
+### Minor Changes
+
+- [#155](https://github.com/kheopskit/kheopskit/pull/155) [`d3a05e1`](https://github.com/kheopskit/kheopskit/commit/d3a05e14f6eebebf182f3d2ddfee4057321fbab0) Thanks [@0xKheops](https://github.com/0xKheops)! - Added: `account.name` is readable on every account type. Solana accounts take it from the Wallet Standard `label`, and Ethereum accounts leave it `undefined`.
+
+### Patch Changes
+
+- [#157](https://github.com/kheopskit/kheopskit/pull/157) [`2eb5c08`](https://github.com/kheopskit/kheopskit/commit/2eb5c086c201763e84065e05785012d0a845d05d) Thanks [@0xKheops](https://github.com/0xKheops)! - Fixed: Polkadot discovery now reads `window.injectedWeb3` at `load` and 100, 300, 600 and 1100 ms after it, as it already did after subscribe. `isDiscovering` is `true` until the last read, 1100 ms after `load` or after subscribe, whichever is later, so no read is pending once it turns `false`, and that emission lists every extension injected before that read. With `config.walletConnect`, it also waits for the connector to load. A subscription that starts after `load` no longer reads `false` from its first emission. On the server, the registry is read once and no timer is set.
+  
+  Hydration waits for discovery only while a cached wallet has not been discovered. When every cached wallet is discovered and settled, `isHydrating` ends at the grace period without waiting for `load`.
+- Updated dependencies [[`d3a05e1`](https://github.com/kheopskit/kheopskit/commit/d3a05e14f6eebebf182f3d2ddfee4057321fbab0), [`2eb5c08`](https://github.com/kheopskit/kheopskit/commit/2eb5c086c201763e84065e05785012d0a845d05d)]:
+  - @kheopskit/core@6.0.0-rc.2
+  - @kheopskit/react@6.0.0-rc.2
+
 ## 6.0.0-rc.1
 
 ### Patch Changes
