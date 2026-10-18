@@ -2,13 +2,22 @@
 import { createKheopskitStore, type KheopskitStore } from "@kheopskit/core";
 import { ethereum } from "@kheopskit/core/ethereum";
 import { polkadot } from "@kheopskit/core/polkadot";
+import { solana } from "@kheopskit/core/solana";
 import {
 	createFakePolkadotExtension,
 	createMemoryStorage,
 	type FakePolkadotExtension,
 } from "@kheopskit/core/testing";
 import { act, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	expectTypeOf,
+	it,
+	vi,
+} from "vitest";
 import { createKheopskit } from "./createKheopskit";
 
 describe("createKheopskit", () => {
@@ -20,6 +29,22 @@ describe("createKheopskit", () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+	});
+
+	it("types account.name on every platform of the bound tuple", () => {
+		const { useAccounts } = createKheopskit({
+			platforms: [polkadot(), ethereum(), solana()],
+			autoReconnect: false,
+		});
+		type Account = ReturnType<typeof useAccounts>[number];
+
+		expectTypeOf<Account["platform"]>().toEqualTypeOf<
+			"polkadot" | "ethereum" | "solana"
+		>();
+		expectTypeOf<Account["name"]>().toEqualTypeOf<string | undefined>();
+		expectTypeOf(
+			(account: Account) => account.name ?? account.address,
+		).returns.toEqualTypeOf<string>();
 	});
 
 	it("provides hooks bound to the platform tuple", () => {

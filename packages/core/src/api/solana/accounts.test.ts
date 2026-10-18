@@ -154,6 +154,55 @@ describe("getSolanaAccounts$", () => {
 			expect(typeof accounts[0]?.getSigner).toBe("function");
 		});
 
+		it("names each account after its Wallet Standard label", async () => {
+			const standardWallet = createMockStandardWallet();
+			standardWallet.accounts = [
+				{ ...standardWallet.accounts[0], label: "Account 1" },
+				{
+					address: ADDRESS_2,
+					publicKey: new Uint8Array(32),
+					chains: ["solana:mainnet"],
+					features: [],
+				},
+			];
+			const wallet = createMockInjectedWallet(standardWallet);
+			const { getSolanaAccounts$ } = await importAccounts();
+
+			const accounts = await firstValueFrom(
+				getSolanaAccounts$(of([wallet]), "solana:mainnet"),
+			);
+
+			expect(accounts.map((a) => [a.address, a.name])).toEqual([
+				[ADDRESS_1, "Account 1"],
+				[ADDRESS_2, undefined],
+			]);
+		});
+
+		it("re-emits accounts when a Wallet Standard label changes", async () => {
+			const standardWallet = createMockStandardWallet();
+			standardWallet.accounts = [
+				{ ...standardWallet.accounts[0], label: "Account 1" },
+			];
+			const wallet = createMockInjectedWallet(standardWallet);
+			const { getSolanaAccounts$ } = await importAccounts();
+
+			const accounts$ = getSolanaAccounts$(of([wallet]), "solana:mainnet");
+			const resultsPromise = firstValueFrom(accounts$.pipe(take(2), toArray()));
+
+			await new Promise((r) => setTimeout(r, 10));
+
+			standardWallet.accounts = [
+				{ ...standardWallet.accounts[0], label: "Savings" },
+			];
+			standardWallet._emitChange({ accounts: standardWallet.accounts });
+
+			const results = await resultsPromise;
+			expect(results.map((accounts) => accounts[0]?.name)).toEqual([
+				"Account 1",
+				"Savings",
+			]);
+		});
+
 		it("returns no accounts (and attaches no listener) when disconnected", async () => {
 			const standardWallet = createMockStandardWallet();
 			const wallet = createMockInjectedWallet(standardWallet, {
@@ -283,6 +332,7 @@ describe("getSolanaAccounts$", () => {
 				[ADDRESS_1, ADDRESS_2].sort(),
 			);
 			expect(accounts.every((a) => a.platform === "solana")).toBe(true);
+			expect(accounts.every((a) => a.name === undefined)).toBe(true);
 		});
 
 		// Regression: AppKit has no native solana adapter, so

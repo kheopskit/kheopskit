@@ -49,6 +49,7 @@ type LiveEthereumAccount = {
 	address: `0x${string}`;
 	/** Current chain ID the wallet is connected to. `undefined` while loading or after provider disconnect. */
 	chainId: number | undefined;
+	name?: string;
 	walletName: string;
 	walletId: WalletId;
 };

@@ -63,6 +63,7 @@ type LiveSolanaAccount = {
 	signer: SolanaSigner;
 	/** Returns a signer bound to an arbitrary cluster. */
 	getSigner: (chain: SolanaChainId) => SolanaSigner;
+	name?: string;
 	walletName: string;
 	walletId: WalletId;
 };

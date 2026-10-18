@@ -142,6 +142,7 @@ describe("Ethereum chain ID tracking", () => {
 
 			expect(accounts).toHaveLength(1);
 			expect(accounts[0]?.chainId).toBe(1);
+			expect(accounts[0]?.name).toBeUndefined();
 		});
 
 		it("updates chainId on chainChanged event (hex string)", async () => {
@@ -492,6 +493,7 @@ describe("Ethereum chain ID tracking", () => {
 
 			expect(accounts).toHaveLength(1);
 			expect(accounts[0]?.address).toBe(MOCK_ADDRESS);
+			expect(accounts[0]?.name).toBeUndefined();
 		});
 
 		it("dedupes one address advertised on multiple eip155 chains", async () => {

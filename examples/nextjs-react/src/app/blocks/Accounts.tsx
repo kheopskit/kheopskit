@@ -56,9 +56,7 @@ const AccountRow: FC<{ account: WalletAccount }> = ({ account }) => {
 		<TableRow key={account.id}>
 			<TableCell>{platform}</TableCell>
 			<TableCell>{walletName}</TableCell>
-			<TableCell>
-				{account.platform === "polkadot" ? account.name : null}
-			</TableCell>
+			<TableCell>{account.name}</TableCell>
 			<TableCell className="font-mono">{shortAddress}</TableCell>
 			<TableCell>
 				{account.platform === "ethereum" ? (account.chainId ?? "-") : "-"}

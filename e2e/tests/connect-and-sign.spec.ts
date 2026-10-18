@@ -16,6 +16,8 @@ const getAccountsTable = (page: Page) =>
 		.getByRole("table")
 		.filter({ has: page.getByRole("columnheader", { name: "Address" }) });
 
+const ACCOUNT_NAME_CELL_INDEX = 2;
+
 test.describe("ethereum mock wallet", () => {
 	test("connect, list account, sign message, disconnect", async ({ page }) => {
 		await page.goto("/");
@@ -39,6 +41,9 @@ test.describe("ethereum mock wallet", () => {
 		});
 		await expect(accountRow).toBeVisible();
 		await expect(accountRow).toContainText("ethereum");
+		await expect(
+			accountRow.getByRole("cell").nth(ACCOUNT_NAME_CELL_INDEX),
+		).toBeEmpty();
 		await expect(
 			accountRow.getByRole("cell", { name: "1", exact: true }),
 		).toBeVisible(); // chainId from eth_chainId
@@ -183,6 +188,9 @@ test.describe("solana mock wallet", () => {
 		});
 		await expect(accountRow).toBeVisible();
 		await expect(accountRow).toContainText("solana");
+		await expect(
+			accountRow.getByRole("cell").nth(ACCOUNT_NAME_CELL_INDEX),
+		).toHaveText("Mock Solana Account");
 
 		// Sign goes through the Wallet Standard solana:signMessage feature; the
 		// mock returns 64 zero bytes, which base58-encodes to "1" x 64.

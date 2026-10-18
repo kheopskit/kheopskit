@@ -114,6 +114,7 @@ const SOL_ICON =
 	"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxIDEiPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiM5OTQ1ZmYiLz48L3N2Zz4=";
 
 const solAccount = {
+	label: "Mock Solana Account",
 	address: SOL_ADDRESS,
 	publicKey: new Uint8Array(32),
 	chains: ["solana:mainnet"],
