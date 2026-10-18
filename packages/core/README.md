@@ -136,9 +136,10 @@ announces or unregisters.
 
 - `true` until the read window ends, 1100 ms after `load` or after subscribe,
   whichever is later.
-- It turns `false` in the emission of the last read. That emission already
-  lists every Polkadot extension injected by then. Wait for it before you
-  conclude that a wallet is missing.
+- It turns `false` in the emission of the last read, or once the
+  WalletConnect connector has loaded if that comes later. That emission lists
+  every Polkadot extension injected before the last read. Wait for it before
+  you conclude that a wallet is missing.
 - Always `true` on the server.
 
 In the end-to-end test `e2e/tests/discovery-at-load.spec.ts`, an extension

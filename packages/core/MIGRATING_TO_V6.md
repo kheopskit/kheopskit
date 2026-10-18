@@ -689,7 +689,8 @@ has no live stream behind it, `connect()` rejects `WALLET_PENDING`.
 `KheopskitState.isDiscovering` is new and required. It is `true` until the
 last read of `window.injectedWeb3`, 1100 ms after `load` or after subscribe,
 whichever is later, so the emission that turns it `false` already lists every
-Polkadot extension injected by then. It is always `true` on the server.
+Polkadot extension injected before that read. With `config.walletConnect`, it
+also waits for the connector to load. It is always `true` on the server.
 
 Kheopskit reads the Polkadot registry at subscribe and 100, 300, 600 and
 1100 ms after it, as in 5.x. At `load` it starts the same schedule again, and

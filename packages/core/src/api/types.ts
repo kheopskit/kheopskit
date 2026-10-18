@@ -579,10 +579,11 @@ export type KheopskitState<
 	 * Whether wallet discovery may still be incomplete.
 	 *
 	 * `true` until the Polkadot registry (`window.injectedWeb3`) read window
-	 * ends, 1100 ms after `load` or after subscribe, whichever is later. The
+	 * ends, 1100 ms after `load` or after subscribe, whichever is later. With
+	 * `config.walletConnect`, it also waits for the connector to load. The
 	 * emission that turns it `false` lists every Polkadot extension injected
-	 * by then. A wallet that injects later is not listed until the next
-	 * subscription. Always `true` on the server.
+	 * before the last read. A wallet that injects later is not listed until
+	 * the next subscription. Always `true` on the server.
 	 *
 	 * Ethereum (EIP-6963) and Solana (Wallet Standard) registries are
 	 * event-driven and need no re-read.
