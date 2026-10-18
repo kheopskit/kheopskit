@@ -3,7 +3,8 @@ import { expect, type Page, test } from "@playwright/test";
 
 const MOCKS_DIR = path.join(__dirname, "..", "mocks");
 const MAX_LOAD_TO_ROW_MS = 300;
-const POLL_TAIL_READS = 5;
+const SUBSCRIBE_TAIL_READS = 5;
+const LOAD_TAIL_MS = 1100;
 
 type DiscoveryMarks = {
 	registryReads: number[];
@@ -28,7 +29,7 @@ const walletsTable = (page: Page) =>
 		.getByRole("table")
 		.filter({ has: page.getByRole("columnheader", { name: "Accounts" }) });
 
-test("a wallet injected after the poll tail but before load is listed at load", async ({
+test("a wallet injected after the subscribe reads but before load is listed at load, and discovery ends 1100 ms after load", async ({
 	page,
 }, testInfo) => {
 	await page.addInitScript({ path: path.join(MOCKS_DIR, "mock-wallets.js") });
@@ -59,24 +60,37 @@ test("a wallet injected after the poll tail but before load is listed at load", 
 
 	const marks = await readMarks(page);
 	const subscribedAt = marks.registryReads[0] ?? Number.NaN;
+	const lastRead = marks.registryReads.at(-1) ?? Number.NaN;
 	const loadToRowMs = (marks.lateRowFirstSeen ?? Number.NaN) - marks.load;
 	await testInfo.attach("discovery-timestamps.json", {
-		body: JSON.stringify({ ...marks, subscribedAt, loadToRowMs }, null, 2),
+		body: JSON.stringify(
+			{ ...marks, subscribedAt, lastRead, loadToRowMs },
+			null,
+			2,
+		),
 		contentType: "application/json",
 	});
 	console.log(
-		`[${testInfo.project.name}] load-to-row ${loadToRowMs.toFixed(1)} ms; subscribe ${subscribedAt.toFixed(1)}, injected ${marks.injected.toFixed(1)}, load ${marks.load.toFixed(1)}, row ${marks.lateRowFirstSeen?.toFixed(1)}`,
+		`[${testInfo.project.name}] load-to-row ${loadToRowMs.toFixed(1)} ms; subscribe ${subscribedAt.toFixed(1)}, injected ${marks.injected.toFixed(1)}, load ${marks.load.toFixed(1)}, row ${marks.lateRowFirstSeen?.toFixed(1)}, reads after load ${marks.registryReads
+			.filter((read) => read >= marks.load)
+			.map((read) => (read - marks.load).toFixed(1))
+			.join(" ")}, status hidden ${marks.discoveringGone?.toFixed(1)}`,
 	);
 
 	expect(
-		marks.registryReads[POLL_TAIL_READS - 1],
-		"poll tail finished before the injection",
+		marks.registryReads[SUBSCRIBE_TAIL_READS - 1],
+		"subscribe reads finished before the injection",
 	).toBeLessThan(marks.injected);
 	expect(marks.injected, "injected before load").toBeLessThan(marks.load);
 	expect(marks.discoveringAtLoad, "status shown until load").toBe(true);
-	expect(marks.discoveringGone, "status hidden after load").toBeGreaterThan(
-		marks.load,
-	);
+	expect(
+		lastRead - marks.load,
+		"registry read until 1100 ms after load",
+	).toBeGreaterThanOrEqual(LOAD_TAIL_MS);
+	expect(
+		marks.discoveringGone,
+		"status hidden after the last read",
+	).toBeGreaterThan(lastRead);
 	expect(marks.lateRowFirstSeen, "row absent before load").toBeGreaterThan(
 		marks.load,
 	);
