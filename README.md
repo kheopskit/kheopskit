@@ -1,86 +1,42 @@
 # Kheopskit
 
-Kheopskit is a library designed to simplify the development of multi-chain DApps (Polkadot, Ethereum, Solana). It provides tools to:
+**Headless wallet connection for Polkadot, Ethereum and Solana dapps.**
 
-- List all installed wallets and connect/disconnect them.
-- List all accounts from those wallets.
-- Support Polkadot, Ethereum, and Solana wallets.
-- Handle identical accounts injected by multiple wallets.
+Kheopskit finds every wallet installed in the browser, connects it, and gives you one typed list of accounts across three chains. It renders nothing. You keep your own UI.
 
-Try it on the [interactive playground](https://Kheopskit.pages.dev/)
+[![npm](https://img.shields.io/npm/v/@kheopskit/core?label=%40kheopskit%2Fcore)](https://www.npmjs.com/package/@kheopskit/core)
+[![npm](https://img.shields.io/npm/v/@kheopskit/react?label=%40kheopskit%2Freact)](https://www.npmjs.com/package/@kheopskit/react)
 
-See [Kheopswap](https://github.com/kheopswap/kheopswap) (polkadot/ethereum) and [Taohop](https://github.com/0xKheops/taohop) for production DApps built using Kheopskit.
+[Playground](https://kheopskit.pages.dev/) · [Core docs](./packages/core/README.md) · [React docs](./packages/react/README.md) · [Upgrade to v6](./packages/core/MIGRATING_TO_V6.md)
 
-> **Upgrading from v3?** v4 moves platforms to plugins and makes platform SDKs (and WalletConnect) optional peer dependencies. See the [v4 migration guide](./packages/core/MIGRATING_TO_V4.md).
+## Why kheopskit
 
-> **Upgrading from v5?** v6 makes `connect()` shared, idempotent and abortable, types its rejections, adds wallet `status`, `isDiscovering`, `isPlaceholder` and `signRaw`, and moves WalletConnect to a plugin. See the [v6 migration guide](./packages/core/MIGRATING_TO_V6.md).
+- **Headless.** No components and no CSS. You get a state object and `connect()` and `disconnect()`, and your design system draws the buttons.
+- **One list for three chains.** Polkadot extensions, EIP-6963 Ethereum wallets, Wallet Standard Solana wallets and WalletConnect land in one `wallets` array and one `accounts` array.
+- **Native SDKs.** Accounts carry a polkadot-api `txCreator`, a viem `client` or a `@solana/kit` signer. There is no wrapper API to learn.
+- **Bundle only what you import.** Each platform is a plugin with its own entry point, and every chain SDK is an optional peer dependency. A Polkadot-only dapp bundles no viem, Solana or AppKit code.
+- **No flash on reload.** The first frame shows the last session from cache, connected wallets reconnect without a prompt, and SSR cookies hydrate Next.js and TanStack Start pages.
+- **Typed errors.** `connect()` rejects with a `KheopskitError` whose `code` you can switch on: `USER_REJECTED`, `ABORTED`, `CONNECT_FAILED`, and more.
+- **Ready for coding agents.** Types and error codes are explicit, the docs ship inside the npm package, and a fake extension lets an agent test its integration in vitest without a real wallet.
 
-## Features
-
-- **Multi-wallet support**: Easily interact with Polkadot, Ethereum, and Solana wallets.
-- **Account management**: Manage accounts from all connected wallets in a single list.
-- **Modern tech stack**: Designed for use with polkadot-api (PAPI), viem, and @solana/kit.
-
----
-
-## Installation
-
-Install the required packages using `pnpm`:
+## Install
 
 ```bash
-pnpm add @kheopskit/core @kheopskit/react
+pnpm add @kheopskit/core @kheopskit/react rxjs
 ```
 
-Each platform lives behind its own entry point and brings its own (optional) peer dependencies. **Install only the platforms you use:**
+Add the SDKs of the platforms you enable:
 
-| Platform | Entry point | Install |
-|----------|-------------|---------|
+| Platform | Plugin entry point | Install |
+|----------|--------------------|---------|
 | Polkadot | `@kheopskit/core/polkadot` | `pnpm add polkadot-api` |
 | Ethereum | `@kheopskit/core/ethereum` | `pnpm add viem mipd` |
 | Solana | `@kheopskit/core/solana` | `pnpm add @solana/kit @wallet-standard/app @wallet-standard/base` |
+| WalletConnect | `@kheopskit/core/walletconnect` | `pnpm add @reown/appkit` |
 
-WalletConnect support (via Reown AppKit, across any platform) is also optional. It lives behind its own entry point, `@kheopskit/core/walletconnect`; install it only if you import that entry:
+## Quick start with React
 
-| Feature | Install |
-|---------|---------|
-| WalletConnect | `pnpm add @reown/appkit` |
-
-`rxjs` is always required. Everything else is an optional peer dependency: a Polkadot-only dapp that doesn't use WalletConnect installs neither the Ethereum/Solana SDKs nor `@reown/appkit`, and none of their code, nor kheopskit's AppKit glue, is pulled into your bundle. If `@reown/appkit` isn't installed, WalletConnect is disabled with a console error while injected wallets keep working.
-
-To enable WalletConnect, pass the plugin to `config.walletConnect`:
-
-```ts
-import { getKheopskit$ } from "@kheopskit/core";
-import { polkadot } from "@kheopskit/core/polkadot";
-import { walletConnect } from "@kheopskit/core/walletconnect";
-import { defineChain } from "@reown/appkit/networks";
-
-const polkadotNetwork = defineChain({
-  id: "91b171bb158e2d3848fa23a9f1c25182",
-  name: "Polkadot",
-  nativeCurrency: { name: "Polkadot", symbol: "DOT", decimals: 10 },
-  rpcUrls: { default: { http: ["https://rpc.polkadot.io"] } },
-  chainNamespace: "polkadot",
-  caipNetworkId: "polkadot:91b171bb158e2d3848fa23a9f1c25182",
-});
-
-const kheopskit$ = getKheopskit$({
-  platforms: [polkadot()],
-  walletConnect: walletConnect({
-    projectId: "<your Reown project id>",
-    metadata: { name: "My Dapp", description: "", url: "https://my.dapp", icons: [] },
-    networks: [polkadotNetwork],
-  }),
-});
-```
-
----
-
-## Usage
-
-### With React
-
-Platforms are enabled by passing **plugins** (imported from their entry points) to `config.platforms`. Bind them once with `createKheopskit` to get a `KheopskitProvider` plus `useWallets` / `useAccounts` hooks already typed to those platforms, with no generic to repeat.
+Bind your platforms once with `createKheopskit`. The hooks it returns are typed to those platforms.
 
 ```tsx
 // kheopskit.ts
@@ -88,9 +44,9 @@ import { createKheopskit } from "@kheopskit/react";
 import { polkadot } from "@kheopskit/core/polkadot";
 import { ethereum } from "@kheopskit/core/ethereum";
 
-export const { KheopskitProvider, useWallets, useAccounts } = createKheopskit({
-  platforms: [polkadot(), ethereum()],
-  autoReconnect: true,
+export const { KheopskitProvider, useWallets } = createKheopskit({
+	platforms: [polkadot(), ethereum()],
+	autoReconnect: true,
 });
 ```
 
@@ -99,381 +55,83 @@ export const { KheopskitProvider, useWallets, useAccounts } = createKheopskit({
 import { KheopskitProvider, useWallets } from "./kheopskit";
 
 const Wallets = () => {
-  const { wallets, accounts } = useWallets(); // platform-precise, no type argument
+	const { wallets, accounts } = useWallets();
 
-  return (
-    <div>
-      <h1>Wallets</h1>
-      {wallets.map((wallet) => (
-        <div key={wallet.id}>
-          [{wallet.platform}] {wallet.name}
-          {wallet.isConnected ? (
-            <button onClick={() => wallet.disconnect()}>Disconnect</button>
-          ) : (
-            <button onClick={() => wallet.connect()}>Connect</button>
-          )}
-        </div>
-      ))}
-
-      <h1>Accounts</h1>
-      {accounts.map((account) => (
-        <p key={account.address}>
-          [{account.platform}] {account.name} - {account.address}
-        </p>
-      ))}
-    </div>
-  );
+	return (
+		<>
+			{wallets.map((wallet) => (
+				<button
+					key={wallet.id}
+					disabled={wallet.status === "connecting"}
+					onClick={() => (wallet.isConnected ? wallet.disconnect() : wallet.connect())}
+				>
+					{wallet.isConnected ? "Disconnect" : "Connect"} {wallet.name}
+				</button>
+			))}
+			{accounts.map((account) => (
+				<p key={account.id}>
+					[{account.platform}] {account.address}
+				</p>
+			))}
+		</>
+	);
 };
 
 export const App = () => (
-  <KheopskitProvider>
-    <Wallets />
-  </KheopskitProvider>
+	<KheopskitProvider>
+		<Wallets />
+	</KheopskitProvider>
 );
 ```
 
-> **What `useWallets()` returns.** The whole state. `isDiscovering` is `true` until the page has loaded and kheopskit has read the Polkadot extensions again; wait for it before you tell the user a wallet is missing. Each wallet has `status` (`disconnected`, `connecting` or `connected`) and `error`, so a button can show `Connecting…` without local state. While `isHydrating` is `true`, wallets and accounts restored from the cache carry `isPlaceholder: true` and no SDK handle. Check `!account.isPlaceholder` before you sign.
+## Quick start without React
 
-> **Prefer the component directly?** Use `<KheopskitProvider config={{ platforms }}>` and recover platform-precise account types (e.g. `account.signer` on Solana, `account.client` on Ethereum) with a type argument, `useWallets<typeof platforms>()`. React context can't be generic, so the bare `useWallets()` returns the SDK-free base shapes. Pass a **referentially stable** `config` (module scope, `useMemo`, or `createKheopskit`); a new object each render recreates the store and re-subscribes.
-
-> **Reading a wallet's SDK handle?** `state.wallets` mixes injected wallets with the single, platform-less WalletConnect connector. Narrow with `isInjectedWallet(wallet)` (the complement of `isWalletConnectWallet`) to recover `wallet.platform`, `wallet.sourceId`, and the injected SDK handle (`provider` on Ethereum, `extension` on Polkadot, `wallet` on Solana).
-
-#### Hooks for one wallet or account
-
-`useWallet(walletId)` and `useAccount(accountId)` return one item, or
-`undefined`, and re-render only when that item changes. `useConnect(walletId)`
-returns `{ connect, disconnect, status, error }`. It aborts a pending
-`connect()` when the component unmounts or `walletId` changes, and rejects
-`ABORTED` a `connect()` that starts after. `useWallets()` and `useAccounts()`
-re-render on every state change. A wallet's `connect` and `disconnect` from
-`useWallet` or `useWallets()`, and `useConnect`'s `disconnect`, act on the
-instance's pipeline when they are called, including right after an
-`<Activity>` reveal restarts it and while another provider or a `kheopskit$`
-subscriber holds it. Once nothing holds it, they reject `ABORTED`.
-`useConnect`'s `connect` is scoped to its component instead. It rejects
-`ABORTED` once the component has unmounted or been hidden by `<Activity>`, even
-while something else holds the pipeline.
-
-```tsx
-import type { WalletId } from "@kheopskit/core";
-import { useConnect } from "@kheopskit/react";
-
-const ConnectButton = ({ walletId }: { walletId: WalletId }) => {
-  const { connect, disconnect, status, error } = useConnect(walletId);
-  if (status === "connected") return <button onClick={disconnect}>Disconnect</button>;
-  return (
-    <>
-      <button disabled={status === "connecting"} onClick={connect}>
-        Connect
-      </button>
-      {error?.code === "USER_REJECTED" && <p>You refused the connection.</p>}
-    </>
-  );
-};
-```
-
-#### One instance for React and RxJS code
-
-`createKheopskit` also returns `kheopskit$`, the stream its provider subscribes
-to, and its `store`. Subscribe to `kheopskit$` from RxJS code instead of calling
-`getKheopskit$` again. The provider and your code then share one wallet
-discovery, one reconnect attempt and one extension prompt.
+`getKheopskit$` returns an RxJS observable of the same state, for any framework or none.
 
 ```ts
-// kheopskit.ts
-export const { KheopskitProvider, useWallet, kheopskit$, store } = createKheopskit({
-  platforms: [polkadot()],
-});
-
-// session.ts
-import { map } from "rxjs";
-import { kheopskit$ } from "./kheopskit";
-
-export const connectedWalletIds$ = kheopskit$.pipe(
-  map(({ wallets }) => wallets.filter((wallet) => wallet.isConnected).map((wallet) => wallet.id)),
-);
-```
-
-In an SSR app, pass `createKheopskit(config, { store })` when code reads `store`
-or subscribes to `kheopskit$` before the provider renders, such as module-scope
-code or a parent's effect that runs before the provider mounts. The
-[React README](packages/react/README.md#one-instance-for-react-and-rxjs-code)
-explains which store `createKheopskit` creates otherwise.
-
-#### Testing React components
-
-Render the real provider with a store backed by memory and a fake extension:
-
-```tsx
-const store = createKheopskitStore({ storage: createMemoryStorage() });
-const talisman = createFakePolkadotExtension({ name: "talisman" });
-const { KheopskitProvider } = createKheopskit({ platforms: [polkadot()] }, { store });
-
-render(
-  <KheopskitProvider>
-    <ConnectButton walletId={talisman.walletId} />
-  </KheopskitProvider>,
-);
-
-// teardown
-cleanup();
-talisman.uninstall();
-store.destroy();
-```
-
-The [React README](packages/react/README.md#testing) has the complete test.
-
-### With Vanilla JavaScript and RxJS
-
-1. Instantiate a Kheopskit observable with `getKheopskit$(config)`.
-2. Subscribe to the observable to access wallets and accounts.
-
-```javascript
 import { getKheopskit$ } from "@kheopskit/core";
-import { polkadot } from "@kheopskit/core/polkadot";
-import { ethereum } from "@kheopskit/core/ethereum";
-
-const config = {
-  platforms: [polkadot(), ethereum()],
-  autoReconnect: true,
-};
-const kheopskit$ = getKheopskit$(config);
-
-kheopskit$.subscribe(({ wallets, accounts }) => {
-  console.log("Wallets:", wallets);
-  console.log("Accounts:", accounts);
-});
-```
-
-### Polkadot account type filtering
-
-Pass `accountTypes` to the `polkadot()` plugin to control which Polkadot account key types are exposed in `accounts`.
-
-- Supported values: `"sr25519"`, `"ed25519"`, `"ecdsa"`, `"ethereum"`
-- Default: `["sr25519", "ed25519", "ecdsa"]`
-- `"ethereum"` is excluded by default and must be opted in explicitly
-
-Example including Ethereum-style Polkadot accounts:
-
-```ts
-import { polkadot } from "@kheopskit/core/polkadot";
-
-const config = {
-  platforms: [
-    polkadot({ accountTypes: ["sr25519", "ed25519", "ecdsa", "ethereum"] }),
-  ],
-  autoReconnect: true,
-};
-```
-
-### Polkadot app name
-
-Set `appName` in the config to name your dapp to Polkadot extensions on connect. When it's unset, kheopskit sends the WalletConnect plugin's `metadata.name`, then `window.location.hostname`, because polkadot.js warns about a suspicious origin when the name is empty.
-
-### Solana
-
-Add the `solana()` plugin to `platforms` to surface Solana wallets. Injected wallets are discovered via the [Wallet Standard](https://github.com/anza-xyz/wallet-standard); WalletConnect is supported through Reown AppKit.
-
-Each Solana account exposes a signer built on [`@solana/kit`](https://www.npmjs.com/package/@solana/kit)'s signer interfaces, so it plugs directly into kit's transaction pipeline (e.g. `signAndSendTransactionMessageWithSigners`):
-
-```ts
 import { solana } from "@kheopskit/core/solana";
 
-const config = {
-  // `chain` is the cluster the account signers target. Default: "solana:mainnet"
-  platforms: [solana({ chain: "solana:mainnet" })],
-  autoReconnect: true,
-};
-
-// account.signer is bound to the plugin's `chain`; a cached placeholder has none
-if (account.isPlaceholder) return;
-const [signed] = await account.signer.modifyAndSignMessages([message]);
-
-// account.getSigner(chain) returns a signer bound to another cluster
-const devnetSigner = account.getSigner("solana:devnet");
+getKheopskit$({ platforms: [solana()], autoReconnect: true }).subscribe(
+	({ wallets, accounts }) => console.log(wallets, accounts),
+);
 ```
 
-- Supported `chain` values: `"solana:mainnet"`, `"solana:devnet"`, `"solana:testnet"`, `"solana:localnet"`
-- `"solana:localnet"` cannot be used over WalletConnect (no canonical CAIP-2 id)
+## Rules that prevent the common bugs
 
-### Server-Side Rendering (SSR)
+- Wait for `isDiscovering` to be `false` before you tell the user a wallet is missing.
+- Check `!account.isPlaceholder` before you sign. Accounts restored from the cache have no SDK handle until reconnect ends.
+- Branch on `error.code`, not on the error message.
+- Pass a config that keeps the same reference across renders. `createKheopskit` does this for you.
 
-Kheopskit supports SSR with frameworks like Next.js and TanStack Start. Pass the `ssrCookies` prop to enable cookie-based storage that works on the server.
+## Docs
 
-When you pass `ssrCookies`:
-- Storage switches from localStorage to cookies
-- Server can read initial state from request headers
-- No hydration mismatch between server and client
+| To do this | Read |
+|------------|------|
+| Use one wallet or account in a component (`useWallet`, `useAccount`, `useConnect`) | [React hooks](./packages/react/README.md#hooks) |
+| Understand discovery, hydration and reconnect timings | [Wallet lifecycle](./packages/core/README.md#wallet-lifecycle) |
+| Handle `connect()` errors | [Connect and disconnect](./packages/core/README.md#connect-and-disconnect) |
+| Sign transactions and raw messages | [Signing](./packages/core/README.md#signing) |
+| Add WalletConnect | [Core install](./packages/core/README.md#install) |
+| Render on the server | [React SSR](./packages/react/README.md#ssr), [Next.js example](./examples/nextjs-react), [TanStack Start example](./examples/tanstack-start) |
+| Test your integration | [Core testing](./packages/core/README.md#testing), [React testing](./packages/react/README.md#testing) |
+| Upgrade | [v5 to v6](./packages/core/MIGRATING_TO_V6.md), [v3 to v4](./packages/core/MIGRATING_TO_V4.md) |
 
-#### Next.js (App Router)
+## For AI coding agents
 
-`@kheopskit/react` ships with a `"use client"` directive, so you can import `KheopskitProvider` straight into a Server Component (like the root layout below), with no manual client-boundary wrapper.
+Read the docs from `node_modules`, because they match the installed version:
 
-```tsx
-// app/layout.tsx
-import { cookies } from "next/headers";
-import { ethereum } from "@kheopskit/core/ethereum";
-import { polkadot } from "@kheopskit/core/polkadot";
-import { App } from "./app";
+- `node_modules/@kheopskit/core/README.md` covers state, lifecycle, errors, signing and test helpers.
+- `node_modules/@kheopskit/react/README.md` covers the provider and hooks.
+- `node_modules/@kheopskit/core/MIGRATING_TO_V6.md` lists every v6 change, with before and after code.
 
-const config = {
-  platforms: [polkadot(), ethereum()],
-  autoReconnect: true,
-};
+To check your work, render the real provider with `createFakePolkadotExtension` and `createMemoryStorage` from `@kheopskit/core/testing`.
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const cookieStore = await cookies();
-  const ssrCookies = cookieStore.toString();
+## Built with kheopskit
 
-  return (
-    <html>
-      <body>
-        <KheopskitProvider config={config} ssrCookies={ssrCookies}>
-          {children}
-        </KheopskitProvider>
-      </body>
-    </html>
-  );
-}
-```
+- [Kheopswap](https://github.com/kheopswap/kheopswap) for Polkadot and Ethereum
+- [Taohop](https://github.com/0xKheops/taohop)
 
-#### TanStack Start
+## Contributing
 
-```tsx
-// routes/__root.tsx
-import { createRootRoute, Outlet } from "@tanstack/react-router";
-import { createServerFn, Meta, Scripts } from "@tanstack/start";
-import { getRequest } from "@tanstack/start/server";
-import { ethereum } from "@kheopskit/core/ethereum";
-import { polkadot } from "@kheopskit/core/polkadot";
-import { KheopskitProvider } from "@kheopskit/react";
-
-const config = {
-  platforms: [polkadot(), ethereum()],
-  autoReconnect: true,
-};
-
-const getSSRCookies = createServerFn({ method: "GET" }).handler(async () => {
-  const request = getRequest();
-  return request?.headers.get("cookie") ?? undefined;
-});
-
-export const Route = createRootRoute({
-  loader: async () => ({ ssrCookies: await getSSRCookies() }),
-  component: RootComponent,
-});
-
-function RootComponent() {
-  const { ssrCookies } = Route.useLoaderData();
-  return (
-    <html>
-      <head><Meta /></head>
-      <body>
-        <KheopskitProvider config={config} ssrCookies={ssrCookies}>
-          <Outlet />
-        </KheopskitProvider>
-        <Scripts />
-      </body>
-    </html>
-  );
-}
-```
-
-#### SSR Considerations
-
-| Feature | Client-Only | SSR (with `ssrCookies`) |
-|---------|-------------|-------------------------|
-| Storage | localStorage | Cookies |
-| Server access | ❌ | ✅ |
-| Hydration match | ⚠️ Flash possible | ✅ No flash |
-| Size limit | ~5MB | ~4KB |
-| Cross-tab sync | `storage` event | BroadcastChannel |
-
-**Cookie attributes**: Kheopskit uses `SameSite=Lax`, `Secure` (on HTTPS), `path=/`, and 1-year expiry.
-
-**Cookie size limit (compact format)**: Cookie storage uses a compact JSON schema to stay under the ~4KB limit. As a rule of thumb, with 6 connected wallets you can fit about 30-40 accounts when most accounts do not include a name. If many accounts have names, expect closer to 25-30. When the cookie grows too large, browsers may reject it.
-
-## Wallet lifecycle
-
-On every page load kheopskit runs the same steps. The [core README](./packages/core/README.md#wallet-lifecycle) gives each rule with its numbers and source file.
-
-1. **Discovery.** Polkadot extensions are read from `window.injectedWeb3` at subscribe, 100, 300, 600 and 1100 ms later, and at `load` and 100 ms after. `isDiscovering` turns `false` after the `load` read. Nothing looks again after the last of these reads.
-2. **Hydration.** The first frame shows the previous visit's wallets and accounts from the cache as placeholders (`isPlaceholder: true`). `isHydrating` ends after the 500 ms grace period, the `load` read and the reconnect of every cached connected wallet have settled, and at 3000 ms (`hydrationTimeout`) at the latest.
-3. **Reconnect.** Wallets the user connected last time reconnect, without a prompt while the site stays authorised, and show `status: "connecting"` meanwhile. A refusal forgets the wallet; other failures set `error`.
-4. **Connect.** An injected wallet's `connect()` is shared between concurrent calls, resolves at once on a connected wallet, takes an `AbortSignal`, has no timeout, rejects with a typed `KheopskitError`, and resolves once the state shows the wallet connected.
-5. **Persistence.** `remembered` gains an injected wallet on every connect (the WalletConnect connector is never remembered) and loses it when a connected wallet is disconnected. The wallet and account cache is written 1 second after hydration ends and the state stops changing, to `localStorage` or to a cookie with `ssrCookies`.
-
-## Testing
-
-`@kheopskit/core/testing` provides a fake Polkadot extension, an in-memory
-storage and helpers to seed a previous session, for vitest or jest. A test that
-checks a remembered wallet reconnects:
-
-```ts
-import {
-  createKheopskitStore,
-  getKheopskit$,
-  type KheopskitState,
-  type KheopskitStore,
-} from "@kheopskit/core";
-import { polkadot } from "@kheopskit/core/polkadot";
-import {
-  cachedAccountOf,
-  cachedWalletOf,
-  createFakePolkadotExtension,
-  createMemoryStorage,
-  type FakePolkadotExtension,
-} from "@kheopskit/core/testing";
-import type { Subscription } from "rxjs";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-
-const alice = {
-  address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-  name: "Alice",
-  type: "sr25519" as const,
-};
-
-let talisman: FakePolkadotExtension;
-let store: KheopskitStore;
-let subscription: Subscription;
-
-beforeEach(() => {
-  vi.useFakeTimers();
-  talisman = createFakePolkadotExtension({ name: "talisman", accounts: [alice] });
-  store = createKheopskitStore({ storage: createMemoryStorage() });
-});
-
-afterEach(() => {
-  talisman.uninstall();
-  subscription.unsubscribe();
-  store.destroy();
-  vi.useRealTimers();
-});
-
-it("reconnects the wallet the user connected last time", async () => {
-  const wallet = cachedWalletOf(talisman.walletId, "Talisman");
-  store.rememberWallet(talisman.walletId);
-  store.setCachedState([wallet], [cachedAccountOf(wallet, alice.address, alice.name)]);
-
-  let state: KheopskitState | undefined;
-  subscription = getKheopskit$({ platforms: [polkadot()] }, { store }).subscribe(
-    (next) => {
-      state = next;
-    },
-  );
-  await vi.advanceTimersByTimeAsync(1000);
-
-  expect(talisman.enableCalls()).toHaveLength(1);
-  expect(state?.wallets.map((w) => [w.id, w.isConnected])).toEqual([
-    ["polkadot:talisman", true],
-  ]);
-  expect(state?.accounts.map((a) => a.name)).toEqual(["Alice"]);
-});
-```
-
-The `afterEach` above is the whole teardown. `uninstall()` removes the fake,
-unsubscribing stops kheopskit's timers, and `destroy()` ends the store's storage
-subscription. With fake timers, use the async `advanceTimersByTimeAsync` so the
-promises between timers run. The fake records `enable()` and `signRaw` calls,
-not `signPayload` calls. See the
-[core README](packages/core/README.md#testing) for the full API.
+See [CONTRIBUTING.md](./CONTRIBUTING.md). Kheopskit is ISC licensed.
