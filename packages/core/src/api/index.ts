@@ -19,5 +19,11 @@ export {
 	getHydratedSnapshot,
 	type HydratedSnapshot,
 } from "./hydration";
+export {
+	type CreateKheopskitConfig,
+	type CreateKheopskitOptions,
+	createKheopskit,
+	type Kheopskit,
+} from "./instance";
 export { createKheopskitStore, getDefaultStore } from "./store";
 export * from "./types";

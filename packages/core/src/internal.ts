@@ -5,6 +5,7 @@
  *
  * @internal
  */
+export { createInstance, kheopskitInternals } from "./api/instance";
 export {
 	clearCachedObservable,
 	clearCachedObservablesByPrefix,
