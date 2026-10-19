@@ -27,8 +27,6 @@ const abortedError = (
 		{ walletId },
 	);
 
-// Holds taken and releases queued in the caller's task (a React commit's
-// layout effects, an rxjs `take(1)` unsubscribing) land before this microtask.
 const whenLiveAfterTheCallersTask = async (
 	pipeline: LivePipeline<KheopskitState>,
 	signal: AbortSignal | undefined,
@@ -37,11 +35,6 @@ const whenLiveAfterTheCallersTask = async (
 	return pipeline.whenLive(signal);
 };
 
-/**
- * `connect` and `disconnect` for one wallet id that act on the pipeline's run
- * at call time: they wait for a restarted run's first emission and reject
- * `ABORTED` while nothing holds the pipeline, without starting it.
- */
 export const walletActions = (
 	pipeline: LivePipeline<KheopskitState>,
 	walletId: WalletId,
@@ -65,10 +58,6 @@ export const walletActions = (
 	};
 };
 
-/**
- * Gives every wallet of a state the pipeline's call-time actions, memoised per
- * state so a state presented twice is the same object.
- */
 export const createPresenter = (pipeline: LivePipeline<KheopskitState>) => {
 	const presented = new WeakMap<KheopskitState, KheopskitState>();
 	return (state: KheopskitState): KheopskitState => {

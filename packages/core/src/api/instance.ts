@@ -57,19 +57,12 @@ export type Kheopskit<P extends readonly KheopskitPlatform[]> = {
 };
 
 type KheopskitInternals = {
-	/** Gives a snapshot that `kheopskit$` did not emit the same actions. */
 	present: (state: KheopskitState) => KheopskitState;
-	/** Actions for a wallet id the state may not list yet. */
 	walletActions: (walletId: WalletId) => WalletActions;
 };
 
 const internals = new WeakMap<object, KheopskitInternals>();
 
-/**
- * The instance over any run source: one shared run per holder period, its
- * liveness, and the presenter that gives every emitted wallet call-time
- * actions.
- */
 export const createInstance = <T extends KheopskitState>(
 	run$: () => Observable<T>,
 	store: KheopskitStore,
@@ -86,7 +79,6 @@ export const createInstance = <T extends KheopskitState>(
 	);
 	const present = createPresenter(pipeline);
 	const kit = {
-		// The presenter only swaps each wallet's actions for ones of the same type.
 		kheopskit$: pipeline.observable$.pipe(map(present)) as Observable<T>,
 		store,
 	};
@@ -97,7 +89,6 @@ export const createInstance = <T extends KheopskitState>(
 	return kit;
 };
 
-/** @internal */
 export const kheopskitInternals = (
 	kit: Kheopskit<readonly KheopskitPlatform[]>,
 ): KheopskitInternals => {
@@ -116,8 +107,6 @@ const lazyStore = (create: () => KheopskitStore): KheopskitStore => ({
 	destroy: () => create().destroy(),
 });
 
-// A module-level instance outlives every request on the server, so no request
-// may change what its store holds there.
 const inertOnTheServer = (store: KheopskitStore): KheopskitStore =>
 	typeof window === "undefined"
 		? {

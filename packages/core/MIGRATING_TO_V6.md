@@ -862,7 +862,8 @@ See the [React README](../react/README.md#one-instance-for-react-and-rxjs-code).
 `@kheopskit/core` exports `createKheopskit`, and `@kheopskit/react`'s
 `createKheopskit` is built on it. It replaces `getKheopskit$`.
 
-- `getKheopskit$` is removed. Create one instance per app and use its stream:
+- `getKheopskit$` and its `GetKheopskitOptions` type are removed. Create one
+  instance per app and use its stream:
   `export const { kheopskit$, store } = createKheopskit(config, { store })`.
   Every subscriber shares one pipeline. Delete your `defer(...)` +
   `shareReplay(...)` wrapper.

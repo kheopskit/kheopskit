@@ -93,7 +93,6 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 			createKheopskit(
 				{
 					...config,
-					// A config without platforms resolves to none, with a warning.
 					platforms: (config?.platforms ?? []) as readonly [KheopskitPlatform],
 				},
 				store ? { store } : { ssr },
