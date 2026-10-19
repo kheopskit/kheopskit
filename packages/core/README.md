@@ -180,6 +180,10 @@ Source: [`api/kheopskit.ts`](https://github.com/kheopskit/kheopskit/blob/main/pa
 On a reload, the first emission shows the wallets and accounts of the previous
 visit from the cache, so the list does not flash empty while the extensions
 inject and the wallets reconnect. `state.isHydrating` is `true` while it does.
+`getHydratedSnapshot` builds this first emission from the config it is given
+and leaves out what that config does not enable: the wallets and accounts of a
+platform missing from `platforms`, the WalletConnect connector when
+`walletConnect` is unset, and every account whose wallet is left out.
 With nothing cached, or with `hydrationGracePeriod: 0`, `isHydrating` is
 `false` from the first emission.
 
