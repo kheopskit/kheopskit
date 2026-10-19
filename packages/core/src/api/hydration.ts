@@ -36,10 +36,10 @@ export type GetHydratedSnapshotOptions = {
  * sorted like the live pipeline. Omits wallets of platforms missing from
  * `config.platforms`, the WalletConnect row when `config.walletConnect` is
  * unset, and every account of a platform missing from `config.platforms` or
- * of an omitted wallet. A cached connected injected wallet that
- * `autoReconnect` rejects comes back `disconnected`, and a wallet that comes
- * back `disconnected` has no accounts. Each remaining account must pass its
- * platform plugin's `acceptsCachedAccount` hook.
+ * whose wallet is not among the returned wallets. A cached connected injected
+ * wallet that `autoReconnect` rejects comes back `disconnected`, and a wallet
+ * that comes back `disconnected` has no accounts. Each remaining account must
+ * pass its platform plugin's `acceptsCachedAccount` hook.
  *
  * This is the single implementation behind the observable's initial seed and
  * both React snapshot sources (`serverValue`/`initialValue`). They must produce
@@ -55,14 +55,9 @@ export const getHydratedSnapshot = (
 	options: GetHydratedSnapshotOptions = {},
 ): HydratedSnapshot => {
 	const cached = store.getCachedState();
-	const unconfigured = new Set(
-		cached.wallets
-			.filter((wallet) => !acceptsCachedWallet(wallet, config))
-			.map((wallet) => wallet.id),
-	);
 
 	const wallets = cached.wallets
-		.filter((wallet) => !unconfigured.has(wallet.id))
+		.filter((wallet) => acceptsCachedWallet(wallet, config))
 		.map(hydrateWallet)
 		.map((wallet) =>
 			wallet.status === "connecting" &&
@@ -80,13 +75,12 @@ export const getHydratedSnapshot = (
 		})
 		.sort(sortWallets);
 
-	const withoutAccounts = new Set([
-		...unconfigured,
-		...wallets.filter((w) => w.status === "disconnected").map((w) => w.id),
-	]);
+	const walletsWithAccounts = new Set(
+		wallets.filter((w) => w.status !== "disconnected").map((w) => w.id),
+	);
 
 	const accounts = cached.accounts
-		.filter((account) => !withoutAccounts.has(account.walletId))
+		.filter((account) => walletsWithAccounts.has(account.walletId))
 		.filter((account) => acceptsCachedAccount(account, config.platforms))
 		.map(hydrateAccount)
 		.sort(sortAccounts);
