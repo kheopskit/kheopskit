@@ -5,19 +5,29 @@ export type PipelineEnd = "aborted" | "unheld" | "errored" | "completed";
 /** The running pipeline's state, or why it cannot serve an action. */
 export type Liveness<T> = { state: T; end?: undefined } | { end: PipelineEnd };
 
-export type LivePipeline<T> = {
+export type LivePipeline<T extends {}> = {
 	/** Subscribing holds the pipeline; it runs while at least one holder stays. */
 	observable$: Observable<T>;
 	/**
+	 * The first value `pick` returns for the current run's states: its latest
+	 * value, then each later emission, until `pick` returns something other
+	 * than `undefined`. Never starts or holds the pipeline. Ends `unheld` while
+	 * nothing holds it or once the last holder leaves, `errored` or
+	 * `completed` once the run ended that way, and `aborted` when `signal`
+	 * fires first.
+	 */
+	whenState: <R extends {}>(
+		pick: (state: T) => R | undefined,
+		signal?: AbortSignal,
+	) => Promise<Liveness<R>>;
+	/**
 	 * The current run's state: its latest value, or its first emission once it
-	 * arrives. Ends `unheld` while nothing holds the pipeline, without starting
-	 * it, `errored` or `completed` once the run ended that way, and `aborted`
-	 * when `signal` fires first.
+	 * arrives. Ends as `whenState` does.
 	 */
 	whenLive: (signal?: AbortSignal) => Promise<Liveness<T>>;
 };
 
-export const createLivePipeline = <T>(
+export const createLivePipeline = <T extends {}>(
 	source$: Observable<T>,
 ): LivePipeline<T> => {
 	let holders = 0;
@@ -25,10 +35,10 @@ export const createLivePipeline = <T>(
 	let emittedRun = 0;
 	let latestValue: T | undefined;
 	let ended: PipelineEnd | undefined;
-	const firstEmissionWaiters = new Set<(liveness: Liveness<T>) => void>();
+	const waiters = new Set<(liveness: Liveness<T>) => void>();
 
-	const settleFirstEmission = (liveness: Liveness<T>) => {
-		for (const waiter of firstEmissionWaiters) waiter(liveness);
+	const notifyWaiters = (liveness: Liveness<T>) => {
+		for (const waiter of waiters) waiter(liveness);
 	};
 
 	const observable$ = new Observable<T>((subscriber) => {
@@ -41,7 +51,7 @@ export const createLivePipeline = <T>(
 			next: (value) => {
 				latestValue = value;
 				emittedRun = thisRun;
-				settleFirstEmission({ state: value });
+				notifyWaiters({ state: value });
 				subscriber.next(value);
 			},
 			error: (error) => {
@@ -55,26 +65,38 @@ export const createLivePipeline = <T>(
 		});
 		return () => {
 			subscription.unsubscribe();
-			if (--holders === 0) settleFirstEmission({ end: ended ?? "unheld" });
+			if (--holders === 0) notifyWaiters({ end: ended ?? "unheld" });
 		};
 	});
 
-	const whenLive = async (signal?: AbortSignal): Promise<Liveness<T>> => {
+	const whenState = async <R extends {}>(
+		pick: (state: T) => R | undefined,
+		signal?: AbortSignal,
+	): Promise<Liveness<R>> => {
 		if (signal?.aborted) return { end: "aborted" };
 		if (ended) return { end: ended };
 		if (holders === 0) return { end: "unheld" };
-		if (emittedRun === run) return { state: latestValue as T };
+		const current = emittedRun === run ? pick(latestValue as T) : undefined;
+		if (current !== undefined) return { state: current };
 		return new Promise((resolve) => {
-			const settle = (liveness: Liveness<T>) => {
-				firstEmissionWaiters.delete(settle);
+			const settle = (liveness: Liveness<R>) => {
+				waiters.delete(observe);
 				signal?.removeEventListener("abort", onAbort);
 				resolve(liveness);
 			};
+			const observe = (liveness: Liveness<T>) => {
+				if (liveness.end) return settle({ end: liveness.end });
+				const picked = pick(liveness.state);
+				if (picked !== undefined) settle({ state: picked });
+			};
 			const onAbort = () => settle({ end: "aborted" });
 			signal?.addEventListener("abort", onAbort, { once: true });
-			firstEmissionWaiters.add(settle);
+			waiters.add(observe);
 		});
 	};
 
-	return { observable$, whenLive };
+	const whenLive = (signal?: AbortSignal) =>
+		whenState((state) => state, signal);
+
+	return { observable$, whenState, whenLive };
 };

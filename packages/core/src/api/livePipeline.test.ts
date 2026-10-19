@@ -158,4 +158,52 @@ describe("createLivePipeline", () => {
 			restarted: { state: 7 },
 		});
 	});
+
+	describe("whenState", () => {
+		const even = (value: number) => (value % 2 === 0 ? value : undefined);
+
+		it("keeps waiting past states it does not pick and resolves on a later one", async () => {
+			const subject = new BehaviorSubject(1);
+			const pipeline = createLivePipeline(subject);
+			pipeline.observable$.subscribe();
+			const waiting = pipeline.whenState(even);
+			subject.next(3);
+			const afterOdd = await outcome(waiting);
+			subject.next(4);
+
+			expect({ afterOdd, picked: await outcome(waiting) }).toEqual({
+				afterOdd: "pending",
+				picked: { state: 4 },
+			});
+		});
+
+		it("picks from the run's latest value at once", async () => {
+			const subject = new BehaviorSubject(2);
+			const pipeline = createLivePipeline(subject);
+			pipeline.observable$.subscribe();
+
+			expect(await pipeline.whenState(even)).toEqual({ state: 2 });
+		});
+
+		it("ends unheld when the last holder leaves while it waits", async () => {
+			const subject = new BehaviorSubject(1);
+			const pipeline = createLivePipeline(subject);
+			const holder = pipeline.observable$.subscribe();
+			const waiting = pipeline.whenState(even);
+			holder.unsubscribe();
+			subject.next(2);
+
+			expect(await outcome(waiting)).toEqual({ end: "unheld" });
+		});
+
+		it("ends unheld without starting the pipeline while nothing holds it", async () => {
+			const subject = new BehaviorSubject(2);
+			const pipeline = createLivePipeline(subject);
+
+			expect({
+				liveness: await pipeline.whenState(even),
+				observed: subject.observed,
+			}).toEqual({ liveness: { end: "unheld" }, observed: false });
+		});
+	});
 });
