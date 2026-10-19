@@ -878,6 +878,9 @@ See the [React README](../react/README.md#one-instance-for-react-and-rxjs-code).
 - A wallet's `connect` and `disconnect`, read from any emission, act on the
   pipeline that is running when you call them. While nothing subscribes
   `kheopskit$`, they reject `ABORTED` and start nothing.
+- New: `waitForAccount(accountId, { signal })` resolves with the live account
+  once the running instance lists it. Use it instead of polling `kheopskit$`
+  until a placeholder account turns live.
 - On the server, a store that `createKheopskit` creates (no `store` option)
   ignores `rememberWallet`, `forgetWallet` and `setCachedState`. A
   module-level instance serves every request there, so no request may change

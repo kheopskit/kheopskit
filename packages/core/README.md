@@ -128,6 +128,26 @@ next subscriber starts a new run, which reads the cache again. A wallet's
 `connect()` and `disconnect()`, read from any emission, act on the run that is
 live when they are called (see [Connect and disconnect](#connect-and-disconnect)).
 
+`createKheopskit` also returns `waitForAccount`. Use it to sign right after a
+reload. A cached account is a placeholder until its wallet reconnects, so wait
+for the live account instead of reading it from the first emission:
+
+```ts
+const account = await waitForAccount(accountId, { signal });
+```
+
+It has three outcomes:
+
+- It resolves with the live account once the running instance lists it, at
+  once when it already does. It waits while `isHydrating` is `true` or the
+  account's wallet is `connecting`.
+- It rejects `ACCOUNT_UNAVAILABLE` when neither holds and the wallet does not
+  list the account.
+- It rejects `ABORTED` when nothing subscribes `kheopskit$` at call time, when
+  the last subscriber leaves, or when `signal` fires.
+
+Like `connect()`, it never starts the pipeline, and it has no timeout.
+
 `createKheopskit(config, options)` persists to `localStorage` by default.
 Pass `{ ssr: true }` to persist in a cookie that a server render can read, or
 `{ store }` to use a store you created (see [Persistence](#persistence)).
