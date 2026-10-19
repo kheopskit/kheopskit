@@ -147,6 +147,7 @@ export type SharedInstanceIsTyped = Expect<
 		[
 			PolkadotBound["kheopskit$"],
 			PolkadotBound["store"],
+			PolkadotBound["waitForAccount"],
 			ReturnType<typeof useWallet>,
 			ReturnType<typeof useAccount>,
 			ReturnType<typeof useConnect>,
@@ -170,6 +171,25 @@ export type CoreWalletIsPlatformPrecise = Expect<
 export type CoreAccountIsPlatformPrecise = Expect<
 	Equal<CoreState["accounts"][number], PolkadotAccount>
 >;
+
+type WaitedEthereumAccount = Awaited<
+	ReturnType<
+		ReturnType<
+			typeof createCoreKheopskit<readonly [ReturnType<typeof ethereum>]>
+		>["waitForAccount"]
+	>
+>;
+export type WaitedAccountIsLive = Expect<
+	Equal<
+		true extends WaitedEthereumAccount["isPlaceholder"] ? true : false,
+		false
+	>
+>;
+export const waitedAccountPlatform = (account: WaitedEthereumAccount) => {
+	// @ts-expect-error an ethereum-only instance waits for ethereum accounts
+	const platform: "polkadot" = account.platform;
+	return platform;
+};
 
 type ProviderProps<
 	Kit extends { KheopskitProvider: (props: never) => unknown },
