@@ -137,3 +137,34 @@ it("a remembered wallet disconnected after its reconnect was granted ends hydrat
 
 	expect(latest?.isHydrating).toBe(false);
 });
+
+it("a disconnect() while the reconnect waits for the extension forgets the wallet and ends hydration at the grace period", async () => {
+	talisman = createFakePolkadotExtension({ name: "talisman", enable: "hold" });
+	subscribe();
+	await vi.advanceTimersByTimeAsync(10);
+	expect(talismanIn(latest)?.status).toBe("connecting");
+
+	await talismanIn(latest)?.disconnect();
+	talisman.resolveEnable();
+	await vi.advanceTimersByTimeAsync(600);
+
+	expect(talismanIn(latest)?.status).toBe("disconnected");
+	expect(await rememberedIds()).toEqual([]);
+	expect(latest?.isHydrating).toBe(false);
+});
+
+it("a disconnect() after a failed reconnect forgets the wallet", async () => {
+	talisman = createFakePolkadotExtension({ name: "talisman", enable: "hold" });
+	subscribe();
+	await vi.advanceTimersByTimeAsync(10);
+	talisman.rejectEnable(new Error("Extension crashed"));
+	await vi.advanceTimersByTimeAsync(10);
+	expect(talismanIn(latest)).toMatchObject({
+		status: "disconnected",
+		error: { code: "CONNECT_FAILED" },
+	});
+
+	await talismanIn(latest)?.disconnect();
+
+	expect(await rememberedIds()).toEqual([]);
+});
