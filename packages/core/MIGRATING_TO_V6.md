@@ -866,7 +866,9 @@ See the [React README](../react/README.md#one-instance-for-react-and-rxjs-code).
   instance per app and use its stream:
   `export const { kheopskit$, store } = createKheopskit(config, { store })`.
   Every subscriber shares one pipeline. Delete your `defer(...)` +
-  `shareReplay(...)` wrapper.
+  `shareReplay(...)` wrapper. `platforms` must be a non-empty tuple, such as
+  `[polkadot()]` written inline; a value typed `KheopskitPlatform[]` no longer
+  compiles.
 - The pipeline runs while something subscribes `kheopskit$`. To keep it
   running for the page's lifetime, subscribe once at startup, or merge
   `kheopskit$` into a stream you already keep subscribed. Unsubscribing the
