@@ -64,6 +64,28 @@ const kheopskit$ = getKheopskit$({
 });
 ```
 
+`appKitOptions` passes any other
+[`createAppKit` option](https://docs.reown.com/appkit/javascript/core/options)
+to AppKit as-is. For example, to feature wallets that Reown's registry does not
+list for your chain and turn analytics off:
+
+```ts
+walletConnect({
+  projectId,
+  metadata,
+  networks,
+  appKitOptions: {
+    featuredWalletIds: ["<wallet id>"],
+    features: { analytics: false },
+  },
+});
+```
+
+kheopskit sets `projectId`, `metadata`, `networks`, `themeMode`,
+`themeVariables` and `universalProviderConfigOverride` itself, and those values
+win over the same keys in `appKitOptions`. `allWallets` defaults to `"HIDE"`,
+and `appKitOptions` can override it.
+
 ## Usage
 
 Platforms are enabled by passing **plugins** (imported from their entry points)
