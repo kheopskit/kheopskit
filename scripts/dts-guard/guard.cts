@@ -168,11 +168,9 @@ export type WaitedAccountIsLive = Expect<
 		false
 	>
 >;
-export const waitedAccountPlatform = (account: WaitedEthereumAccount) => {
-	// @ts-expect-error an ethereum-only instance waits for ethereum accounts
-	const platform: "polkadot" = account.platform;
-	return platform;
-};
+export type WaitedAccountIsEthereum = Expect<
+	Equal<WaitedEthereumAccount["platform"], "ethereum">
+>;
 
 type ProviderProps<
 	Kit extends { KheopskitProvider: (props: never) => unknown },
