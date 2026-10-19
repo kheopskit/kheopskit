@@ -149,27 +149,15 @@ describe("KheopskitProvider hydration (no flash on SPA reload)", () => {
 		// Stored out of order (solana, ethereum, polkadot). The first paint must
 		// already be in the canonical sortAccounts order so the list does not
 		// reorder once the live observable emits (which is also sorted).
+		const zeta = cachedWalletOf("solana:mock", "Zeta");
+		const beta = cachedWalletOf("ethereum:mock", "Beta");
+		const talisman = cachedWalletOf("polkadot:talisman", "Talisman");
 		seedCache(
-			[],
+			[zeta, beta, talisman],
 			[
-				cachedAccountOf(
-					cachedWalletOf("solana:mock", "Zeta"),
-					"So11111111111111111111111111111111111111112",
-				),
-				{
-					...cachedAccountOf(
-						cachedWalletOf("ethereum:mock", "Beta"),
-						HARDHAT_0,
-					),
-					chainId: 1,
-				},
-				{
-					...cachedAccountOf(
-						cachedWalletOf("polkadot:talisman", "Talisman"),
-						ALICE,
-					),
-					polkadotAccountType: "sr25519",
-				},
+				cachedAccountOf(zeta, "So11111111111111111111111111111111111111112"),
+				{ ...cachedAccountOf(beta, HARDHAT_0), chainId: 1 },
+				{ ...cachedAccountOf(talisman, ALICE), polkadotAccountType: "sr25519" },
 			],
 		);
 

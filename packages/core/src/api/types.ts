@@ -445,6 +445,12 @@ export type KheopskitConfig<
 	/**
 	 * Platform plugins to enable, e.g. `[polkadot(), solana({ chain })]`.
 	 * Import factories from `@kheopskit/core/<platform>`.
+	 *
+	 * Cached wallets and accounts of a platform missing here are omitted from
+	 * the first emission on, and its remembered wallets are not reconnected.
+	 * They stay remembered, so adding the platform back makes them eligible
+	 * for reconnect under `autoReconnect` again. The cached WalletConnect row
+	 * likewise requires `walletConnect`.
 	 */
 	platforms: P;
 	/** Create with `walletConnect()` from `@kheopskit/core/walletconnect`. */

@@ -240,8 +240,7 @@ provider remount. Call it yourself when the app no longer needs kheopskit.
 ## SSR
 
 Create the instance with `{ ssr: true }`, so it persists in a cookie the server
-can read. Then pass the request cookie header as `ssrCookies` to hydrate wallet
-state on the server without a UI flash:
+can read:
 
 ```ts
 // kheopskit.ts
@@ -251,20 +250,29 @@ export const { KheopskitProvider, useWallets } = createKheopskit(
 );
 ```
 
+Then pass the `kheopskit` cookie as `ssrCookies` to hydrate wallet state on the
+server without a UI flash. Never forward the whole cookie header to a client
+component: the framework serializes its props into the HTML, httpOnly session
+cookies included.
+
 ```tsx
 // Next.js App Router
-const cookieStore = await cookies();
-const ssrCookies = cookieStore
-  .getAll()
-  .map((c) => `${c.name}=${c.value}`)
-  .join("; ");
+const kheopskitCookie = (await cookies()).get("kheopskit");
+const ssrCookies = kheopskitCookie
+  ? `kheopskit=${encodeURIComponent(kheopskitCookie.value)}`
+  : "";
 
 <KheopskitProvider ssrCookies={ssrCookies}>{children}</KheopskitProvider>;
 ```
 
+Kheopskit reads one cookie, named after the `storageKey` config option
+(default `kheopskit`). Pass `""` when it is absent. The
+[TanStack Start example](https://github.com/kheopskit/kheopskit/blob/main/examples/tanstack-start/src/routes/__root.tsx)
+reads it with `getCookie("kheopskit")` in a server function.
+
 `ssrCookies` on the provider of an instance created without `{ ssr: true }` is
-a type error. The standalone `KheopskitProvider` accepts `ssrCookies` and
-persists in the cookie when it receives the prop.
+a type error. The standalone `KheopskitProvider` persists to the cookie only
+when it receives `ssrCookies`, so pass `""` rather than leaving the prop out.
 
 > While `state.isHydrating` is `true`, wallets and accounts restored from the
 > cache are placeholders with `isPlaceholder: true` and no SDK handle

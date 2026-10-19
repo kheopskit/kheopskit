@@ -65,6 +65,29 @@ export const { kheopskit$ } = createKheopskit({
 });
 ```
 
+`appKitOptions` passes any other
+[`createAppKit` option](https://docs.reown.com/appkit/javascript/core/options)
+to AppKit as-is. For example, to feature wallets that Reown's registry does not
+list for your chain and turn analytics off:
+
+```ts
+walletConnect({
+  projectId,
+  metadata,
+  networks,
+  appKitOptions: {
+    featuredWalletIds: ["<wallet id>"],
+    features: { analytics: false },
+  },
+});
+```
+
+kheopskit sets `projectId`, `metadata`, `networks`, `themeMode`,
+`themeVariables` and `universalProviderConfigOverride` itself. `appKitOptions`
+does not accept those keys, and kheopskit's values win if one gets through
+untyped. `allWallets` defaults to `"HIDE"`,
+and `appKitOptions` can override it.
+
 ## Usage
 
 Create one kheopskit instance per app with `createKheopskit`. Platforms are
@@ -179,6 +202,10 @@ Source: [`api/kheopskit.ts`](https://github.com/kheopskit/kheopskit/blob/main/pa
 On a reload, the first emission shows the wallets and accounts of the previous
 visit from the cache, so the list does not flash empty while the extensions
 inject and the wallets reconnect. `state.isHydrating` is `true` while it does.
+`getHydratedSnapshot` builds this first emission from the config it is given
+and leaves out what that config does not enable: the wallets and accounts of a
+platform missing from `platforms`, the WalletConnect connector when
+`walletConnect` is unset, and every account whose wallet is left out.
 With nothing cached, or with `hydrationGracePeriod: 0`, `isHydrating` is
 `false` from the first emission.
 
@@ -256,6 +283,19 @@ wallet still `connecting` at that moment keeps its previous cached entry and
 accounts, so a slow reconnect never writes an empty cache. Every other wallet is
 written as it is, with the accounts of connected wallets only. See
 [Persistence](#persistence) for the format.
+
+#### Knowing when wallets have settled
+
+```ts
+const settled =
+  !isHydrating && wallets.every((wallet) => wallet.status !== "connecting");
+```
+
+Use it to hold a splash screen or a "welcome back" gate until the reconnects
+are over, including a reconnect still pending when `hydrationTimeout` ended
+hydration. Kheopskit has no flag for it, for the same reason it has no
+`walletsReady` promise ([Design choices](#design-choices)): the state already
+carries the fact.
 
 ### Reconnect
 
@@ -482,7 +522,16 @@ cookie in a compact form, to stay under the cookie size limit:
 `a` holds `[walletId, address, name, chainId, polkadotType, platform]` per
 account. The cookie is URI-encoded, lasts one year, and is set with `path=/`,
 `SameSite=Lax`, and `Secure` on HTTPS. Kheopskit warns in the console when the
-encoded value exceeds 3072 bytes.
+encoded value exceeds 3072 bytes. On the server, pass only this cookie as
+`ssrCookies`, never the whole cookie header: a value handed to a client
+component ends up in the HTML, httpOnly session cookies included.
+
+The `kheopskit` entry, in the cookie or in `localStorage`, holds only the ids of
+the wallets the user connected, each cached wallet's id, name, type and
+connected flag, and each cached account's address, name, wallet, chain id,
+Polkadot key type and platform. Apart from the wallet icons in
+`kheopskit-icons`, kheopskit stores nothing else. With the `walletConnect()`
+plugin, Reown AppKit keeps its own session data in the browser.
 
 Data written before v6 stored `remembered` as `autoReconnect`. The store reads
 that field as `remembered` and drops it on the next write. A storage write that

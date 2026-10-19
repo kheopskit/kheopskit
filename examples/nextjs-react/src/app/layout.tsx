@@ -16,8 +16,10 @@ export default async function RootLayout({
 }: Readonly<{
 	children: React.ReactNode;
 }>) {
-	const cookieStore = await cookies();
-	const ssrCookies = cookieStore.toString();
+	const kheopskitCookie = (await cookies()).get("kheopskit");
+	const ssrCookies = kheopskitCookie
+		? `kheopskit=${encodeURIComponent(kheopskitCookie.value)}`
+		: "";
 
 	return (
 		<html lang="en" className="dark">
