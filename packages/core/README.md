@@ -16,8 +16,8 @@ https://github.com/kheopskit/kheopskit.
 
 > **Upgrading from v5?** v6 makes `connect()` shared, idempotent and
 > abortable, types its rejections, adds `status`, `isDiscovering`,
-> `isPlaceholder` and `signRaw`, moves WalletConnect to a plugin, and replaces
-> `getKheopskit$` with `createKheopskit`. See
+> `isPlaceholder` and `signRaw`, moves WalletConnect to a plugin, and shares
+> one pipeline per app through `createKheopskit`. See
 > [MIGRATING_TO_V6.md](./MIGRATING_TO_V6.md).
 
 ## Install

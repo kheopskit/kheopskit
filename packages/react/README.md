@@ -197,9 +197,9 @@ same for every platform.
 `createKheopskit` is
 [`@kheopskit/core`'s `createKheopskit`](../core/README.md#usage) plus the
 provider and the typed hooks. It also returns `kheopskit$`, the state stream
-its provider subscribes to, and `store`, the store that stream persists into. Code outside
-React, such as an RxJS pipeline or a sign-in flow, subscribes to the same
-`kheopskit$`. While the provider is mounted, both share one pipeline: one wallet
+its provider subscribes to, and `store`, the store that stream persists into.
+Code outside React, such as an RxJS pipeline or a sign-in flow, subscribes to
+the same `kheopskit$`. While the provider is mounted, both share one pipeline: one wallet
 discovery, one reconnect attempt and one extension prompt.
 
 ```ts

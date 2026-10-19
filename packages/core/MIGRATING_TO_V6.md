@@ -109,10 +109,10 @@ Each section ends with the app code it makes redundant. In short:
 - `ABORTED`: this `connect()` or `disconnect()` call was abandoned. For
   `connect()`, its `signal` fired before the platform answered, `disconnect()`
   was called while it pended, or the last `kheopskit$` subscriber
-  unsubscribed. For either call on any wallet, placeholders and the
-  WalletConnect connector included, nothing subscribed `kheopskit$` when it was
-  called; the call then rejects without asking the platform, without changing
-  the remembered list and without starting the pipeline (section 10).
+  unsubscribed. Either call also rejects `ABORTED` when nothing subscribes
+  `kheopskit$` at the time of the call. It then asks no platform, leaves the
+  remembered list as it is and starts no pipeline. This holds for every
+  wallet, placeholders and the WalletConnect connector included (section 10).
 - `USER_REJECTED`: the user refused the wallet prompt. `cause` holds the
   platform error. It is an EIP-1193 error with `code: 4001` on Ethereum; on
   Polkadot the extension's own `Error`, for Talisman
