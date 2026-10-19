@@ -212,9 +212,6 @@ over a longer grace period, so an app that raises `hydrationGracePeriod` sets
   ends.
 - A failed reconnect ends that wallet's wait, even when the reconnect policy
   still permits a retry.
-- A remembered wallet the user disconnects while its reconnect still waits for
-  the extension stays remembered, so it holds hydration, and shows its cached
-  accounts, until `hydrationTimeout`.
 - A prompt the extension opens for a revoked site holds hydration until the
   user answers or `hydrationTimeout` elapses.
 - "Its account list has been read" relies on a signal that the built-in
@@ -245,8 +242,8 @@ Source: [`api/wallets.ts`](https://github.com/kheopskit/kheopskit/blob/main/pack
 [`api/injectedWallets.ts`](https://github.com/kheopskit/kheopskit/blob/main/packages/core/src/api/injectedWallets.ts).
 
 Kheopskit adds an injected wallet to the store's `remembered` list on every
-successful `connect()` and removes it when `disconnect()` starts on a
-connected wallet, whatever `autoReconnect` says, so an app can turn reconnect
+successful `connect()` and removes it when `disconnect()` starts, whatever the
+wallet's status and whatever `autoReconnect` says, so an app can turn reconnect
 on later. On the next load it reconnects the remembered injected wallets that
 `autoReconnect` accepts:
 
@@ -281,7 +278,7 @@ or removed, or any wallet's status changing), 3 attempts in total. If the list
 never changes again, no retry runs. A manual `connect()` or `disconnect()` on a
 remembered wallet ends its automatic reconnect for the session. A
 `disconnect()` while the automatic reconnect still waits for the extension
-aborts it without forgetting the wallet, so the next load reconnects it.
+aborts it and forgets the wallet, so the next load does not reconnect it.
 Forgetting a wallet with `store.forgetWallet(walletId)`, or calling
 `disconnect()` on its placeholder before it injects, ends its automatic
 reconnect for the rest of the session, even if the wallet is remembered again.
@@ -442,9 +439,8 @@ goes to `localStorage` as JSON:
 ```
 
 - `remembered` lists the injected wallets the user connected. It is written as
-  soon as a connect succeeds and cleared as soon as `disconnect()` starts on a
-  connected wallet. A `disconnect()` that aborts a pending connect leaves it
-  unchanged.
+  soon as a connect succeeds and cleared as soon as `disconnect()` starts,
+  whatever the wallet's status.
 - `cachedWallets` and `cachedAccounts` are written by the hydration rule above:
   after hydration ends, 1 second after the state stops changing.
 - Wallet icons go to a separate `localStorage` key, `kheopskit-icons`, to keep
@@ -697,8 +693,9 @@ fail.
   that injects shortly after `load` is listed before `isDiscovering` turns
   `false`.
   Hydration waits for that end only while a cached wallet is missing.
-- `remembered` is read once at subscribe. A live read would make a connect in
-  one tab connect every open tab, with no matching disconnect.
+- A wallet remembered after subscribe is not reconnected. Reconnecting it
+  would make a connect in one tab connect every open tab, with no matching
+  disconnect. A wallet forgotten after subscribe is not reconnected either.
 - No `persist: false` option. The `autoReconnect` predicate covers "do not
   reconnect", and `storageKey` keeps two dapps apart.
 

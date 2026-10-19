@@ -167,7 +167,8 @@ export type BaseWallet = {
 	/**
 	 * Disconnects the wallet.
 	 *
-	 * On a disconnected wallet it resolves at once. While a `connect()` waits
+	 * It forgets the wallet at once, whatever its status, so the next load does
+	 * not reconnect it. On a disconnected wallet it then resolves. While a `connect()` waits
 	 * for the platform to grant it, it aborts that connect (its promise rejects
 	 * with `ABORTED`) and never waits for the extension prompt. Otherwise it
 	 * first waits for the platform's disconnect and rejects if that fails, so
@@ -427,9 +428,9 @@ export type KheopskitConfig<
 	 * the extension. When the authorisation was revoked the extension prompts
 	 * once; a refusal forgets the wallet, so the next load stays silent. A manual
 	 * `connect()` or `disconnect()` on a remembered wallet ends its automatic
-	 * reconnect for the session. A `disconnect()` while the automatic reconnect
-	 * still waits for the extension aborts it without forgetting the wallet, so
-	 * the next load reconnects it.
+	 * reconnect for the session. A `disconnect()` forgets the wallet whatever
+	 * its status, so one made while the automatic reconnect still waits for the
+	 * extension aborts it, and the next load does not reconnect it.
 	 * Automatic reconnect also ends when the wallet disappears mid-attempt; the
 	 * wallet stays remembered for the next load.
 	 *
@@ -514,9 +515,6 @@ export type KheopskitConfig<
 	 *   or name changing), which may never happen, so waiting for it would
 	 *   hold most failed reconnects until `hydrationTimeout`. A retry that
 	 *   does run shows on the live wallet's `status`, not as a placeholder.
-	 * - A remembered wallet the user disconnects while its reconnect still
-	 *   waits for the extension stays remembered, so it holds hydration, and
-	 *   shows its cached accounts, until `hydrationTimeout`.
 	 * - A prompt the extension opens for a revoked site holds hydration until
 	 *   the user answers or `hydrationTimeout` elapses.
 	 *

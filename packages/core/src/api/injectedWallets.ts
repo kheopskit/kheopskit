@@ -263,6 +263,7 @@ export const createInjectedWallets$ = <
 
 		const disconnect = (source: TSource, walletId: WalletId): Promise<void> => {
 			const current = connections$.value.get(walletId);
+			store.forgetWallet(walletId);
 			if (!current || current.status === "disconnected")
 				return Promise.resolve();
 			if (current.status === "connecting") {
@@ -271,7 +272,6 @@ export const createInjectedWallets$ = <
 			}
 			if (current.disconnecting) return current.disconnecting;
 
-			store.forgetWallet(walletId);
 			const disconnecting = (async () => {
 				try {
 					await adapter.disconnect?.(source, walletId);
