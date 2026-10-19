@@ -15,7 +15,10 @@ afterEach(() => {
 it("renders useConnect on the server without warnings", () => {
 	const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 	const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
-	const { KheopskitProvider } = createKheopskit({ platforms: [polkadot()] });
+	const { KheopskitProvider } = createKheopskit(
+		{ platforms: [polkadot()] },
+		{ ssr: true },
+	);
 	const Status = () => {
 		const { status } = useConnect("polkadot:talisman");
 		return <span>{String(status)}</span>;

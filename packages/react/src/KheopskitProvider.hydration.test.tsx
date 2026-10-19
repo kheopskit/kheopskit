@@ -24,11 +24,16 @@ const liveObservable = vi.hoisted(() => ({ enabled: false }));
 // exactly what must reflect the client cache to avoid the empty-list flash.
 vi.mock("@kheopskit/core", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("@kheopskit/core")>();
+	const { createInstance } = await import("@kheopskit/core/internal");
 	const { NEVER } = await import("rxjs");
 	return {
 		...actual,
-		getKheopskit$: (...args: Parameters<typeof actual.getKheopskit$>) =>
-			liveObservable.enabled ? actual.getKheopskit$(...args) : NEVER,
+		createKheopskit: (...args: Parameters<typeof actual.createKheopskit>) => {
+			const kit = actual.createKheopskit(...args);
+			return liveObservable.enabled
+				? kit
+				: createInstance(() => NEVER, kit.store);
+		},
 	};
 });
 

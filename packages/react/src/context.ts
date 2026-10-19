@@ -1,12 +1,12 @@
-import type { KheopskitState } from "@kheopskit/core";
+import type { KheopskitState, WalletId } from "@kheopskit/core";
+import type { WalletActions } from "@kheopskit/core/internal";
 import { createContext, useContext } from "react";
-import type { Liveness } from "./livePipeline";
 
 export type KheopskitExternalStore = {
 	subscribe: (onChange: () => void) => () => void;
 	getSnapshot: () => KheopskitState;
 	getServerSnapshot: () => KheopskitState;
-	whenLive: (signal?: AbortSignal) => Promise<Liveness<KheopskitState>>;
+	walletActions: (walletId: WalletId) => WalletActions;
 };
 
 export const KheopskitContext = createContext<KheopskitExternalStore | null>(

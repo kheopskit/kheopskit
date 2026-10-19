@@ -5,6 +5,7 @@ import {
 	type KheopskitState,
 	type KheopskitStore,
 } from "@kheopskit/core";
+import { createInstance } from "@kheopskit/core/internal";
 import { polkadot } from "@kheopskit/core/polkadot";
 import {
 	createFakePolkadotExtension,
@@ -29,7 +30,6 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createKheopskit } from "./createKheopskit";
 import { KheopskitSourceProvider } from "./KheopskitSourceProvider";
-import { createLivePipeline } from "./livePipeline";
 import { useConnect } from "./useConnect";
 import { useWallet } from "./useWallet";
 import { useWallets } from "./useWallets";
@@ -411,7 +411,7 @@ describe("actions reach the live pipeline after an Activity hide stops it and a 
 			remembered: await t.remembered(),
 		}).toEqual({
 			messages: [
-				"ABORTED: [kheopskit] connect of wallet polkadot:talisman was called while nothing holds the pipeline (no KheopskitProvider of this instance is mounted and visible, and nothing subscribes its kheopskit$)",
+				"ABORTED: [kheopskit] connect of wallet polkadot:talisman was called while nothing subscribes this kheopskit instance's kheopskit$ (a mounted, visible KheopskitProvider subscribes it)",
 			],
 			enableCalls: 0,
 			writes: 0,
@@ -793,10 +793,7 @@ describe("an action pending on a pipeline that ends before its first emission", 
 	const mountOnSubject = () => {
 		const subject = new Subject<KheopskitState>();
 		const store = createKheopskitStore({ storage: createMemoryStorage() });
-		const resolveClientSource = () => ({
-			store,
-			pipeline: createLivePipeline(subject),
-		});
+		const kit = createInstance(() => subject, store);
 		const api: { connect?: () => Promise<void> } = {};
 		const Consumer = () => {
 			api.connect = useWallet(walletId)?.connect;
@@ -805,9 +802,9 @@ describe("an action pending on a pipeline that ends before its first emission", 
 		const app = (mode: Mode) => (
 			<Activity mode={mode}>
 				<KheopskitSourceProvider
+					kit={kit}
 					config={providerConfig}
 					ssrCookies={undefined}
-					resolveClientSource={resolveClientSource}
 				>
 					<Consumer />
 				</KheopskitSourceProvider>

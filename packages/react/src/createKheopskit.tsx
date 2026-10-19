@@ -1,57 +1,38 @@
 import {
-	createKheopskitStore,
-	getKheopskit$,
-	type KheopskitConfig,
+	type CreateKheopskitConfig,
+	type CreateKheopskitOptions,
+	createKheopskit as createCoreKheopskit,
 	type KheopskitPlatform,
-	type KheopskitState,
-	type KheopskitStore,
-	resolveConfig,
 	type WalletAccountId,
 	type WalletId,
 } from "@kheopskit/core";
-import { type FC, type PropsWithChildren, useCallback } from "react";
-import { defer, type Observable, shareReplay } from "rxjs";
+import type { FC, PropsWithChildren } from "react";
 import { KheopskitSourceProvider } from "./KheopskitSourceProvider";
-import { createLivePipeline, type LivePipeline } from "./livePipeline";
 import { useAccount } from "./useAccount";
 import { useWallet } from "./useWallet";
 import { useWallets } from "./useWallets";
 
-export type CreateKheopskitConfig<P extends readonly KheopskitPlatform[]> =
-	Omit<Partial<KheopskitConfig<P>>, "platforms"> & {
-		/** Platform plugins, e.g. `[polkadot(), solana()]`. Required. */
-		platforms: P;
-	};
+export type {
+	CreateKheopskitConfig,
+	CreateKheopskitOptions,
+} from "@kheopskit/core";
 
-export type CreateKheopskitOptions = {
-	/**
-	 * Store the shared instance reads the cache from and persists into. Pass one
-	 * when code outside React reads `store` or subscribes `kheopskit$` before
-	 * the provider renders in an SSR app, and in tests.
-	 */
-	store?: KheopskitStore;
-};
-
-const deferredStore = (claim: () => KheopskitStore): KheopskitStore => ({
-	observable: defer(() => claim().observable),
-	rememberWallet: (walletId) => claim().rememberWallet(walletId),
-	forgetWallet: (walletId) => claim().forgetWallet(walletId),
-	getCachedState: () => claim().getCachedState(),
-	setCachedState: (wallets, accounts) =>
-		claim().setCachedState(wallets, accounts),
-	destroy: () => claim().destroy(),
-});
+type ProviderProps<O> = O extends { ssr: true }
+	? { ssrCookies?: string }
+	: { ssrCookies?: never };
 
 /**
  * Binds a platform tuple once and returns one kheopskit instance: a
  * `KheopskitProvider`, hooks already typed to those platforms, and the
  * `kheopskit$` stream and `store` the provider uses, for code outside React.
- * Subscribing `kheopskit$` while the provider is mounted runs no second
- * pipeline, and holds the one pipeline for every hook action of the instance.
+ * It is `@kheopskit/core`'s `createKheopskit` instance: subscribing
+ * `kheopskit$` while the provider is mounted runs no second pipeline, and
+ * holds the one pipeline for every hook action of the instance.
  *
- * Without `options.store`, the store is created on first use in the browser:
- * backed by cookies when the provider renders first with `ssrCookies`, by
- * localStorage otherwise. The caller owns `store.destroy()`.
+ * Without `options.store`, the store is created on first use, backed by
+ * cookies with `{ ssr: true }` and by localStorage otherwise. Only an
+ * instance created with `{ ssr: true }` accepts the provider's `ssrCookies`.
+ * The caller owns `store.destroy()`.
  *
  * @example
  * ```tsx
@@ -65,57 +46,29 @@ const deferredStore = (claim: () => KheopskitStore): KheopskitStore => ({
  */
 export const createKheopskit = <
 	const P extends readonly [KheopskitPlatform, ...KheopskitPlatform[]],
+	const O extends CreateKheopskitOptions = CreateKheopskitOptions,
 >(
 	config: CreateKheopskitConfig<P>,
-	options: CreateKheopskitOptions = {},
+	options?: O,
 ) => {
-	let claimed: KheopskitStore | undefined;
-	const claimStore = (ssrCookies?: string) => {
-		claimed ??=
-			options.store ??
-			createKheopskitStore({
-				ssrCookies,
-				storageKey: resolveConfig(config).storageKey,
-			});
-		return claimed;
-	};
-
-	const shared$: Observable<KheopskitState<P>> = defer(() =>
-		getKheopskit$(config, { store: claimStore() }),
-	).pipe(shareReplay({ refCount: true, bufferSize: 1 }));
-	const pipeline = createLivePipeline(shared$);
-	const kheopskit$ = pipeline.observable$;
+	const kit = createCoreKheopskit(config, options);
 
 	const Provider: FC<PropsWithChildren<{ ssrCookies?: string }>> = ({
 		children,
 		ssrCookies,
-	}) => {
-		if (typeof window !== "undefined") claimStore(ssrCookies);
-		const resolveClientSource = useCallback(
-			() => ({
-				store: claimStore(ssrCookies),
-				pipeline: pipeline as unknown as LivePipeline<KheopskitState>,
-			}),
-			[ssrCookies],
-		);
-		return (
-			<KheopskitSourceProvider
-				config={config}
-				ssrCookies={ssrCookies}
-				resolveClientSource={resolveClientSource}
-			>
-				{children}
-			</KheopskitSourceProvider>
-		);
-	};
+	}) => (
+		<KheopskitSourceProvider kit={kit} config={config} ssrCookies={ssrCookies}>
+			{children}
+		</KheopskitSourceProvider>
+	);
 	Provider.displayName = "KheopskitProvider";
 
 	return {
-		KheopskitProvider: Provider,
+		KheopskitProvider: Provider as FC<PropsWithChildren<ProviderProps<O>>>,
 		/** The state stream the provider subscribes to, shared with code outside React. */
-		kheopskit$,
+		kheopskit$: kit.kheopskit$,
 		/** The store `kheopskit$` reads the cache from and persists into. */
-		store: options.store ?? deferredStore(claimStore),
+		store: kit.store,
 		/** Current state, typed to the bound platform tuple. */
 		useWallets: () => useWallets<P>(),
 		/** Current accounts, typed to the bound platform tuple. */

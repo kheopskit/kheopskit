@@ -8,7 +8,6 @@ import {
 	type KheopskitExternalStore,
 	useKheopskitExternalStore,
 } from "./context";
-import { walletActions } from "./liveActions";
 import { useWallet } from "./useWallet";
 
 export type UseConnectResult = {
@@ -48,7 +47,7 @@ const createWalletActions = (
 	walletId: WalletId,
 ) => {
 	let scope = new AbortController();
-	const wallet = walletActions(store, walletId);
+	const wallet = store.walletActions(walletId);
 
 	return {
 		connect: async () => {

@@ -2,11 +2,13 @@ import {
 	createKheopskitStore,
 	getHydratedSnapshot,
 	type HydratedSnapshot,
+	type Kheopskit,
 	type KheopskitConfig,
+	type KheopskitPlatform,
 	type KheopskitState,
-	type KheopskitStore,
 	resolveConfig,
 } from "@kheopskit/core";
+import { kheopskitInternals } from "@kheopskit/core/internal";
 import {
 	type FC,
 	type PropsWithChildren,
@@ -14,20 +16,13 @@ import {
 	useLayoutEffect,
 	useMemo,
 } from "react";
-import { KheopskitContext } from "./context";
+import { KheopskitContext, type KheopskitExternalStore } from "./context";
 import { createExternalStore } from "./createExternalStore";
-import { withLiveActions } from "./liveActions";
-import type { LivePipeline } from "./livePipeline";
-
-type KheopskitSource = {
-	store: KheopskitStore;
-	pipeline: LivePipeline<KheopskitState>;
-};
 
 type KheopskitSourceProviderProps = PropsWithChildren<{
+	kit: Kheopskit<readonly KheopskitPlatform[]>;
 	config: Partial<KheopskitConfig> | undefined;
 	ssrCookies: string | undefined;
-	resolveClientSource: (config: KheopskitConfig) => KheopskitSource;
 }>;
 
 const keepPipelineRunning = () => {};
@@ -64,31 +59,29 @@ const serverSnapshot = (
 
 export const KheopskitSourceProvider: FC<KheopskitSourceProviderProps> = ({
 	children,
+	kit,
 	config,
 	ssrCookies,
-	resolveClientSource,
 }) => {
 	const resolvedConfig = useMemo(() => resolveConfig(config), [config]);
 
-	const externalStore = useMemo(
-		() =>
-			withLiveActions(
-				createExternalStore(
-					() => {
-						const { store, pipeline } = resolveClientSource(resolvedConfig);
-						return {
-							pipeline,
-							initialValue: hydrating(
-								resolvedConfig,
-								getHydratedSnapshot(store, resolvedConfig, { icons: true }),
-							),
-						};
-					},
-					serverSnapshot(resolvedConfig, ssrCookies),
-				),
+	const externalStore = useMemo((): KheopskitExternalStore => {
+		const { present, walletActions } = kheopskitInternals(kit);
+		return {
+			...createExternalStore(
+				kit.kheopskit$,
+				() =>
+					present(
+						hydrating(
+							resolvedConfig,
+							getHydratedSnapshot(kit.store, resolvedConfig, { icons: true }),
+						),
+					),
+				present(serverSnapshot(resolvedConfig, ssrCookies)),
 			),
-		[resolvedConfig, ssrCookies, resolveClientSource],
-	);
+			walletActions,
+		};
+	}, [kit, resolvedConfig, ssrCookies]);
 
 	useIsomorphicLayoutEffect(
 		() => externalStore.subscribe(keepPipelineRunning),

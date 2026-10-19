@@ -1,17 +1,12 @@
 import { BehaviorSubject, Observable, Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import { createExternalStore } from "./createExternalStore";
-import { createLivePipeline } from "./livePipeline";
 
 const storeOf = <T>(
 	observable$: Observable<T>,
 	initialValue: T,
 	serverValue = initialValue,
-) =>
-	createExternalStore(
-		() => ({ pipeline: createLivePipeline(observable$), initialValue }),
-		serverValue,
-	);
+) => createExternalStore(observable$, () => initialValue, serverValue);
 
 const countingSubscriptions = <T>(subject: Subject<T>) => {
 	let count = 0;
@@ -25,36 +20,36 @@ const countingSubscriptions = <T>(subject: Subject<T>) => {
 const flushMicrotasks = () => Promise.resolve();
 
 describe("createExternalStore (React)", () => {
-	describe("source resolution", () => {
-		it("resolves the source only when a client path reads it", () => {
-			const resolveClientSource = vi.fn(() => ({
-				pipeline: createLivePipeline(new Subject<{ side: string }>()),
-				initialValue: { side: "client" },
-			}));
-			const store = createExternalStore(resolveClientSource, {
-				side: "server",
-			});
+	describe("initial value", () => {
+		it("reads the initial value only when a client path needs it", () => {
+			const getInitialValue = vi.fn(() => ({ side: "client" }));
+			const store = createExternalStore(
+				new Subject<{ side: string }>(),
+				getInitialValue,
+				{ side: "server" },
+			);
 
 			expect(store.getServerSnapshot()).toEqual({ side: "server" });
-			expect(resolveClientSource).toHaveBeenCalledTimes(0);
+			expect(getInitialValue).toHaveBeenCalledTimes(0);
 
 			expect(store.getSnapshot()).toEqual({ side: "client" });
-			expect(resolveClientSource).toHaveBeenCalledTimes(1);
+			expect(getInitialValue).toHaveBeenCalledTimes(1);
 		});
 
-		it("resolves the source once across snapshots and subscriptions", () => {
-			const resolveClientSource = vi.fn(() => ({
-				pipeline: createLivePipeline(new BehaviorSubject({ count: 1 })),
-				initialValue: { count: 0 },
-			}));
-			const store = createExternalStore(resolveClientSource, { count: 0 });
+		it("reads the initial value once across snapshots and subscriptions", () => {
+			const getInitialValue = vi.fn(() => ({ count: 0 }));
+			const store = createExternalStore(
+				new Subject<{ count: number }>(),
+				getInitialValue,
+				{ count: 0 },
+			);
 
-			store.getSnapshot();
+			const first = store.getSnapshot();
 			store.subscribe(() => {});
 			store.subscribe(() => {});
 
-			expect(store.getSnapshot()).toEqual({ count: 1 });
-			expect(resolveClientSource).toHaveBeenCalledTimes(1);
+			expect(store.getSnapshot()).toBe(first);
+			expect(getInitialValue).toHaveBeenCalledTimes(1);
 		});
 	});
 
@@ -177,33 +172,6 @@ describe("createExternalStore (React)", () => {
 			expect(subscriptions()).toBe(2);
 			expect(store.getSnapshot()).toEqual({ status: "complete" });
 			expect(listener).toHaveBeenLastCalledWith({ status: "complete" });
-		});
-	});
-
-	describe("whenLive", () => {
-		it("resolves the running pipeline's state", async () => {
-			const store = storeOf(new BehaviorSubject({ value: 1 }), { value: 0 });
-			store.subscribe(() => {});
-
-			expect(await store.whenLive()).toEqual({ state: { value: 1 } });
-		});
-
-		it("ends unheld when no listener holds the pipeline after a microtask, without restarting it", async () => {
-			const subject = new BehaviorSubject({ value: 1 });
-			const store = storeOf(subject.asObservable(), { value: 0 });
-			store.subscribe(() => {})();
-
-			expect(await store.whenLive()).toEqual({ end: "unheld" });
-			expect(subject.observed).toBe(false);
-		});
-
-		it("serves a listener that subscribed in this task before deciding", async () => {
-			const subject = new BehaviorSubject({ value: 1 });
-			const store = storeOf(subject.asObservable(), { value: 0 });
-			const live = store.whenLive();
-			store.subscribe(() => {});
-
-			expect(await live).toEqual({ state: { value: 1 } });
 		});
 	});
 });

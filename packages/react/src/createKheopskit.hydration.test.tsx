@@ -36,9 +36,10 @@ it.each([
 	"keeps the cookie store when a child subscribes kheopskit$ in %s during hydration",
 	async (_, useSubscribeEffect) => {
 		const ssrCookies = document.cookie;
-		const { KheopskitProvider, kheopskit$, useWallets } = createKheopskit({
-			platforms: [polkadot()],
-		});
+		const { KheopskitProvider, kheopskit$, useWallets } = createKheopskit(
+			{ platforms: [polkadot()] },
+			{ ssr: true },
+		);
 		const SessionSync = () => {
 			useSubscribeEffect(() => {
 				const subscription = kheopskit$.subscribe();
