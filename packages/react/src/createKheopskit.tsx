@@ -24,7 +24,7 @@ type ProviderProps<O> = O extends { ssr: true }
 /**
  * Binds a platform tuple once and returns one kheopskit instance: a
  * `KheopskitProvider`, hooks already typed to those platforms, and the
- * `kheopskit$` stream, `store` and `waitForAccount` the provider uses, for
+ * `kheopskit$` stream and `store` the provider uses, and `waitForAccount`, for
  * code outside React.
  * It is `@kheopskit/core`'s `createKheopskit` instance: subscribing
  * `kheopskit$` while the provider is mounted runs no second pipeline, and
