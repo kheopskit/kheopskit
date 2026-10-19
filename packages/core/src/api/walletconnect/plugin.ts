@@ -34,6 +34,15 @@ export type WalletConnectOptions = {
 	networks: [unknown, ...unknown[]];
 	themeMode?: "light" | "dark";
 	themeVariables?: Record<string, string | number>;
+	/**
+	 * Extra Reown AppKit `createAppKit` options (e.g. `featuredWalletIds`,
+	 * `features`, `allWallets`), forwarded as-is; see
+	 * https://docs.reown.com/appkit/javascript/core/options.
+	 * kheopskit always sets `projectId`, `metadata`, `networks`, `themeMode`,
+	 * `themeVariables` and `universalProviderConfigOverride`, so those keys
+	 * are ignored here.
+	 */
+	appKitOptions?: Record<string, unknown>;
 };
 
 /**
@@ -288,6 +297,10 @@ const getWalletConnectWallet$ = (
 				createAppKit
 					? createConnector$(
 							createAppKit({
+								allWallets: "HIDE",
+								debug,
+								allowUnsupportedChain: true,
+								...walletConnect.appKitOptions,
 								projectId: walletConnect.projectId,
 								metadata: walletConnect.metadata,
 								networks: walletConnect.networks as never,
@@ -306,9 +319,6 @@ const getWalletConnectWallet$ = (
 										],
 									},
 								},
-								allWallets: "HIDE",
-								debug,
-								allowUnsupportedChain: true,
 							}),
 						)
 					: null,
