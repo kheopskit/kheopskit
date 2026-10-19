@@ -39,7 +39,7 @@ export type GetHydratedSnapshotOptions = {
  * connected wallet it rejects becomes `disconnected` and loses its cached
  * accounts), filter accounts through each platform plugin's
  * `acceptsCachedAccount` hook, and sort with the same comparators the live
- * pipeline uses. An account survives only with its wallet.
+ * pipeline uses. An account of a dropped wallet is dropped with it.
  *
  * This is the single implementation behind the observable's initial seed and
  * both React snapshot sources (`serverValue`/`initialValue`). They must produce
@@ -55,9 +55,14 @@ export const getHydratedSnapshot = (
 	options: GetHydratedSnapshotOptions = {},
 ): HydratedSnapshot => {
 	const cached = store.getCachedState();
+	const unconfigured = new Set(
+		cached.wallets
+			.filter((wallet) => !acceptsCachedWallet(wallet, config))
+			.map((wallet) => wallet.id),
+	);
 
 	const wallets = cached.wallets
-		.filter((wallet) => acceptsCachedWallet(wallet, config))
+		.filter((wallet) => !unconfigured.has(wallet.id))
 		.map(hydrateWallet)
 		.map((wallet) =>
 			wallet.status === "connecting" &&
@@ -75,12 +80,13 @@ export const getHydratedSnapshot = (
 		})
 		.sort(sortWallets);
 
-	const walletsWithAccounts = new Set(
-		wallets.filter((w) => w.status !== "disconnected").map((w) => w.id),
-	);
+	const withoutAccounts = new Set([
+		...unconfigured,
+		...wallets.filter((w) => w.status === "disconnected").map((w) => w.id),
+	]);
 
 	const accounts = cached.accounts
-		.filter((account) => walletsWithAccounts.has(account.walletId))
+		.filter((account) => !withoutAccounts.has(account.walletId))
 		.filter((account) => acceptsCachedAccount(account, config.platforms))
 		.map(hydrateAccount)
 		.sort(sortAccounts);
