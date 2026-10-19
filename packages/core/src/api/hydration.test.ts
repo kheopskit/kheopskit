@@ -6,7 +6,7 @@ import { setCachedIcons } from "../utils/iconCache";
 import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../utils/WalletId";
 import { ethereum } from "./ethereum/plugin";
 import { getHydratedSnapshot } from "./hydration";
-import { getKheopskit$ } from "./kheopskit";
+import { kheopskitRun$ } from "./kheopskit";
 import { polkadot } from "./polkadot/plugin";
 import { createKheopskitStore } from "./store";
 import type {
@@ -288,7 +288,7 @@ describe("cached state of platforms the config does not enable", () => {
 		expect(accounts.map((a) => a.id)).toEqual([talismanAlice.id]);
 	});
 
-	describe("through getKheopskit$", () => {
+	describe("through kheopskitRun$", () => {
 		beforeEach(() => {
 			vi.useFakeTimers();
 		});
@@ -300,7 +300,7 @@ describe("cached state of platforms the config does not enable", () => {
 
 		it("never emits an Ethereum or Solana wallet or account, first frame or later", async () => {
 			const emissions: KheopskitState[] = [];
-			const sub = getKheopskit$(
+			const sub = kheopskitRun$(
 				{ platforms: [polkadot()], hydrationGracePeriod: 500 },
 				{ store: seedStore() },
 			).subscribe((state) => emissions.push(state));
@@ -337,7 +337,7 @@ describe("cached state of platforms the config does not enable", () => {
 			const store = seedStore();
 			store.rememberWallet(metamask.id);
 
-			const sub = getKheopskit$(
+			const sub = kheopskitRun$(
 				{ platforms: [polkadot()], hydrationGracePeriod: 500 },
 				{ store },
 			).subscribe();

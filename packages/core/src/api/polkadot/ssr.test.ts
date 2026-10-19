@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryStorage } from "../../testing";
 import { resolveConfig } from "../config";
-import { getKheopskit$ } from "../kheopskit";
+import { kheopskitRun$ } from "../kheopskit";
 import { createKheopskitStore } from "../store";
 import type { KheopskitState } from "../types";
 import { polkadot } from "./plugin";
@@ -36,7 +36,7 @@ describe("polkadot discovery on the server", () => {
 
 	it("kheopskit$ holds only the cache write debounce and stays discovering", async () => {
 		const states: KheopskitState[] = [];
-		const subscription = getKheopskit$(
+		const subscription = kheopskitRun$(
 			{ platforms: [polkadot()], hydrationGracePeriod: 0 },
 			{ store: memoryStore() },
 		).subscribe((state) => states.push(state));

@@ -15,7 +15,7 @@ import {
 	type FakePolkadotExtension,
 } from "../testing";
 import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../utils/WalletId";
-import { getKheopskit$ } from "./kheopskit";
+import { kheopskitRun$ } from "./kheopskit";
 import { createPlatformAccounts$ } from "./platformAccounts";
 import { polkadot } from "./polkadot/plugin";
 import { createKheopskitStore } from "./store";
@@ -74,7 +74,7 @@ const fireLoad = async () => {
 	}
 };
 
-describe("getKheopskit$ cached account filtering", () => {
+describe("kheopskitRun$ cached account filtering", () => {
 	const seededStore = (polkadotAccountType: "ecdsa" | "ed25519") => {
 		const store = memoryStore();
 		const talisman = cachedWalletOf("polkadot:talisman", "Talisman");
@@ -90,7 +90,7 @@ describe("getKheopskit$ cached account filtering", () => {
 		accountTypes: ("sr25519" | "ed25519")[],
 	) =>
 		firstValueFrom(
-			getKheopskit$(
+			kheopskitRun$(
 				{
 					platforms: [polkadot({ accountTypes })],
 					autoReconnect: true,
@@ -118,12 +118,12 @@ describe("getKheopskit$ cached account filtering", () => {
 	});
 });
 
-describe("getKheopskit$ discovery", () => {
+describe("kheopskitRun$ discovery", () => {
 	let subscription: Subscription | undefined;
 
 	const recordStates = () => {
 		const states: KheopskitState[] = [];
-		subscription = getKheopskit$(
+		subscription = kheopskitRun$(
 			{ platforms: [polkadot()] },
 			{ store: memoryStore() },
 		).subscribe((state) => states.push(state));
@@ -183,7 +183,7 @@ describe("getKheopskit$ discovery", () => {
 	});
 });
 
-describe("getKheopskit$ discovery while the WalletConnect connector loads", () => {
+describe("kheopskitRun$ discovery while the WalletConnect connector loads", () => {
 	let subscription: Subscription | undefined;
 	let connector$: Subject<WalletConnectWallet | null>;
 	const walletConnectPlugin: WalletConnectPlugin = {
@@ -214,7 +214,7 @@ describe("getKheopskit$ discovery while the WalletConnect connector loads", () =
 			[],
 		);
 		const states: KheopskitState[] = [];
-		subscription = getKheopskit$(
+		subscription = kheopskitRun$(
 			{ platforms: [polkadot()], walletConnect: walletConnectPlugin },
 			{ store },
 		).subscribe((state) => states.push(state));
@@ -232,7 +232,7 @@ describe("getKheopskit$ discovery while the WalletConnect connector loads", () =
 	});
 });
 
-describe("getKheopskit$ account changes", () => {
+describe("kheopskitRun$ account changes", () => {
 	const config: KheopskitConfig = {
 		platforms: [polkadot({ accountTypes: ["sr25519"] })],
 		autoReconnect: true,
@@ -256,7 +256,7 @@ describe("getKheopskit$ account changes", () => {
 		const store = memoryStore();
 		store.rememberWallet(talisman.walletId);
 		const states: KheopskitState[] = [];
-		const sub = getKheopskit$(config, { store }).subscribe((state) =>
+		const sub = kheopskitRun$(config, { store }).subscribe((state) =>
 			states.push(state),
 		);
 		await vi.advanceTimersByTimeAsync(2000);
@@ -277,7 +277,7 @@ describe("getKheopskit$ account changes", () => {
 	});
 });
 
-describe("getKheopskit$ reload with a cached connected wallet", () => {
+describe("kheopskitRun$ reload with a cached connected wallet", () => {
 	let subscription: Subscription | undefined;
 	let talisman: FakePolkadotExtension;
 	const walletId = "polkadot:talisman";
@@ -307,7 +307,7 @@ describe("getKheopskit$ reload with a cached connected wallet", () => {
 		store.rememberWallet(talisman.walletId);
 		store.setCachedState([cachedWallet], [cachedAccount]);
 		const states: KheopskitState[] = [];
-		subscription = getKheopskit$(
+		subscription = kheopskitRun$(
 			{ platforms: [polkadot()], hydrationGracePeriod: 500 },
 			{ store },
 		).subscribe((state) => states.push(state));
@@ -335,7 +335,7 @@ describe("getKheopskit$ reload with a cached connected wallet", () => {
 	});
 });
 
-describe("getKheopskit$ placeholders", () => {
+describe("kheopskitRun$ placeholders", () => {
 	let subscription: Subscription | undefined;
 	const walletId = "polkadot:talisman";
 	const addresses = [ALICE, "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty"];
@@ -362,7 +362,7 @@ describe("getKheopskit$ placeholders", () => {
 
 	const record = (store: ReturnType<typeof memoryStore>) => {
 		const states: KheopskitState[] = [];
-		subscription = getKheopskit$(
+		subscription = kheopskitRun$(
 			{ platforms: [polkadot()], hydrationGracePeriod: 500 },
 			{ store },
 		).subscribe((state) => states.push(state));
@@ -608,7 +608,7 @@ describe("getKheopskit$ placeholders", () => {
 				);
 			const connector$ = new BehaviorSubject<WalletConnectWallet | null>(null);
 			const states: KheopskitState[] = [];
-			subscription = getKheopskit$(
+			subscription = kheopskitRun$(
 				{
 					platforms: [polkadot()],
 					hydrationGracePeriod: 500,
@@ -678,7 +678,7 @@ describe("getKheopskit$ placeholders", () => {
 			};
 			const connector$ = new BehaviorSubject<WalletConnectWallet | null>(null);
 			const states: KheopskitState[] = [];
-			subscription = getKheopskit$(
+			subscription = kheopskitRun$(
 				{
 					platforms: [polkadot()],
 					hydrationGracePeriod: 500,
@@ -727,7 +727,7 @@ describe("getKheopskit$ placeholders", () => {
 	});
 });
 
-describe("getKheopskit$ hydration end", () => {
+describe("kheopskitRun$ hydration end", () => {
 	let subscription: Subscription | undefined;
 	const talisman = "polkadot:talisman" as WalletId;
 	const subwallet = "polkadot:subwallet-js" as WalletId;
@@ -800,7 +800,7 @@ describe("getKheopskit$ hydration end", () => {
 		store: ReturnType<typeof createKheopskitStore>,
 	) => {
 		const states: KheopskitState[] = [];
-		subscription = getKheopskit$(
+		subscription = kheopskitRun$(
 			{ platforms: [polkadot()], ...config },
 			{ store },
 		).subscribe((state) => states.push(state));

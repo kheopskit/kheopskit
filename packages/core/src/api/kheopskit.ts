@@ -46,8 +46,7 @@ import { getWallets$ } from "./wallets";
 
 export type { KheopskitConfig, KheopskitState } from "./types";
 
-/** Options for {@link getKheopskit$}. */
-export type GetKheopskitOptions = {
+export type KheopskitRunOptions = {
 	/**
 	 * Cookie string for SSR hydration. When provided, state is read from cookies
 	 * instead of localStorage so the server can hydrate without a flash. Pass the
@@ -60,11 +59,11 @@ export type GetKheopskitOptions = {
 	store?: ReturnType<typeof createKheopskitStore>;
 };
 
-export const getKheopskit$ = <
+export const kheopskitRun$ = <
 	const P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],
 >(
 	config?: Partial<KheopskitConfig<P>>,
-	options: GetKheopskitOptions = {},
+	options: KheopskitRunOptions = {},
 ): Observable<KheopskitState<P>> => {
 	const { ssrCookies, store: existingStore } = options;
 	const kc = resolveConfig(config);

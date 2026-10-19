@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getKheopskit$ } from "../kheopskit";
+import { kheopskitRun$ } from "../kheopskit";
 import { createKheopskitStore } from "../store";
 import type { KheopskitState } from "../types";
 import { polkadot } from "./plugin";
@@ -78,7 +78,7 @@ const frameOf = (state: KheopskitState) => ({
 const start = () => {
 	const store = createKheopskitStore();
 	const emissions: KheopskitState[] = [];
-	const subscription = getKheopskit$(
+	const subscription = kheopskitRun$(
 		{ platforms: [polkadot()], hydrationGracePeriod: 0 },
 		{ store },
 	).subscribe((state) => emissions.push(state));

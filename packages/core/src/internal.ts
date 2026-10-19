@@ -5,6 +5,8 @@
  *
  * @internal
  */
+export { createInstance, kheopskitInternals } from "./api/instance";
+export type { WalletActions } from "./api/liveActions";
 export {
 	clearCachedObservable,
 	clearCachedObservablesByPrefix,

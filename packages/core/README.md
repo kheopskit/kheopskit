@@ -16,7 +16,8 @@ https://github.com/kheopskit/kheopskit.
 
 > **Upgrading from v5?** v6 makes `connect()` shared, idempotent and
 > abortable, types its rejections, adds `status`, `isDiscovering`,
-> `isPlaceholder` and `signRaw`, and moves WalletConnect to a plugin. See
+> `isPlaceholder` and `signRaw`, moves WalletConnect to a plugin, and shares
+> one pipeline per app through `createKheopskit`. See
 > [MIGRATING_TO_V6.md](./MIGRATING_TO_V6.md).
 
 ## Install
@@ -40,7 +41,7 @@ WalletConnect is a plugin from its own entry point, so only a dapp that imports
 `@kheopskit/core/walletconnect` bundles AppKit:
 
 ```ts
-import { getKheopskit$ } from "@kheopskit/core";
+import { createKheopskit } from "@kheopskit/core";
 import { polkadot } from "@kheopskit/core/polkadot";
 import { walletConnect } from "@kheopskit/core/walletconnect";
 import { defineChain } from "@reown/appkit/networks";
@@ -54,7 +55,7 @@ const polkadotNetwork = defineChain({
   caipNetworkId: "polkadot:91b171bb158e2d3848fa23a9f1c25182",
 });
 
-const kheopskit$ = getKheopskit$({
+export const { kheopskit$ } = createKheopskit({
   platforms: [polkadot()],
   walletConnect: walletConnect({
     projectId: "<your Reown project id>",
@@ -89,16 +90,18 @@ and `appKitOptions` can override it.
 
 ## Usage
 
-Platforms are enabled by passing **plugins** (imported from their entry points)
-to `config.platforms`:
+Create one kheopskit instance per app with `createKheopskit`. Platforms are
+enabled by passing **plugins** (imported from their entry points) to
+`config.platforms`:
 
 ```ts
-import { getKheopskit$ } from "@kheopskit/core";
+// kheopskit.ts
+import { createKheopskit } from "@kheopskit/core";
 import { polkadot } from "@kheopskit/core/polkadot";
 import { ethereum } from "@kheopskit/core/ethereum";
 import { solana } from "@kheopskit/core/solana";
 
-const kheopskit$ = getKheopskit$({
+export const { kheopskit$, store } = createKheopskit({
   platforms: [
     polkadot({ accountTypes: ["sr25519", "ed25519", "ecdsa"] }),
     ethereum(),
@@ -107,11 +110,30 @@ const kheopskit$ = getKheopskit$({
   appName: "My Dapp", // shown by Polkadot extensions; defaults to the WalletConnect metadata name, then the hostname
   autoReconnect: true,
 });
+```
 
+```ts
+// main.ts
 kheopskit$.subscribe(({ wallets, accounts, isHydrating, isDiscovering }) => {
   // ...
 });
 ```
+
+Subscribe `kheopskit$` once at app start, or merge it into a stream the app
+keeps subscribed. The pipeline runs while something subscribes, and every
+subscriber shares that one run.
+
+When the last subscriber unsubscribes, the pipeline stops every timer. The
+next subscriber starts a new run, which reads the cache again. A wallet's
+`connect()` and `disconnect()`, read from any emission, act on the run that is
+live when they are called (see [Connect and disconnect](#connect-and-disconnect)).
+
+`createKheopskit(config, options)` persists to `localStorage` by default.
+Pass `{ ssr: true }` to persist in a cookie that a server render can read, or
+`{ store }` to use a store you created (see [Persistence](#persistence)).
+`store` is created on first use, so `createKheopskit` at module scope touches
+no storage. A `config` that kheopskit cannot use throws `INVALID_CONFIG` from
+`createKheopskit` itself.
 
 [Wallet lifecycle](#wallet-lifecycle) explains what each field means over a
 page load, with every default and delay.
@@ -147,7 +169,7 @@ event, so kheopskit reads that registry on a fixed schedule:
 
 The read window ends 1100 ms after `load` or after subscribe, whichever is
 later. Nothing reads the registry after that, so a wallet that injects later
-is not listed until the next subscription, usually the next page load.
+is not listed until the next run, usually on the next page load.
 Kheopskit has no `refreshWallets()` and does not read again on focus or on
 connect. On the server it reads once and sets no timer.
 
@@ -296,7 +318,7 @@ on later. On the next load it reconnects the remembered injected wallets that
   markup diverges. It receives the `BaseWallet` fields only, so key on `id`.
 
 ```ts
-getKheopskit$({
+createKheopskit({
   platforms: [polkadot()],
   autoReconnect: (wallet) => wallet.id === "polkadot:talisman",
 });
@@ -390,13 +412,15 @@ code:
   subscription ended. During a pending `connect()` that the platform has not
   granted, `disconnect()` aborts it and resolves without waiting for the
   prompt.
-- **After the subscription.** Once the last `kheopskit$` subscriber has
-  unsubscribed, `connect()` and `disconnect()` on an injected wallet object
-  from that subscription reject with `ABORTED` without asking the platform. A
-  placeholder's `connect()` rejects the same way, and its `disconnect()` still
-  resolves at once. The live WalletConnect connector is not wrapped, so its
-  `connect()` still opens the AppKit modal and its `disconnect()` still ends a
-  live session.
+- **Acts on the live run.** A wallet object read from any emission acts on
+  the run that is live when you call it, even when it was read from an earlier
+  run. When a new subscriber restarts the pipeline, the call waits for the new
+  run's first emission. While nothing subscribes `kheopskit$`, `connect()` and
+  `disconnect()` reject with `ABORTED`, ask no platform and start no run. This
+  holds for every wallet, placeholders and the WalletConnect connector
+  included. When the live run lists no wallet with the object's id, the call
+  rejects with a plain `Error`. A call pending when the pipeline errors or
+  completes rejects with `ABORTED`.
 
 Every rejection of `connect()` is a `KheopskitError` with a stable `code` and
 the `walletId`, and so is an `ABORTED` `disconnect()`. A `disconnect()` whose
@@ -407,7 +431,7 @@ platform's own error.
 |------|------|
 | `USER_REJECTED` | The user refused the prompt. `cause` holds the platform error. |
 | `CONNECT_FAILED` | Any other platform failure, including a Polkadot extension whose `enable()` result lacks `accounts.get`, `accounts.subscribe`, `signer.signPayload` or `signer.signRaw`, or whose `accounts.get()` rejects. `cause` holds the platform error. |
-| `ABORTED` | The call was abandoned, as listed above. The message reads `connect of wallet <id> was aborted` or `disconnect of wallet <id> was aborted`. |
+| `ABORTED` | The call was abandoned, as listed above. The message starts with `connect of wallet <id>` or `disconnect of wallet <id>` and names the reason, such as `was aborted`. |
 | `FEATURE_NOT_SUPPORTED` | A Solana Wallet Standard wallet that lacks `standard:connect`. |
 | `WALLET_PENDING` | `connect()` on a placeholder whose live wallet was not discovered before hydration ended, and always on a `getHydratedSnapshot` placeholder. |
 
@@ -486,8 +510,9 @@ goes to `localStorage` as JSON:
 - Wallet icons go to a separate `localStorage` key, `kheopskit-icons`, to keep
   the main entry small.
 
-With `ssrCookies`, the same data goes to a `kheopskit` cookie in a compact
-form, to stay under the cookie size limit:
+With `ssrCookies` (`createKheopskitStore({ ssrCookies })`, or
+`createKheopskit(config, { ssr: true })`), the same data goes to a `kheopskit`
+cookie in a compact form, to stay under the cookie size limit:
 
 ```json
 { "v": 1, "r": ["polkadot:talisman"], "w": [["polkadot:talisman", "Talisman", 1, 0]], "a": [["polkadot:talisman", "5Grw…", "Alice", null, 0, 0]] }
@@ -514,15 +539,20 @@ throws (`QuotaExceededError`, a denied write) keeps the in-memory state while
 the store is observed, and
 neither `connect()` nor `disconnect()` rejects because of it.
 
+On the server, a store that `createKheopskit` creates ignores
+`rememberWallet`, `forgetWallet` and `setCachedState`. A module-level
+instance serves every request there, so no request may change what its store
+holds. A store passed as `{ store }` is used as it is.
+
 #### Custom storage
 
 `createKheopskitStore` accepts a `storage` option, which takes precedence over
-`ssrCookies` and `localStorage`. Pass the store to `getKheopskit$`:
+`ssrCookies` and `localStorage`. Pass the store to `createKheopskit`:
 
 ```ts
 import {
+  createKheopskit,
   createKheopskitStore,
-  getKheopskit$,
   type SyncableStorage,
 } from "@kheopskit/core";
 
@@ -534,7 +564,7 @@ const storage: SyncableStorage = {
 };
 
 const store = createKheopskitStore({ storage });
-const kheopskit$ = getKheopskit$(config, { store });
+export const { kheopskit$ } = createKheopskit(config, { store });
 
 // When done with the store
 store.destroy();
@@ -634,8 +664,8 @@ A vitest test that seeds a remembered wallet and checks that it reconnects:
 
 ```ts
 import {
+  createKheopskit,
   createKheopskitStore,
-  getKheopskit$,
   type KheopskitState,
   type KheopskitStore,
 } from "@kheopskit/core";
@@ -678,12 +708,11 @@ it("reconnects the wallet the user connected last time", async () => {
   store.rememberWallet(talisman.walletId);
   store.setCachedState([wallet], [cachedAccountOf(wallet, alice.address, alice.name)]);
 
+  const { kheopskit$ } = createKheopskit({ platforms: [polkadot()] }, { store });
   let state: KheopskitState | undefined;
-  subscription = getKheopskit$({ platforms: [polkadot()] }, { store }).subscribe(
-    (next) => {
-      state = next;
-    },
-  );
+  subscription = kheopskit$.subscribe((next) => {
+    state = next;
+  });
   await vi.advanceTimersByTimeAsync(1000);
 
   expect(talisman.enableCalls()).toHaveLength(1);
@@ -702,9 +731,9 @@ subscription.unsubscribe();
 store.destroy();
 ```
 
-Unsubscribing from `getKheopskit$` stops every timer it started, among them
-the discovery reads, the hydration timers and the 1 second persistence
-debounce. Without it, a persist can write to storage after the test ended.
+When the last subscriber of `kheopskit$` unsubscribes, kheopskit stops every
+timer it started, among them the discovery reads, the hydration timers and the
+1 second persistence debounce. Without it, a persist can write to storage after the test ended.
 `store.destroy()` ends the store's storage subscription. `uninstall()` removes
 the fake from `window.injectedWeb3`, and removes `window.injectedWeb3` once it
 is empty.
@@ -714,7 +743,7 @@ With fake timers, advance time with `vi.advanceTimersByTimeAsync` (jest:
 promises, and the async variants run those microtasks between timers. The
 synchronous variants leave them pending.
 
-When the code under test calls `getKheopskit$` without a `store`, it uses
+When the code under test creates its instance without a `store`, it uses
 `localStorage`. Seed it through a store on the same storage, then destroy that
 store:
 

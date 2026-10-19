@@ -52,6 +52,8 @@ This guide grows with each v6 change. Each section covers one area.
 | Discovery at page load | the Polkadot registry was read at 0, 100, 300, 600 and 1100 ms after subscribe only | read at subscribe and at `load`, then 100, 300, 600 and 1100 ms after each; `state.isDiscovering` is `true` until the last read, 1100 ms after `load` or after subscribe, whichever is later, and while a WalletConnect connector loads | [8](#8-discovery-hydration-end-and-persistence) |
 | Cache during a slow reconnect | a reconnect slower than the persistence debounce wrote `isConnected: false` and no accounts | a wallet still `connecting` keeps its previous cached entry and accounts | [8](#8-discovery-hydration-end-and-persistence) |
 | React instance and hooks | `createKheopskit` returns a provider and `useWallets`/`useAccounts`; reaching one wallet means reading the whole state; unmounting the provider leaves the pipeline running | `createKheopskit` also returns `kheopskit$` and `store`; `useWallet`, `useAccount` and `useConnect` read one item; unmounting the provider stops the pipeline | [9](#9-kheopskitreact-one-shared-instance-and-wallet-hooks) |
+| Core stream | `getKheopskit$(config, options)`: each call a separate pipeline; its wallets' actions bound to that pipeline | `createKheopskit(config, options)` returns `kheopskit$` and `store`; every subscriber shares one pipeline; a wallet's actions act on the pipeline running when they are called | [10](#10-one-shared-instance-in-core-createkheopskit) |
+| SSR persistence | `getKheopskit$(config, { ssrCookies })`, or `ssrCookies` on any provider | `createKheopskit(config, { ssr: true })`; the React provider's `ssrCookies` requires it | [10](#10-one-shared-instance-in-core-createkheopskit) |
 
 ---
 
@@ -75,8 +77,10 @@ Each section ends with the app code it makes redundant. In short:
 - A second `enable()` call made to reach `signer.signRaw`. Call
   `account.signRaw(message)` (section 3).
 - A hand-built `ecdsa` tx creator for ethereum-format accounts (section 3).
-- A second `getKheopskit$` subscription next to the React provider. Subscribe
-  to the `kheopskit$` that `createKheopskit` returns (section 9).
+- The `getKheopskit$` subscription next to the React provider, and a
+  `defer(...)` + `shareReplay(...)` wrapper that shares one `getKheopskit$`
+  pipeline. Subscribe to the `kheopskit$` that `createKheopskit` returns
+  (sections 9 and 10).
 - Test seeds that write the persisted shape to raw storage. Use
   `store.rememberWallet` and `store.setCachedState` with the test kit's
   builders (section 6).
@@ -105,11 +109,10 @@ Each section ends with the app code it makes redundant. In short:
 - `ABORTED`: this `connect()` or `disconnect()` call was abandoned. For
   `connect()`, its `signal` fired before the platform answered, `disconnect()`
   was called while it pended, or the last `kheopskit$` subscriber
-  unsubscribed. For either call on an injected wallet, the wallet object came
-  from a subscription that had already ended; the call then rejects without
-  asking the platform and without changing the remembered list. A
-  placeholder's `connect()` rejects the same way and its `disconnect()`
-  resolves. The WalletConnect connector is not wrapped and still calls AppKit.
+  unsubscribed. Either call also rejects `ABORTED` when nothing subscribes
+  `kheopskit$` at the time of the call. It then asks no platform, leaves the
+  remembered list as it is and starts no pipeline. This holds for every
+  wallet, placeholders and the WalletConnect connector included (section 10).
 - `USER_REJECTED`: the user refused the wallet prompt. `cause` holds the
   platform error. It is an EIP-1193 error with `code: 4001` on Ethereum; on
   Polkadot the extension's own `Error`, for Talisman
@@ -119,7 +122,7 @@ Each section ends with the app code it makes redundant. In short:
   user.`, for SubWallet `Rejected` or `Cancelled`.
 - `CONNECT_FAILED`: any other platform failure. `cause` holds the platform
   error.
-- `INVALID_CONFIG`: `getKheopskit$` throws it synchronously when
+- `INVALID_CONFIG`: `createKheopskit` throws it synchronously when
   `config.walletConnect` is not a plugin created by `walletConnect()` from
   `@kheopskit/core/walletconnect` (see section 5). It is not a rejection and
   carries no `walletId`.
@@ -552,10 +555,10 @@ getKheopskit$({
 });
 
 // v6
-import { getKheopskit$ } from "@kheopskit/core";
+import { createKheopskit } from "@kheopskit/core";
 import { walletConnect } from "@kheopskit/core/walletconnect";
 
-getKheopskit$({
+createKheopskit({
   platforms: [polkadot()],
   walletConnect: walletConnect({ projectId, metadata, networks }),
 });
@@ -563,7 +566,7 @@ getKheopskit$({
 
 | v5 | v6 |
 |----|----|
-| `walletConnect: { projectId, metadata, networks, ... }` | `walletConnect: walletConnect({ projectId, metadata, networks, ... })`. A raw object is a type error, and `getKheopskit$` throws a `KheopskitError` with the new code `INVALID_CONFIG` |
+| `walletConnect: { projectId, metadata, networks, ... }` | `walletConnect: walletConnect({ projectId, metadata, networks, ... })`. A raw object is a type error, and `createKheopskit` throws a `KheopskitError` with the new code `INVALID_CONFIG` |
 | `import { resetAppKitCache } from "@kheopskit/core"` | `import { resetAppKitCache } from "@kheopskit/core/walletconnect"` |
 | `WalletConnectConfig` from `@kheopskit/core` | `WalletConnectOptions` from `@kheopskit/core/walletconnect` |
 | `relayUrl` option | removed. It was never passed to AppKit |
@@ -603,16 +606,17 @@ signet and talisman-web keep in `domains/extension/fakeInjectedWeb3.ts`.
 | `refusingWallet()` (talisman-web) | `{ enable: "reject" }` |
 | `enableDelay.ms` (signet) | `{ enable: "hold" }`, then `resolveEnable()` after advancing the timers |
 | `localStorage.setItem("kheopskit", JSON.stringify(cache))` (signet's `load`) | `store.rememberWallet(id)` and `store.setCachedState([cachedWalletOf(id, name)], [cachedAccountOf(wallet, address, name)])` |
-| `vi.doMock("@kheopskit/core")` wrapping `getKheopskit$` in `takeUntil(disposed$)` (signet's `load`) | unsubscribe from `getKheopskit$` and `store.destroy()`; unsubscribing stops kheopskit's timers |
+| `vi.doMock("@kheopskit/core")` wrapping `getKheopskit$` in `takeUntil(disposed$)` (signet's `load`) | unsubscribe from `kheopskit$` and `store.destroy()`; unsubscribing stops kheopskit's timers |
 | `vi.unstubAllGlobals()` | `uninstall()` on each fake |
 
 Two things stay in the apps. The kit has no hook to make `disconnect` fail,
-so signet's `disconnectFailure` keeps its `getKheopskit$` wrapper. An extension
+so signet's `disconnectFailure` keeps a wrapper, now around the `kheopskit$`
+that `createKheopskit` returns. An extension
 that returns a broken `enable()` result, such as signet's
 `broken.enable.mockResolvedValue(...)`, stays a hand-written entry next to the
 fakes on `window.injectedWeb3`.
 
-An app that calls `getKheopskit$` without a `store` persists to
+An app that creates its instance without a `store` persists to
 `localStorage`. Seed it with `createKheopskitStore()`, then call `destroy()` on
 that seeding store. The seeded data uses `remembered`, not v5's `autoReconnect`.
 
@@ -834,7 +838,7 @@ subscriber is left.
 
 | Addition | What it does |
 |----------|--------------|
-| `createKheopskit(config, { store? })` returns `kheopskit$` and `store` | the stream its provider subscribes to and the store that stream persists into; code outside React subscribes to the same pipeline |
+| `createKheopskit(config, { store } \| { ssr: true })` returns `kheopskit$` and `store` | the stream its provider subscribes to and the store that stream persists into; code outside React subscribes to the same pipeline |
 | `useWallet(walletId)`, `useAccount(accountId)` | one item or `undefined`; re-render only when that item changes; also returned by `createKheopskit`, typed to its platforms |
 | `useConnect(walletId)` | `{ connect, disconnect, status, error }`; aborts a pending `connect()` on unmount or when `walletId` changes; rejects `ABORTED` a `connect()` that starts after either |
 | wallet actions act on the instance's pipeline | `connect` and `disconnect` from `useWallet` and `useWallets`, and `disconnect` from `useConnect`, act on the instance's pipeline when they are called, while any provider of the instance or any `kheopskit$` subscriber holds it, and wait for its first emission after an `<Activity>` reveal restarts it; called once nothing holds the pipeline, they reject `ABORTED` without restarting it. `useConnect`'s `connect` is component-scoped. It rejects `ABORTED` once its component has unmounted or been hidden by `<Activity>`, even while something else holds the pipeline |
@@ -844,9 +848,63 @@ See the [React README](../react/README.md#one-instance-for-react-and-rxjs-code).
 
 ### What downstream apps delete
 
-- A second `getKheopskit$` call next to the provider for RxJS code. Subscribe
-  to the `kheopskit$` returned by `createKheopskit`.
+- The `getKheopskit$` call next to the provider for RxJS code. Subscribe to
+  the `kheopskit$` returned by `createKheopskit`.
 - Components that read `useWallets()` only to find one wallet or account. Use
   `useWallet` or `useAccount`.
 - An `AbortController` kept in a ref to cancel `connect()` on unmount. Use
   `useConnect`.
+
+---
+
+## 10. One shared instance in core: `createKheopskit`
+
+`@kheopskit/core` exports `createKheopskit`, and `@kheopskit/react`'s
+`createKheopskit` is built on it. It replaces `getKheopskit$`.
+
+- `getKheopskit$` and its `GetKheopskitOptions` type are removed. Create one
+  instance per app and use its stream:
+  `export const { kheopskit$, store } = createKheopskit(config, { store })`.
+  Every subscriber shares one pipeline. Delete your `defer(...)` +
+  `shareReplay(...)` wrapper. `platforms` must be a non-empty tuple, such as
+  `[polkadot()]` written inline; a value typed `KheopskitPlatform[]` no longer
+  compiles.
+- The pipeline runs while something subscribes `kheopskit$`. To keep it
+  running for the page's lifetime, subscribe once at startup, or merge
+  `kheopskit$` into a stream you already keep subscribed. Unsubscribing the
+  last subscriber stops every timer, as before.
+- `getKheopskit$(config, { ssrCookies })` on the client becomes
+  `createKheopskit(config, { ssr: true })`. On the server, read the request's
+  state with
+  `getHydratedSnapshot(createKheopskitStore({ ssrCookies }), resolveConfig(config))`.
+- A wallet's `connect` and `disconnect`, read from any emission, act on the
+  pipeline that is running when you call them. While nothing subscribes
+  `kheopskit$`, they reject `ABORTED` and start nothing.
+- On the server, a store that `createKheopskit` creates (no `store` option)
+  ignores `rememberWallet`, `forgetWallet` and `setCachedState`. A
+  module-level instance serves every request there, so no request may change
+  what its store holds. A store passed as `{ store }` is used as it is.
+- `@kheopskit/react`: `createKheopskit(config, { ssr: true })` is required when
+  the provider receives `ssrCookies`. Without it, `ssrCookies` is a type error.
+  `createKheopskitStore({ ssrCookies: "" })` passed as `store` is no longer
+  needed. The `ABORTED` message for "nothing holds the pipeline" changed, so
+  match on `error.code`.
+
+```diff
+- import { getKheopskit$ } from "@kheopskit/core";
+- const store = createKheopskitStore();
+- export const kheopskit$ = defer(() => getKheopskit$(config, { store })).pipe(
+-   shareReplay({ bufferSize: 1, refCount: false }),
+- );
++ import { createKheopskit } from "@kheopskit/core";
++ export const { kheopskit$, store } = createKheopskit(config);
++ kheopskit$.subscribe(); // once, at app start
+```
+
+```diff
+  // kheopskit.ts, React with SSR
+- export const { KheopskitProvider } = createKheopskit(config, {
+-   store: createKheopskitStore({ ssrCookies: "" }),
+- });
++ export const { KheopskitProvider } = createKheopskit(config, { ssr: true });
+```

@@ -194,10 +194,12 @@ same for every platform.
 
 ## One instance for React and RxJS code
 
-`createKheopskit` also returns `kheopskit$`, the state stream its provider
-subscribes to, and `store`, the store that stream persists into. Code outside
-React, such as an RxJS pipeline or a sign-in flow, subscribes to the same
-`kheopskit$`. While the provider is mounted, both share one pipeline: one wallet
+`createKheopskit` is
+[`@kheopskit/core`'s `createKheopskit`](../core/README.md#usage) plus the
+provider and the typed hooks. It also returns `kheopskit$`, the state stream
+its provider subscribes to, and `store`, the store that stream persists into.
+Code outside React, such as an RxJS pipeline or a sign-in flow, subscribes to
+the same `kheopskit$`. While the provider is mounted, both share one pipeline: one wallet
 discovery, one reconnect attempt and one extension prompt.
 
 ```ts
@@ -226,29 +228,29 @@ on the server. It renders each server request from that request's
 it there. It emits one state without wallets, persists nothing, leaves no timer
 behind and does not change what the provider renders for a request.
 
-Without `options.store`, `createKheopskit` creates the store on first use in
-the browser. The provider claims it when it first renders there. The store is
-backed by cookies when the provider renders with `ssrCookies`, and by
-localStorage otherwise. Effects of components inside the provider run after
-that render, so they use the provider's store. In an SSR app, code that reads
-`store` or subscribes to `kheopskit$` before the provider renders, such as
-module-scope code or a parent's effect that runs before the provider mounts,
-would get the localStorage store. Pass the store in that case:
-
-```ts
-import { createKheopskitStore } from "@kheopskit/core";
-
-export const { KheopskitProvider, kheopskit$, store } = createKheopskit(config, {
-  store: createKheopskitStore({ ssrCookies: "" }),
-});
-```
+Without `options.store`, `createKheopskit` creates the store on first use.
+It is backed by cookies with `{ ssr: true }` (see [SSR](#ssr)) and by
+localStorage otherwise, whoever touches it first, the provider or code outside
+React. On the server, that store ignores `rememberWallet`, `forgetWallet` and
+`setCachedState`, so module code shared by every request cannot change it.
 
 `createKheopskit` never calls `store.destroy()`, so the store survives a
 provider remount. Call it yourself when the app no longer needs kheopskit.
 
 ## SSR
 
-Pass the `kheopskit` cookie as `ssrCookies` to hydrate wallet state on the
+Create the instance with `{ ssr: true }`, so it persists in a cookie the server
+can read:
+
+```ts
+// kheopskit.ts
+export const { KheopskitProvider, useWallets } = createKheopskit(
+  { platforms: [polkadot()] },
+  { ssr: true },
+);
+```
+
+Then pass the `kheopskit` cookie as `ssrCookies` to hydrate wallet state on the
 server without a UI flash. Never forward the whole cookie header to a client
 component: the framework serializes its props into the HTML, httpOnly session
 cookies included.
@@ -264,10 +266,13 @@ const ssrCookies = kheopskitCookie
 ```
 
 Kheopskit reads one cookie, named after the `storageKey` config option
-(default `kheopskit`). Pass `""` when it is absent, because without
-`ssrCookies` the browser persists to `localStorage` instead of the cookie. The
+(default `kheopskit`). Pass `""` when it is absent. The
 [TanStack Start example](https://github.com/kheopskit/kheopskit/blob/main/examples/tanstack-start/src/routes/__root.tsx)
 reads it with `getCookie("kheopskit")` in a server function.
+
+`ssrCookies` on the provider of an instance created without `{ ssr: true }` is
+a type error. The standalone `KheopskitProvider` persists to the cookie only
+when it receives `ssrCookies`, so pass `""` rather than leaving the prop out.
 
 > While `state.isHydrating` is `true`, wallets and accounts restored from the
 > cache are placeholders with `isPlaceholder: true` and no SDK handle

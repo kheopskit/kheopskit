@@ -4,6 +4,7 @@
  */
 
 import type {
+	createKheopskit as createCoreKheopskit,
 	createKheopskitStore,
 	KheopskitConfig,
 	KheopskitPlatform,
@@ -135,6 +136,36 @@ export type SharedInstanceIsTyped = Expect<
 		]
 	>
 >;
+export type RemovedGetKheopskit =
+	// @ts-expect-error getKheopskit$ left the public API: use createKheopskit
+	typeof import("@kheopskit/core").getKheopskit$;
+
+type CorePolkadotKit = ReturnType<
+	typeof createCoreKheopskit<readonly [ReturnType<typeof polkadot>]>
+>;
+type CoreState = Exclude<
+	Awaited<ReturnType<CorePolkadotKit["kheopskit$"]["toPromise"]>>,
+	undefined
+>;
+export type CoreWalletIsPlatformPrecise = Expect<
+	Equal<CoreState["wallets"][number], PolkadotWallet | WalletConnectWallet>
+>;
+export type CoreAccountIsPlatformPrecise = Expect<
+	Equal<CoreState["accounts"][number], PolkadotAccount>
+>;
+
+type ProviderProps<
+	Kit extends { KheopskitProvider: (props: never) => unknown },
+> = Parameters<Kit["KheopskitProvider"]>[0];
+type SsrBound = ReturnType<
+	typeof createKheopskit<readonly [ReturnType<typeof polkadot>], { ssr: true }>
+>;
+export const ssrProviderProps: ProviderProps<SsrBound> = { ssrCookies: "" };
+export const plainProviderProps: ProviderProps<PolkadotBound> = {
+	// @ts-expect-error ssrCookies needs an instance created with { ssr: true }
+	ssrCookies: "",
+};
+
 export type BoundWalletIsPlatformPrecise = Expect<
 	Equal<
 		ReturnType<PolkadotBound["useWallet"]>,

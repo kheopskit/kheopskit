@@ -1,18 +1,17 @@
 import {
-	createKheopskitStore,
-	getKheopskit$,
+	createKheopskit,
 	type KheopskitConfig,
+	type KheopskitPlatform,
 	type KheopskitStore,
 } from "@kheopskit/core";
 import {
 	type FC,
 	type PropsWithChildren,
-	useCallback,
 	useEffect,
+	useMemo,
 	useRef,
 } from "react";
 import { KheopskitSourceProvider } from "./KheopskitSourceProvider";
-import { createLivePipeline } from "./livePipeline";
 
 export type KheopskitProviderProps = PropsWithChildren & {
 	/**
@@ -91,30 +90,21 @@ export const KheopskitProvider: FC<KheopskitProviderProps> = ({
 		lastConfigRef.current = config;
 	}, [config]);
 
-	const resolveClientSource = useCallback(
-		(resolvedConfig: KheopskitConfig) => {
-			const sourceStore =
-				store ??
-				createKheopskitStore({
-					ssrCookies,
-					storageKey: resolvedConfig.storageKey,
-				});
-			return {
-				store: sourceStore,
-				pipeline: createLivePipeline(
-					getKheopskit$(resolvedConfig, { ssrCookies, store: sourceStore }),
-				),
-			};
-		},
-		[ssrCookies, store],
+	const ssr = ssrCookies !== undefined;
+	const kit = useMemo(
+		() =>
+			createKheopskit(
+				{
+					...config,
+					platforms: (config?.platforms ?? []) as readonly [KheopskitPlatform],
+				},
+				store ? { store } : { ssr },
+			),
+		[config, store, ssr],
 	);
 
 	return (
-		<KheopskitSourceProvider
-			config={config}
-			ssrCookies={ssrCookies}
-			resolveClientSource={resolveClientSource}
-		>
+		<KheopskitSourceProvider kit={kit} config={config} ssrCookies={ssrCookies}>
 			{children}
 		</KheopskitSourceProvider>
 	);

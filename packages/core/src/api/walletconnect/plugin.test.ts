@@ -307,7 +307,7 @@ describe("walletConnect().getWallet$ single AppKit instance", () => {
 	});
 });
 
-describe("walletConnect() provider subscription lifetime through getKheopskit$", () => {
+describe("walletConnect() provider subscription lifetime through kheopskitRun$", () => {
 	afterEach(() => {
 		vi.resetModules();
 		vi.restoreAllMocks();
@@ -386,7 +386,7 @@ describe("walletConnect() provider subscription lifetime through getKheopskit$",
 	};
 
 	const observe = async (platform = fakePlatform) => {
-		const { getKheopskit$ } = await import("../kheopskit");
+		const { kheopskitRun$ } = await import("../kheopskit");
 		const { createKheopskitStore } = await import("../store");
 		const { walletConnect, resetAppKitCache } = await import("./plugin");
 		resetAppKitCache();
@@ -396,7 +396,7 @@ describe("walletConnect() provider subscription lifetime through getKheopskit$",
 				| undefined;
 		const mount = () => {
 			const states: KheopskitState[] = [];
-			const sub = getKheopskit$(
+			const sub = kheopskitRun$(
 				{ platforms: [platform], walletConnect: walletConnect(options) },
 				{ store: createKheopskitStore() },
 			).subscribe((s) => states.push(s));

@@ -119,7 +119,7 @@ The real-wallet path has no automatic evidence. Save screenshots and console out
 
 Proof standards:
 
-- Drive the real user path: click `Connect`, `Sign`, and `Disconnect`. Do not call `getKheopskit$` or set storage from the test.
+- Drive the real user path: click `Connect`, `Sign`, and `Disconnect`. Do not call the kheopskit API or set storage from the test.
 - Call `snap` after each action, so the evidence shows both the action and the state it produced. A final screenshot alone is not proof.
 - Check side effects as well as the visible UI. Connected wallets persist under the `kheopskit` key: localStorage on vite-react, the `kheopskit` cookie on nextjs-react and tanstack-start. Use `readPersistedState` and `saveJson`.
 - Mocks are acceptable only because wallet extensions are an external process boundary. Never mock `@kheopskit/*`.

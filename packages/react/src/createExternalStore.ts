@@ -1,31 +1,19 @@
-import type { Subscription } from "rxjs";
-import type { Liveness, LivePipeline } from "./livePipeline";
-
-export type ExternalStoreSource<T> = {
-	pipeline: LivePipeline<T>;
-	initialValue: T;
-};
-
-// React runs every layout setup of a commit synchronously, so once this
-// microtask runs a mounted provider has taken its hold on the pipeline, and a
-// release queued by a hide in this task has landed.
-const afterThisCommitsLayoutEffects = () => Promise.resolve();
+import type { Observable, Subscription } from "rxjs";
 
 export const createExternalStore = <T>(
-	resolveClientSource: () => ExternalStoreSource<T>,
+	source$: Observable<T>,
+	getInitialValue: () => T,
 	serverValue: T,
 ) => {
-	let source: ExternalStoreSource<T> | undefined;
+	let initialValue: T | undefined;
 	let latestValue: T | undefined;
 	let subscription: Subscription | undefined;
 	const listeners = new Set<(value: T) => void>();
 
-	const getSource = () => {
-		source ??= resolveClientSource();
-		return source;
+	const getSnapshot = () => {
+		initialValue ??= getInitialValue();
+		return latestValue ?? initialValue;
 	};
-
-	const getSnapshot = () => latestValue ?? getSource().initialValue;
 
 	const getServerSnapshot = () => serverValue;
 
@@ -37,7 +25,7 @@ export const createExternalStore = <T>(
 
 	const subscribe = (listener: (value: T) => void) => {
 		if (!subscription || subscription.closed) {
-			subscription = getSource().pipeline.observable$.subscribe((value) => {
+			subscription = source$.subscribe((value) => {
 				latestValue = value;
 				for (const notify of listeners) notify(value);
 			});
@@ -53,11 +41,5 @@ export const createExternalStore = <T>(
 		};
 	};
 
-	/** The shared pipeline's liveness once this commit's layout effects ran. */
-	const whenLive = async (signal?: AbortSignal): Promise<Liveness<T>> => {
-		await afterThisCommitsLayoutEffects();
-		return getSource().pipeline.whenLive(signal);
-	};
-
-	return { getSnapshot, getServerSnapshot, subscribe, whenLive };
+	return { getSnapshot, getServerSnapshot, subscribe };
 };

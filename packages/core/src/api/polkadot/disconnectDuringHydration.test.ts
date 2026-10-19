@@ -6,7 +6,7 @@ import {
 	createMemoryStorage,
 	type FakePolkadotExtension,
 } from "../../testing";
-import { getKheopskit$ } from "../kheopskit";
+import { kheopskitRun$ } from "../kheopskit";
 import { createKheopskitStore, type KheopskitStore } from "../store";
 import type { KheopskitState } from "../types";
 import { polkadot } from "./plugin";
@@ -38,7 +38,7 @@ afterEach(() => {
 });
 
 const subscribe = () => {
-	subscription = getKheopskit$(
+	subscription = kheopskitRun$(
 		{ platforms: [polkadot()] },
 		{ store },
 	).subscribe((state) => {

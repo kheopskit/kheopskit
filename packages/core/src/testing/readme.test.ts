@@ -1,6 +1,6 @@
 import {
+	createKheopskit,
 	createKheopskitStore,
-	getKheopskit$,
 	type KheopskitState,
 	type KheopskitStore,
 } from "@kheopskit/core";
@@ -50,11 +50,12 @@ it("reconnects the wallet the user connected last time", async () => {
 		[cachedAccountOf(wallet, alice.address, alice.name)],
 	);
 
-	let state: KheopskitState | undefined;
-	subscription = getKheopskit$(
+	const { kheopskit$ } = createKheopskit(
 		{ platforms: [polkadot()] },
 		{ store },
-	).subscribe((next) => {
+	);
+	let state: KheopskitState | undefined;
+	subscription = kheopskit$.subscribe((next) => {
 		state = next;
 	});
 	await vi.advanceTimersByTimeAsync(1000);

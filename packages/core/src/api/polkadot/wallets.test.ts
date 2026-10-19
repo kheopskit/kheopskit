@@ -6,7 +6,7 @@ import {
 } from "../../testing/fakePolkadotExtension";
 import { createMemoryStorage } from "../../testing/memoryStorage";
 import { resolveConfig } from "../config";
-import { getKheopskit$ } from "../kheopskit";
+import { kheopskitRun$ } from "../kheopskit";
 import { createKheopskitStore } from "../store";
 import type {
 	KheopskitConfig,
@@ -260,7 +260,7 @@ describe("polkadot accounts at connect", () => {
 				}),
 		);
 		const emissions: KheopskitState[] = [];
-		const subscription = getKheopskit$(
+		const subscription = kheopskitRun$(
 			{ platforms: [polkadot()], hydrationGracePeriod: 0 },
 			{ store: createKheopskitStore() },
 		).subscribe((state) => emissions.push(state));
