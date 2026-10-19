@@ -161,12 +161,8 @@ describe("createKheopskit shared instance", () => {
 
 	it("waitForAccount resolves the live account of the run the provider holds", async () => {
 		fake.setAccounts([alice]);
-		const { KheopskitProvider, waitForAccount, Statuses } = createInstance();
-		render(
-			<KheopskitProvider>
-				<Statuses />
-			</KheopskitProvider>,
-		);
+		const { KheopskitProvider, waitForAccount } = createInstance();
+		render(<KheopskitProvider />);
 
 		const waiting = waitForAccount(`${fake.walletId}::${alice.address}`);
 		await act(() => vi.advanceTimersByTimeAsync(1000));
