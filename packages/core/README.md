@@ -128,6 +128,30 @@ next subscriber starts a new run, which reads the cache again. A wallet's
 `connect()` and `disconnect()`, read from any emission, act on the run that is
 live when they are called (see [Connect and disconnect](#connect-and-disconnect)).
 
+`createKheopskit` also returns `waitForAccount`. Use it to sign right after a
+reload. A cached account is a placeholder until its wallet reconnects, so wait
+for the live account instead of reading it from the first emission:
+
+```ts
+const account = await waitForAccount(accountId, { signal });
+```
+
+It has three outcomes:
+
+- It resolves with the live account once the running instance lists it, at
+  once when it already does. It waits while `isHydrating` is `true`, while
+  `isDiscovering` is `true` and the account's wallet is not listed yet, while
+  that wallet is `connecting`, and while it is connected but lists no account
+  yet (an Ethereum wallet shows `connected` before `eth_accounts` answers).
+- It rejects `ACCOUNT_UNAVAILABLE` when none of these holds and the wallet does
+  not list the account.
+- It rejects `ABORTED` when nothing subscribes `kheopskit$` by the end of the
+  calling task, when the last subscriber leaves, or when `signal` fires.
+
+Like `connect()`, it never starts the pipeline, and it has no timeout. A
+connected wallet that lists no accounts, such as a locked Ethereum wallet,
+keeps the wait open until `signal` fires or the last subscriber leaves.
+
 `createKheopskit(config, options)` persists to `localStorage` by default.
 Pass `{ ssr: true }` to persist in a cookie that a server render can read, or
 `{ store }` to use a store you created (see [Persistence](#persistence)).
@@ -423,7 +447,8 @@ code:
   completes rejects with `ABORTED`.
 
 Every rejection of `connect()` is a `KheopskitError` with a stable `code` and
-the `walletId`, and so is an `ABORTED` `disconnect()`. A `disconnect()` whose
+the `walletId`, and so are an `ABORTED` `disconnect()` and every rejection of
+`waitForAccount()` for a well-formed account id. A `disconnect()` whose
 platform call fails (Solana, the WalletConnect connector) rejects with the
 platform's own error.
 
@@ -431,7 +456,8 @@ platform's own error.
 |------|------|
 | `USER_REJECTED` | The user refused the prompt. `cause` holds the platform error. |
 | `CONNECT_FAILED` | Any other platform failure, including a Polkadot extension whose `enable()` result lacks `accounts.get`, `accounts.subscribe`, `signer.signPayload` or `signer.signRaw`, or whose `accounts.get()` rejects. `cause` holds the platform error. |
-| `ABORTED` | The call was abandoned, as listed above. The message starts with `connect of wallet <id>` or `disconnect of wallet <id>` and names the reason, such as `was aborted`. |
+| `ABORTED` | The call was abandoned, as listed above and in [Usage](#usage) for `waitForAccount()`. The message starts with `connect of wallet <id>`, `disconnect of wallet <id>` or `waitForAccount of account <id>` and names the reason, such as `was aborted`. |
+| `ACCOUNT_UNAVAILABLE` | `waitForAccount()` stopped waiting and the account is not live: its wallet settled without listing it, is not connected, or was not discovered. |
 | `FEATURE_NOT_SUPPORTED` | A Solana Wallet Standard wallet that lacks `standard:connect`. |
 | `WALLET_PENDING` | `connect()` on a placeholder whose live wallet was not discovered before hydration ended, and always on a `getHydratedSnapshot` placeholder. |
 

@@ -1,3 +1,4 @@
+import { announceProvider, type EIP6963ProviderDetail } from "mipd";
 import {
 	BehaviorSubject,
 	filter,
@@ -9,13 +10,16 @@ import {
 } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	cachedAccountOf,
 	cachedWalletOf,
 	createFakePolkadotExtension,
 	createMemoryStorage,
 	type FakePolkadotExtension,
 } from "../testing";
+import { clearCachedObservable } from "../utils/getCachedObservable";
 import type { WalletId } from "../utils/WalletId";
 import type { KheopskitError } from "./errors";
+import { ethereum } from "./ethereum/plugin";
 import {
 	createInstance,
 	createKheopskit,
@@ -26,6 +30,9 @@ import { createKheopskitStore } from "./store";
 import type { KheopskitState, KheopskitStore } from "./types";
 
 const ALICE = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+const BOB = "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty";
+const ETH_ADDRESS = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+const ETH_RDNS = "io.kheopskit.fake";
 const UNHELD =
 	"was called while nothing subscribes this kheopskit instance's kheopskit$ (a mounted, visible KheopskitProvider subscribes it)";
 
@@ -260,6 +267,362 @@ describe("createKheopskit", () => {
 			untouched,
 			touched: getItem.mock.calls.length > 0,
 		}).toEqual({ untouched: 0, touched: true });
+	});
+});
+
+describe("waitForAccount", () => {
+	let fake: FakePolkadotExtension;
+	let store: KheopskitStore;
+	const holds: Subscription[] = [];
+	const accountId = `polkadot:talisman::${ALICE}`;
+	const waitedFor = (aborted: string) =>
+		`rejected:ABORTED: [kheopskit] waitForAccount of account ${accountId} ${aborted}`;
+
+	beforeEach(() => {
+		vi.useFakeTimers();
+		fake = createFakePolkadotExtension({
+			name: "talisman",
+			accounts: [{ address: ALICE, name: "Alice" }],
+			enable: "hold",
+		});
+		store = createKheopskitStore({ storage: createMemoryStorage() });
+		const wallet = cachedWalletOf(fake.walletId, "Talisman");
+		store.setCachedState([wallet], [cachedAccountOf(wallet, ALICE)]);
+		store.rememberWallet(fake.walletId);
+	});
+
+	afterEach(() => {
+		for (const hold of holds.splice(0)) hold.unsubscribe();
+		fake.uninstall();
+		store.destroy();
+		vi.restoreAllMocks();
+		vi.useRealTimers();
+	});
+
+	const reloaded = () => {
+		const kit = createKheopskit({ platforms: [polkadot()] }, { store });
+		const states: KheopskitState[] = [];
+		const subscription = kit.kheopskit$.subscribe((state) => {
+			states.push(state);
+		});
+		holds.push(subscription);
+		return { kit, states, subscription };
+	};
+
+	it("resolves with the live account once its cached wallet reconnects", async () => {
+		const { kit, states } = reloaded();
+		const waiting = kit.waitForAccount(accountId);
+		const settlement = settlementOf(waiting);
+		await vi.advanceTimersByTimeAsync(2000);
+		const beforeReconnect = settlement();
+		fake.resolveEnable();
+		await vi.advanceTimersByTimeAsync(100);
+		const account = await waiting;
+
+		expect({
+			beforeReconnect,
+			isPlaceholder: account.isPlaceholder,
+			emitted:
+				account ===
+				states.at(-1)?.accounts.find((candidate) => candidate.id === accountId),
+		}).toEqual({
+			beforeReconnect: "pending",
+			isPlaceholder: false,
+			emitted: true,
+		});
+	});
+
+	it("resolves at once with the account when it is already live", async () => {
+		const { kit, states } = reloaded();
+		await vi.advanceTimersByTimeAsync(2000);
+		fake.resolveEnable();
+		await vi.advanceTimersByTimeAsync(100);
+		const live = states
+			.at(-1)
+			?.accounts.find((candidate) => candidate.id === accountId);
+
+		let resolvedWith: unknown;
+		kit.waitForAccount(accountId).then((account) => {
+			resolvedWith = account;
+		});
+		await flushMicrotasks();
+
+		expect({
+			isPlaceholder: live?.isPlaceholder,
+			resolvedWithLive: resolvedWith !== undefined && resolvedWith === live,
+		}).toEqual({ isPlaceholder: false, resolvedWithLive: true });
+	});
+
+	it("keeps waiting while the extension injects after hydrationTimeout but before the page load, and resolves at the reconnect", async () => {
+		const readyState = vi
+			.spyOn(document, "readyState", "get")
+			.mockReturnValue("interactive");
+		fake.uninstall();
+		const { kit, states } = reloaded();
+		const settlement = settlementOf(kit.waitForAccount(accountId));
+		await vi.advanceTimersByTimeAsync(8000);
+		const beforeLoad = {
+			settlement: settlement(),
+			isHydrating: states.at(-1)?.isHydrating,
+			isDiscovering: states.at(-1)?.isDiscovering,
+			walletListed: states
+				.at(-1)
+				?.wallets.some((wallet) => wallet.id === fake.walletId),
+		};
+		fake = createFakePolkadotExtension({
+			name: "talisman",
+			accounts: [{ address: ALICE, name: "Alice" }],
+			enable: "hold",
+		});
+		readyState.mockReturnValue("complete");
+		window.dispatchEvent(new Event("load"));
+		await vi.advanceTimersByTimeAsync(100);
+		const beforeReconnect = settlement();
+		fake.resolveEnable();
+		await vi.advanceTimersByTimeAsync(100);
+
+		expect({
+			beforeLoad,
+			beforeReconnect,
+			afterReconnect: settlement(),
+		}).toEqual({
+			beforeLoad: {
+				settlement: "pending",
+				isHydrating: false,
+				isDiscovering: true,
+				walletListed: false,
+			},
+			beforeReconnect: "pending",
+			afterReconnect: "resolved",
+		});
+	});
+
+	it("rejects ACCOUNT_UNAVAILABLE when the reconnected wallet no longer lists the account", async () => {
+		const { kit } = reloaded();
+		const settlement = settlementOf(kit.waitForAccount(accountId));
+		fake.setAccounts([{ address: BOB, name: "Bob" }]);
+		await vi.advanceTimersByTimeAsync(2000);
+		fake.resolveEnable();
+		await vi.advanceTimersByTimeAsync(5000);
+
+		expect(settlement()).toBe(
+			`rejected:ACCOUNT_UNAVAILABLE: [kheopskit] wallet ${fake.walletId} settled without listing account ${accountId}`,
+		);
+	});
+
+	it("keeps waiting past hydrationTimeout while the wallet is still connecting", async () => {
+		const { kit, states } = reloaded();
+		const settlement = settlementOf(kit.waitForAccount(accountId));
+		await vi.advanceTimersByTimeAsync(4000);
+		const afterTimeout = {
+			settlement: settlement(),
+			isHydrating: states.at(-1)?.isHydrating,
+			status: states.at(-1)?.wallets.find(({ id }) => id === fake.walletId)
+				?.status,
+		};
+		fake.resolveEnable();
+		await vi.advanceTimersByTimeAsync(100);
+
+		expect({ afterTimeout, afterReconnect: settlement() }).toEqual({
+			afterTimeout: {
+				settlement: "pending",
+				isHydrating: false,
+				status: "connecting",
+			},
+			afterReconnect: "resolved",
+		});
+	});
+
+	it("rejects ABORTED while nothing subscribes, and starts no run", async () => {
+		const kit = createKheopskit({ platforms: [polkadot()] }, { store });
+
+		const settlement = settlementOf(kit.waitForAccount(accountId));
+		await vi.advanceTimersByTimeAsync(1000);
+
+		expect({
+			settlement: settlement(),
+			enableCalls: fake.enableCalls(),
+		}).toEqual({ settlement: waitedFor(UNHELD), enableCalls: [] });
+	});
+
+	it("rejects ABORTED when the last subscriber leaves while it waits, and leaves no timer", async () => {
+		const { kit, subscription } = reloaded();
+		const settlement = settlementOf(kit.waitForAccount(accountId));
+		await vi.advanceTimersByTimeAsync(1000);
+
+		subscription.unsubscribe();
+		await vi.advanceTimersByTimeAsync(5000);
+
+		expect({
+			settlement: settlement(),
+			timers: vi.getTimerCount(),
+		}).toEqual({ settlement: waitedFor(UNHELD), timers: 0 });
+	});
+
+	it("rejects ABORTED when its signal fired before or during the wait, and removes every listener it added", async () => {
+		const { kit } = reloaded();
+		const listenersOf = (signal: AbortSignal) => {
+			const added = vi.spyOn(signal, "addEventListener");
+			const removed = vi.spyOn(signal, "removeEventListener");
+			return () => ({
+				added: added.mock.calls.length,
+				removed: removed.mock.calls.length,
+			});
+		};
+		const before = new AbortController();
+		before.abort();
+		const during = new AbortController();
+		const resolved = new AbortController();
+		const listeners = {
+			before: listenersOf(before.signal),
+			during: listenersOf(during.signal),
+			resolved: listenersOf(resolved.signal),
+		};
+
+		const settlements = {
+			before: settlementOf(
+				kit.waitForAccount(accountId, { signal: before.signal }),
+			),
+			during: settlementOf(
+				kit.waitForAccount(accountId, { signal: during.signal }),
+			),
+			resolved: settlementOf(
+				kit.waitForAccount(accountId, { signal: resolved.signal }),
+			),
+		};
+		await vi.advanceTimersByTimeAsync(1000);
+		during.abort();
+		fake.resolveEnable();
+		await vi.advanceTimersByTimeAsync(100);
+
+		expect({
+			before: settlements.before(),
+			during: settlements.during(),
+			resolved: settlements.resolved(),
+			listeners: {
+				before: listeners.before(),
+				during: listeners.during(),
+				resolved: listeners.resolved(),
+			},
+		}).toEqual({
+			before: waitedFor("was aborted"),
+			during: waitedFor("was aborted"),
+			resolved: "resolved",
+			listeners: {
+				before: { added: 0, removed: 0 },
+				during: { added: 1, removed: 1 },
+				resolved: { added: 1, removed: 1 },
+			},
+		});
+	});
+});
+
+describe("waitForAccount on Ethereum, while eth_accounts has not answered", () => {
+	const walletId = `ethereum:${ETH_RDNS}` as const;
+	const accountId = `${walletId}::${ETH_ADDRESS}` as const;
+	const holds: Subscription[] = [];
+	let answerAccounts: Array<(addresses: string[]) => void>;
+	let unannounce: () => void;
+	let store: KheopskitStore;
+
+	beforeEach(() => {
+		vi.useFakeTimers();
+		answerAccounts = [];
+		const provider = {
+			request: async ({ method }: { method: string }) => {
+				if (method === "eth_requestAccounts") return [ETH_ADDRESS];
+				if (method === "eth_chainId") return "0x1";
+				if (method === "eth_accounts")
+					return new Promise<string[]>((resolve) =>
+						answerAccounts.push(resolve),
+					);
+				throw new Error(`unexpected request ${method}`);
+			},
+			on: () => {},
+			removeListener: () => {},
+		};
+		unannounce = announceProvider({
+			info: {
+				uuid: "00000000-0000-4000-8000-000000000001",
+				name: "Fake",
+				icon: "data:image/svg+xml,",
+				rdns: ETH_RDNS,
+			},
+			provider: provider as unknown as EIP6963ProviderDetail["provider"],
+		});
+		store = createKheopskitStore({ storage: createMemoryStorage() });
+	});
+
+	afterEach(() => {
+		for (const hold of holds.splice(0)) hold.unsubscribe();
+		unannounce();
+		clearCachedObservable(`accounts:${walletId}`);
+		store.destroy();
+		vi.useRealTimers();
+	});
+
+	const subscribed = (kit: { kheopskit$: Observable<KheopskitState> }) => {
+		const states: KheopskitState[] = [];
+		holds.push(kit.kheopskit$.subscribe((state) => states.push(state)));
+		const wallet = () =>
+			states.at(-1)?.wallets.find((candidate) => candidate.id === walletId);
+		return {
+			observed: (settlement: () => Settlement) => ({
+				settlement: settlement(),
+				isHydrating: states.at(-1)?.isHydrating,
+				isConnected: wallet()?.isConnected,
+				accounts: states.at(-1)?.accounts.length,
+			}),
+			connect: () => wallet()?.connect(),
+		};
+	};
+
+	it("keeps waiting after a fresh connect, and resolves once eth_accounts answers", async () => {
+		const kit = createKheopskit(
+			{ platforms: [ethereum()], autoReconnect: false },
+			{ store },
+		);
+		const { observed, connect } = subscribed(kit);
+		await vi.advanceTimersByTimeAsync(1000);
+		await connect();
+		const settlement = settlementOf(kit.waitForAccount(accountId));
+		await vi.advanceTimersByTimeAsync(5000);
+		const beforeAnswer = observed(settlement);
+		for (const answer of answerAccounts.splice(0)) answer([ETH_ADDRESS]);
+		await vi.advanceTimersByTimeAsync(100);
+
+		expect({ beforeAnswer, afterAnswer: settlement() }).toEqual({
+			beforeAnswer: {
+				settlement: "pending",
+				isHydrating: false,
+				isConnected: true,
+				accounts: 0,
+			},
+			afterAnswer: "resolved",
+		});
+	});
+
+	it("keeps waiting after a reload whose eth_accounts outlasts hydrationTimeout, and resolves once it answers", async () => {
+		const wallet = cachedWalletOf(walletId, "Fake");
+		store.setCachedState([wallet], [cachedAccountOf(wallet, ETH_ADDRESS)]);
+		store.rememberWallet(walletId);
+		const kit = createKheopskit({ platforms: [ethereum()] }, { store });
+		const { observed } = subscribed(kit);
+		const settlement = settlementOf(kit.waitForAccount(accountId));
+		await vi.advanceTimersByTimeAsync(10_000);
+		const beforeAnswer = observed(settlement);
+		for (const answer of answerAccounts.splice(0)) answer([ETH_ADDRESS]);
+		await vi.advanceTimersByTimeAsync(100);
+
+		expect({ beforeAnswer, afterAnswer: settlement() }).toEqual({
+			beforeAnswer: {
+				settlement: "pending",
+				isHydrating: false,
+				isConnected: true,
+				accounts: 0,
+			},
+			afterAnswer: "resolved",
+		});
 	});
 });
 

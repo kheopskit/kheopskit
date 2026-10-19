@@ -24,7 +24,8 @@ type ProviderProps<O> = O extends { ssr: true }
 /**
  * Binds a platform tuple once and returns one kheopskit instance: a
  * `KheopskitProvider`, hooks already typed to those platforms, and the
- * `kheopskit$` stream and `store` the provider uses, for code outside React.
+ * `kheopskit$` stream and `store` the provider uses, and `waitForAccount`, for
+ * code outside React.
  * It is `@kheopskit/core`'s `createKheopskit` instance: subscribing
  * `kheopskit$` while the provider is mounted runs no second pipeline, and
  * holds the one pipeline for every hook action of the instance.
@@ -69,6 +70,8 @@ export const createKheopskit = <
 		kheopskit$: kit.kheopskit$,
 		/** The store `kheopskit$` reads the cache from and persists into. */
 		store: kit.store,
+		/** Resolves with the live account once the running instance lists it. */
+		waitForAccount: kit.waitForAccount,
 		/** Current state, typed to the bound platform tuple. */
 		useWallets: () => useWallets<P>(),
 		/** Current accounts, typed to the bound platform tuple. */
