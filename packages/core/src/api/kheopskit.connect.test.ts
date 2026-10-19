@@ -13,7 +13,7 @@ import {
 	createInjectedWallets$,
 	type InjectedWalletsAdapter,
 } from "./injectedWallets";
-import { getKheopskit$ } from "./kheopskit";
+import { kheopskitRun$ } from "./kheopskit";
 import { polkadot } from "./polkadot/plugin";
 import { solana } from "./solana/plugin";
 import { createKheopskitStore } from "./store";
@@ -333,7 +333,7 @@ const subscribeEngineDuringHydration = (
 	const store = createKheopskitStore();
 	cacheWallet(store, cachedIsConnected, { id: engineWalletId, name: "Engine" });
 	const emissions: KheopskitState[] = [];
-	const sub = getKheopskit$(
+	const sub = kheopskitRun$(
 		{ ...engineConfig(platform), hydrationGracePeriod: 500 },
 		{ store },
 	).subscribe((state) => emissions.push(state));
@@ -341,7 +341,7 @@ const subscribeEngineDuringHydration = (
 };
 
 const collect = (
-	state$: ReturnType<typeof getKheopskit$>,
+	state$: ReturnType<typeof kheopskitRun$>,
 	emissions: KheopskitState[],
 ) => {
 	const sub = state$.subscribe((state) => emissions.push(state));
@@ -359,7 +359,7 @@ const accountsOf = (state: KheopskitState) =>
 		.map((a) => a.address)
 		.sort();
 
-describe("getKheopskit$ connect semantics", () => {
+describe("kheopskitRun$ connect semantics", () => {
 	let fake: ReturnType<typeof installFakeExtension>;
 
 	beforeEach(() => {
@@ -390,7 +390,7 @@ describe("getKheopskit$ connect semantics", () => {
 	it("never emits a connected wallet with stale accounts", async () => {
 		const emissions: KheopskitState[] = [];
 		const { sub, wallet } = collect(
-			getKheopskit$(config(0), { store: createKheopskitStore() }),
+			kheopskitRun$(config(0), { store: createKheopskitStore() }),
 			emissions,
 		);
 		await settleMicrotasks();
@@ -431,7 +431,7 @@ describe("getKheopskit$ connect semantics", () => {
 	it("connect resolves after the state shows the wallet connected", async () => {
 		const emissions: KheopskitState[] = [];
 		const { sub, wallet } = collect(
-			getKheopskit$(config(0), { store: createKheopskitStore() }),
+			kheopskitRun$(config(0), { store: createKheopskitStore() }),
 			emissions,
 		);
 		await settleMicrotasks();
@@ -459,7 +459,7 @@ describe("getKheopskit$ connect semantics", () => {
 		cacheWallet(store, false);
 		const emissions: KheopskitState[] = [];
 		const { sub, wallet } = collect(
-			getKheopskit$(config(500), { store }),
+			kheopskitRun$(config(500), { store }),
 			emissions,
 		);
 		await settleMicrotasks();
@@ -493,7 +493,7 @@ describe("getKheopskit$ connect semantics", () => {
 	it("tearing down the last subscriber settles a pending connect", async () => {
 		const emissions: KheopskitState[] = [];
 		const { sub, wallet } = collect(
-			getKheopskit$(config(0), { store: createKheopskitStore() }),
+			kheopskitRun$(config(0), { store: createKheopskitStore() }),
 			emissions,
 		);
 		await settleMicrotasks();
@@ -528,7 +528,7 @@ describe("getKheopskit$ connect semantics", () => {
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 		const emissions: KheopskitState[] = [];
 		const { sub, wallet } = collect(
-			getKheopskit$(config(0, true), { store }),
+			kheopskitRun$(config(0, true), { store }),
 			emissions,
 		);
 		await settleMicrotasks();
@@ -556,7 +556,7 @@ describe("getKheopskit$ connect semantics", () => {
 	it("an abort fired by the subscriber that sees the wallet connected leaves the connect resolved", async () => {
 		const controller = new AbortController();
 		const emissions: KheopskitState[] = [];
-		const sub = getKheopskit$(config(0), {
+		const sub = kheopskitRun$(config(0), {
 			store: createKheopskitStore(),
 		}).subscribe((state) => {
 			emissions.push(state);
@@ -583,7 +583,7 @@ describe("getKheopskit$ connect semantics", () => {
 
 	it("connect on a wallet from a torn-down subscription rejects ABORTED without prompting", async () => {
 		const state = await firstValueFrom(
-			getKheopskit$(config(0), { store: createKheopskitStore() }),
+			kheopskitRun$(config(0), { store: createKheopskitStore() }),
 		);
 		const wallet = state.wallets.find((w) => w.id === fakeWalletId);
 		if (!wallet) throw new Error("fake wallet not in the first emission");
@@ -602,7 +602,7 @@ describe("getKheopskit$ connect semantics", () => {
 	it("teardown between the platform's answer and the wrapper's resumption still settles the connect", async () => {
 		const emissions: KheopskitState[] = [];
 		const { sub, wallet } = collect(
-			getKheopskit$(config(0), { store: createKheopskitStore() }),
+			kheopskitRun$(config(0), { store: createKheopskitStore() }),
 			emissions,
 		);
 		await settleMicrotasks();
@@ -626,7 +626,7 @@ describe("getKheopskit$ connect semantics", () => {
 		cacheWallet(store, true);
 		const emissions: KheopskitState[] = [];
 		const { sub, wallet } = collect(
-			getKheopskit$(config(500, true), { store }),
+			kheopskitRun$(config(500, true), { store }),
 			emissions,
 		);
 		await settleMicrotasks();
@@ -659,7 +659,7 @@ describe("getKheopskit$ connect semantics", () => {
 		cacheWallet(store, true);
 		const emissions: KheopskitState[] = [];
 		const { sub, wallet } = collect(
-			getKheopskit$(config(500, true), { store }),
+			kheopskitRun$(config(500, true), { store }),
 			emissions,
 		);
 		await settleMicrotasks();
@@ -686,7 +686,7 @@ describe("getKheopskit$ connect semantics", () => {
 		cacheWallet(store, true);
 		const emissions: KheopskitState[] = [];
 		const { sub, wallet } = collect(
-			getKheopskit$(config(500, true), { store }),
+			kheopskitRun$(config(500, true), { store }),
 			emissions,
 		);
 		await settleMicrotasks();
@@ -714,7 +714,7 @@ describe("getKheopskit$ connect semantics", () => {
 		cacheWallet(store, true);
 		const emissions: KheopskitState[] = [];
 		const { sub, wallet } = collect(
-			getKheopskit$(config(500, true), { store }),
+			kheopskitRun$(config(500, true), { store }),
 			emissions,
 		);
 		await settleMicrotasks();
@@ -736,7 +736,7 @@ describe("getKheopskit$ connect semantics", () => {
 	it("an accounts-only emission keeps the same wallet object and functions", async () => {
 		const emissions: KheopskitState[] = [];
 		const { sub, wallet } = collect(
-			getKheopskit$(config(0), { store: createKheopskitStore() }),
+			kheopskitRun$(config(0), { store: createKheopskitStore() }),
 			emissions,
 		);
 		await settleMicrotasks();
@@ -765,7 +765,7 @@ describe("getKheopskit$ connect semantics", () => {
 		const platform = enginePlatform({ disconnect: platformDisconnect });
 		const store = createKheopskitStore();
 		const first: KheopskitState[] = [];
-		const firstSub = getKheopskit$(engineConfig(platform), { store }).subscribe(
+		const firstSub = kheopskitRun$(engineConfig(platform), { store }).subscribe(
 			(state) => first.push(state),
 		);
 		await settleMicrotasks();
@@ -776,7 +776,7 @@ describe("getKheopskit$ connect semantics", () => {
 		firstSub.unsubscribe();
 
 		const second: KheopskitState[] = [];
-		const secondSub = getKheopskit$(engineConfig(platform), {
+		const secondSub = kheopskitRun$(engineConfig(platform), {
 			store,
 		}).subscribe((state) => second.push(state));
 		await settleMicrotasks();
@@ -802,7 +802,7 @@ describe("getKheopskit$ connect semantics", () => {
 	it("a Wallet Standard wallet that unregisters while its connect is pending rejects that connect ABORTED, and a later grant neither connects nor remembers it", async () => {
 		const standard = registerFakeStandardWallet();
 		const emissions: KheopskitState[] = [];
-		const sub = getKheopskit$(solanaConfig, {
+		const sub = kheopskitRun$(solanaConfig, {
 			store: createKheopskitStore(),
 		}).subscribe((state) => emissions.push(state));
 		await settleMicrotasks();
@@ -905,7 +905,7 @@ describe("getKheopskit$ connect semantics", () => {
 		const platform = enginePlatform({ sources$, connect: () => grant.promise });
 		const store = createKheopskitStore();
 		const emissions: KheopskitState[] = [];
-		const sub = getKheopskit$(engineConfig(platform), { store }).subscribe(
+		const sub = kheopskitRun$(engineConfig(platform), { store }).subscribe(
 			(state) => emissions.push(state),
 		);
 		await settleMicrotasks();
@@ -945,7 +945,7 @@ describe("getKheopskit$ connect semantics", () => {
 			[],
 		);
 		const emissions: KheopskitState[] = [];
-		const sub = getKheopskit$(
+		const sub = kheopskitRun$(
 			{ ...solanaConfig, hydrationGracePeriod: 500 },
 			{ store },
 		).subscribe((state) => emissions.push(state));
@@ -987,7 +987,7 @@ describe("getKheopskit$ connect semantics", () => {
 		const platform = enginePlatform({ sources$ });
 		const store = createKheopskitStore();
 		const emissions: KheopskitState[] = [];
-		const sub = getKheopskit$(engineConfig(platform), { store }).subscribe(
+		const sub = kheopskitRun$(engineConfig(platform), { store }).subscribe(
 			(state) => emissions.push(state),
 		);
 		await settleMicrotasks();
@@ -1037,7 +1037,7 @@ describe("getKheopskit$ connect semantics", () => {
 		const platform = enginePlatform({ sources$, connect: () => grant.promise });
 		const emissions: KheopskitState[] = [];
 		const errors: unknown[] = [];
-		const sub = getKheopskit$(engineConfig(platform), {
+		const sub = kheopskitRun$(engineConfig(platform), {
 			store: createKheopskitStore(),
 		}).subscribe({
 			next: (state) => emissions.push(state),
@@ -1069,7 +1069,7 @@ describe("getKheopskit$ connect semantics", () => {
 		const grant = createDeferred<string>();
 		const platform = enginePlatform({ sources$, connect: () => grant.promise });
 		const emissions: KheopskitState[] = [];
-		const sub = getKheopskit$(engineConfig(platform), {
+		const sub = kheopskitRun$(engineConfig(platform), {
 			store: createKheopskitStore(),
 		}).subscribe((state) => emissions.push(state));
 		await settleMicrotasks();
@@ -1093,7 +1093,7 @@ describe("getKheopskit$ connect semantics", () => {
 		const eth = installFakeEthereumProvider({ address: NEW });
 		eth.holdAccounts();
 		const emissions: KheopskitState[] = [];
-		const sub = getKheopskit$(ethConfig, {
+		const sub = kheopskitRun$(ethConfig, {
 			store: createKheopskitStore(),
 		}).subscribe((state) => emissions.push(state));
 		await settleMicrotasks();
@@ -1141,7 +1141,7 @@ describe("getKheopskit$ connect semantics", () => {
 			address: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		});
 		const emissions: KheopskitState[] = [];
-		const sub = getKheopskit$(ethConfig, {
+		const sub = kheopskitRun$(ethConfig, {
 			store: createKheopskitStore(),
 		}).subscribe((state) => emissions.push(state));
 		await settleMicrotasks();
@@ -1192,7 +1192,7 @@ describe("getKheopskit$ connect semantics", () => {
 
 	const subscribeEthereum = async () => {
 		const emissions: KheopskitState[] = [];
-		const sub = getKheopskit$(ethConfig, {
+		const sub = kheopskitRun$(ethConfig, {
 			store: createKheopskitStore(),
 		}).subscribe((state) => emissions.push(state));
 		await settleMicrotasks();
@@ -1308,7 +1308,7 @@ describe("getKheopskit$ connect semantics", () => {
 	it("a Polkadot wallet disconnecting and reconnecting does not make a connected Ethereum wallet re-read eth_accounts", async () => {
 		const eth = installFakeEthereumProvider();
 		const emissions: KheopskitState[] = [];
-		const sub = getKheopskit$(
+		const sub = kheopskitRun$(
 			{ ...config(0), platforms: [...config(0).platforms, ethereum()] },
 			{ store: createKheopskitStore() },
 		).subscribe((state) => emissions.push(state));
@@ -1380,7 +1380,7 @@ describe("getKheopskit$ connect semantics", () => {
 
 	const subscribePolkadot = async () => {
 		const emissions: KheopskitState[] = [];
-		const sub = getKheopskit$(config(0), {
+		const sub = kheopskitRun$(config(0), {
 			store: createKheopskitStore(),
 		}).subscribe((state) => emissions.push(state));
 		await settleMicrotasks();
@@ -1469,7 +1469,7 @@ const subscribeLaggingPlatform = (disconnect: () => Promise<void>) => {
 			getAccounts$: () => of([]),
 		};
 	const emissions: KheopskitState[] = [];
-	const sub = getKheopskit$(engineConfig(platform), {
+	const sub = kheopskitRun$(engineConfig(platform), {
 		store: createKheopskitStore(),
 	}).subscribe((state) => emissions.push(state));
 	return {
@@ -1479,7 +1479,7 @@ const subscribeLaggingPlatform = (disconnect: () => Promise<void>) => {
 	};
 };
 
-describe("getKheopskit$ connect semantics on a platform whose state lags its promises", () => {
+describe("kheopskitRun$ connect semantics on a platform whose state lags its promises", () => {
 	beforeEach(() => {
 		localStorage.clear();
 		vi.useFakeTimers({
@@ -1619,7 +1619,7 @@ const subscribeSelfConnectingPlatform = () => {
 	const store = createKheopskitStore();
 	store.rememberWallet(selfConnectingWalletId);
 	const emissions: KheopskitState[] = [];
-	const sub = getKheopskit$(
+	const sub = kheopskitRun$(
 		{ ...engineConfig(platform), autoReconnect: true },
 		{ store },
 	).subscribe((state) => emissions.push(state));
@@ -1631,7 +1631,7 @@ const subscribeSelfConnectingPlatform = () => {
 	};
 };
 
-describe("getKheopskit$ automatic reconnect on a platform that reports its own connections", () => {
+describe("kheopskitRun$ automatic reconnect on a platform that reports its own connections", () => {
 	beforeEach(() => {
 		localStorage.clear();
 	});

@@ -13,7 +13,7 @@ import {
 	createMemoryStorage,
 	type FakePolkadotExtension,
 } from "../../testing";
-import { getKheopskit$ } from "../kheopskit";
+import { kheopskitRun$ } from "../kheopskit";
 import { createKheopskitStore, type KheopskitStore } from "../store";
 import type { KheopskitState } from "../types";
 import { polkadot } from "./plugin";
@@ -57,7 +57,7 @@ const subscribe = (
 ) => {
 	readyState.mockReturnValue(documentReadyState);
 	const start = Date.now();
-	subscription = getKheopskit$(
+	subscription = kheopskitRun$(
 		{ platforms: [polkadot()], hydrationGracePeriod: 0, ...config },
 		{ store },
 	).subscribe((state: KheopskitState) =>

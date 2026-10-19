@@ -13,7 +13,7 @@ import {
 	createInjectedWallets$,
 	type InjectedWalletsAdapter,
 } from "./injectedWallets";
-import { getKheopskit$ } from "./kheopskit";
+import { kheopskitRun$ } from "./kheopskit";
 import { createKheopskitStore } from "./store";
 import type {
 	AppKitInstance,
@@ -614,7 +614,7 @@ describe("getWallets$ WalletConnect connector", () => {
 	});
 });
 
-describe("getKheopskit$ with a cached connected wallet discovered after subscribe", () => {
+describe("kheopskitRun$ with a cached connected wallet discovered after subscribe", () => {
 	const wait = (ms: number) =>
 		new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -637,7 +637,7 @@ describe("getKheopskit$ with a cached connected wallet discovered after subscrib
 		const sources$ = new BehaviorSubject<Source[]>([]);
 		const deferred = createDeferred();
 		const statuses: (string | undefined)[] = [];
-		const sub = getKheopskit$(
+		const sub = kheopskitRun$(
 			{
 				platforms: [
 					enginePlugin(sources$, { connect: () => deferred.promise }),

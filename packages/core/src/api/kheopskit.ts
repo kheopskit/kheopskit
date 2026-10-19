@@ -46,7 +46,7 @@ import { getWallets$ } from "./wallets";
 
 export type { KheopskitConfig, KheopskitState } from "./types";
 
-/** Options for {@link getKheopskit$}. */
+/** Options for {@link kheopskitRun$}. */
 export type GetKheopskitOptions = {
 	/**
 	 * Cookie string for SSR hydration. When provided, state is read from cookies
@@ -60,7 +60,7 @@ export type GetKheopskitOptions = {
 	store?: ReturnType<typeof createKheopskitStore>;
 };
 
-export const getKheopskit$ = <
+export const kheopskitRun$ = <
 	const P extends readonly KheopskitPlatform[] = readonly KheopskitPlatform[],
 >(
 	config?: Partial<KheopskitConfig<P>>,

@@ -19,6 +19,5 @@ export {
 	getHydratedSnapshot,
 	type HydratedSnapshot,
 } from "./hydration";
-export * from "./kheopskit";
 export { createKheopskitStore, getDefaultStore } from "./store";
 export * from "./types";
