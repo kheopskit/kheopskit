@@ -159,6 +159,25 @@ describe("createKheopskit shared instance", () => {
 		subscription.unsubscribe();
 	});
 
+	it("waitForAccount resolves the live account of the run the provider holds", async () => {
+		fake.setAccounts([alice]);
+		const { KheopskitProvider, waitForAccount, Statuses } = createInstance();
+		render(
+			<KheopskitProvider>
+				<Statuses />
+			</KheopskitProvider>,
+		);
+
+		const waiting = waitForAccount(`${fake.walletId}::${alice.address}`);
+		await act(() => vi.advanceTimersByTimeAsync(1000));
+		const account = await waiting;
+
+		expect({
+			address: account.address,
+			isPlaceholder: account.isPlaceholder,
+		}).toEqual({ address: alice.address, isPlaceholder: false });
+	});
+
 	it("kheopskit$ completes its pipeline when the last subscriber leaves", async () => {
 		const { KheopskitProvider, kheopskit$, Statuses } = createInstance();
 		const writes = vi.spyOn(storage, "setItem");
