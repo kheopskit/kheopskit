@@ -5,13 +5,15 @@ import {
 	Scripts,
 } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { getRequest } from "@tanstack/react-start/server";
+import { getCookie } from "@tanstack/react-start/server";
 import { App } from "../app";
 import appCss from "../styles.css?url";
 
 const getSSRCookies = createServerFn({ method: "GET" }).handler(async () => {
-	const request = getRequest();
-	return request?.headers.get("cookie") ?? "";
+	const kheopskitCookie = getCookie("kheopskit");
+	return kheopskitCookie === undefined
+		? ""
+		: `kheopskit=${encodeURIComponent(kheopskitCookie)}`;
 });
 
 export const Route = createRootRoute({

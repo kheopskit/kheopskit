@@ -248,19 +248,26 @@ provider remount. Call it yourself when the app no longer needs kheopskit.
 
 ## SSR
 
-Pass the request cookie header as `ssrCookies` to hydrate wallet state on the
-server without a UI flash:
+Pass the `kheopskit` cookie as `ssrCookies` to hydrate wallet state on the
+server without a UI flash. Never forward the whole cookie header to a client
+component: the framework serializes its props into the HTML, httpOnly session
+cookies included.
 
 ```tsx
 // Next.js App Router
-const cookieStore = await cookies();
-const ssrCookies = cookieStore
-  .getAll()
-  .map((c) => `${c.name}=${c.value}`)
-  .join("; ");
+const kheopskitCookie = (await cookies()).get("kheopskit");
+const ssrCookies = kheopskitCookie
+  ? `kheopskit=${encodeURIComponent(kheopskitCookie.value)}`
+  : "";
 
 <KheopskitProvider ssrCookies={ssrCookies}>{children}</KheopskitProvider>;
 ```
+
+Kheopskit reads one cookie, named after the `storageKey` config option
+(default `kheopskit`). Pass `""` when it is absent, because without
+`ssrCookies` the browser persists to `localStorage` instead of the cookie. The
+[TanStack Start example](https://github.com/kheopskit/kheopskit/blob/main/examples/tanstack-start/src/routes/__root.tsx)
+reads it with `getCookie("kheopskit")` in a server function.
 
 > While `state.isHydrating` is `true`, wallets and accounts restored from the
 > cache are placeholders with `isPlaceholder: true` and no SDK handle

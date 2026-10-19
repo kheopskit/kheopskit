@@ -235,6 +235,19 @@ accounts, so a slow reconnect never writes an empty cache. Every other wallet is
 written as it is, with the accounts of connected wallets only. See
 [Persistence](#persistence) for the format.
 
+#### Knowing when wallets have settled
+
+```ts
+const settled =
+  !isHydrating && wallets.every((wallet) => wallet.status !== "connecting");
+```
+
+Use it to hold a splash screen or a "welcome back" gate until the reconnects
+are over, including a reconnect still pending when `hydrationTimeout` ended
+hydration. Kheopskit has no flag for it, for the same reason it has no
+`walletsReady` promise ([Design choices](#design-choices)): the state already
+carries the fact.
+
 ### Reconnect
 
 Source: [`api/wallets.ts`](https://github.com/kheopskit/kheopskit/blob/main/packages/core/src/api/wallets.ts),
@@ -457,7 +470,16 @@ form, to stay under the cookie size limit:
 `a` holds `[walletId, address, name, chainId, polkadotType, platform]` per
 account. The cookie is URI-encoded, lasts one year, and is set with `path=/`,
 `SameSite=Lax`, and `Secure` on HTTPS. Kheopskit warns in the console when the
-encoded value exceeds 3072 bytes.
+encoded value exceeds 3072 bytes. On the server, pass only this cookie as
+`ssrCookies`, never the whole cookie header: a value handed to a client
+component ends up in the HTML, httpOnly session cookies included.
+
+The `kheopskit` entry, in the cookie or in `localStorage`, holds only the ids of
+the wallets the user connected, each cached wallet's id, name, type and
+connected flag, and each cached account's address, name, wallet, chain id,
+Polkadot key type and platform. Apart from the wallet icons in
+`kheopskit-icons`, kheopskit stores nothing else. With the `walletConnect()`
+plugin, Reown AppKit keeps its own session data in the browser.
 
 Data written before v6 stored `remembered` as `autoReconnect`. The store reads
 that field as `remembered` and drops it on the next write. A storage write that
