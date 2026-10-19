@@ -26,9 +26,10 @@ export type KheopskitProviderProps = PropsWithChildren & {
 	 */
 	config?: Partial<KheopskitConfig>;
 	/**
-	 * Cookie string for SSR hydration.
-	 * Pass the request cookie header (e.g., from Next.js headers or TanStack Start)
-	 * to hydrate wallet state on the server.
+	 * The kheopskit cookie, for SSR hydration. Pass only the cookie named after
+	 * `storageKey` (default `kheopskit`), or `""` when it is absent. Never pass
+	 * the whole cookie header: props of a client component are serialized into
+	 * the HTML, httpOnly session cookies included.
 	 *
 	 * @remarks
 	 * This value should be stable per render to avoid unnecessary store recreation.
@@ -37,8 +38,10 @@ export type KheopskitProviderProps = PropsWithChildren & {
 	 * @example
 	 * ```tsx
 	 * // Next.js App Router
-	 * const cookieStore = await cookies();
-	 * const ssrCookies = cookieStore.getAll().map(c => `${c.name}=${c.value}`).join('; ');
+	 * const kheopskitCookie = (await cookies()).get("kheopskit");
+	 * const ssrCookies = kheopskitCookie
+	 *   ? `kheopskit=${encodeURIComponent(kheopskitCookie.value)}`
+	 *   : "";
 	 * return <Providers ssrCookies={ssrCookies}>{children}</Providers>
 	 * ```
 	 */
