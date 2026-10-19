@@ -143,8 +143,8 @@ It has three outcomes:
   account's wallet is `connecting`.
 - It rejects `ACCOUNT_UNAVAILABLE` when neither holds and the wallet does not
   list the account.
-- It rejects `ABORTED` when nothing subscribes `kheopskit$` at call time, when
-  the last subscriber leaves, or when `signal` fires.
+- It rejects `ABORTED` when nothing subscribes `kheopskit$` by the end of the
+  calling task, when the last subscriber leaves, or when `signal` fires.
 
 Like `connect()`, it never starts the pipeline, and it has no timeout.
 

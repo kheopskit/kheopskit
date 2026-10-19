@@ -8,21 +8,15 @@ export type Liveness<T> = { state: T; end?: undefined } | { end: PipelineEnd };
 export type LivePipeline<T extends {}> = {
 	/** Subscribing holds the pipeline; it runs while at least one holder stays. */
 	observable$: Observable<T>;
-	/**
-	 * The first value `pick` returns for the current run's states: its latest
-	 * value, then each later emission, until `pick` returns something other
-	 * than `undefined`. Never starts or holds the pipeline. Ends `unheld` while
-	 * nothing holds it or once the last holder leaves, `errored` or
-	 * `completed` once the run ended that way, and `aborted` when `signal`
-	 * fires first.
-	 */
-	whenState: <R extends {}>(
+	whenLivePicks: <R extends {}>(
 		pick: (state: T) => R | undefined,
 		signal?: AbortSignal,
 	) => Promise<Liveness<R>>;
 	/**
 	 * The current run's state: its latest value, or its first emission once it
-	 * arrives. Ends as `whenState` does.
+	 * arrives. Ends `unheld` while nothing holds the pipeline, without starting
+	 * it, `errored` or `completed` once the run ended that way, and `aborted`
+	 * when `signal` fires first.
 	 */
 	whenLive: (signal?: AbortSignal) => Promise<Liveness<T>>;
 };
@@ -69,7 +63,7 @@ export const createLivePipeline = <T extends {}>(
 		};
 	});
 
-	const whenState = async <R extends {}>(
+	const whenLivePicks = async <R extends {}>(
 		pick: (state: T) => R | undefined,
 		signal?: AbortSignal,
 	): Promise<Liveness<R>> => {
@@ -96,7 +90,7 @@ export const createLivePipeline = <T extends {}>(
 	};
 
 	const whenLive = (signal?: AbortSignal) =>
-		whenState((state) => state, signal);
+		whenLivePicks((state) => state, signal);
 
-	return { observable$, whenState, whenLive };
+	return { observable$, whenLivePicks, whenLive };
 };

@@ -58,7 +58,7 @@ type WaitForAccount<A> = (
  * A wallet's `connect` and `disconnect`, read from any emission, act on the
  * run that is live when they are called. They wait for a restarted run's
  * first emission, reject `ABORTED` while nothing subscribes, and never start
- * the pipeline themselves. `waitForAccount` follows the same rule.
+ * the pipeline themselves.
  */
 export type Kheopskit<P extends readonly KheopskitPlatform[]> = {
 	readonly kheopskit$: Observable<KheopskitState<P>>;
@@ -69,8 +69,9 @@ export type Kheopskit<P extends readonly KheopskitPlatform[]> = {
 	 * at once when it already does. Waits while the run hydrates or the
 	 * account's wallet is `connecting`. Rejects `ACCOUNT_UNAVAILABLE` once
 	 * neither holds and the account is still not live. Rejects `ABORTED` when
-	 * nothing subscribes `kheopskit$` at call time, when the last subscriber
-	 * leaves, or when `signal` fires. It never starts or holds the pipeline.
+	 * nothing subscribes `kheopskit$` by the end of the calling task, when the
+	 * last subscriber leaves, or when `signal` fires. It never starts or holds
+	 * the pipeline.
 	 */
 	readonly waitForAccount: WaitForAccount<
 		Exclude<AccountOf<P[number]>, { isPlaceholder: true }>
@@ -141,7 +142,7 @@ export const createInstance = <T extends KheopskitState>(
 	) => {
 		const { walletId } = parseWalletAccountId(accountId);
 		await Promise.resolve();
-		const found = await pipeline.whenState(
+		const found = await pipeline.whenLivePicks(
 			(state) => lookUpAccount(state, accountId, walletId),
 			signal,
 		);
