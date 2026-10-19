@@ -1,3 +1,4 @@
+import type { WalletAccountId } from "../utils/WalletAccountId";
 import type { WalletId } from "../utils/WalletId";
 
 /**
@@ -28,6 +29,11 @@ export type KheopskitErrorCode =
 	 * snapshot, always.
 	 */
 	| "WALLET_PENDING"
+	/**
+	 * `waitForAccount()` found the account's wallet settled without listing it
+	 * as a live account, or not connected.
+	 */
+	| "ACCOUNT_UNAVAILABLE"
 	/** The wallet does not advertise a capability kheopskit needs to proceed. */
 	| "FEATURE_NOT_SUPPORTED"
 	/** No active WalletConnect session for the requested operation. */
@@ -87,6 +93,16 @@ export const walletPendingError = (walletId: WalletId): KheopskitError =>
 	new KheopskitError(
 		"WALLET_PENDING",
 		`wallet ${walletId} was not discovered before hydration ended`,
+		{ walletId },
+	);
+
+export const accountUnavailableError = (
+	accountId: WalletAccountId,
+	walletId: WalletId,
+): KheopskitError =>
+	new KheopskitError(
+		"ACCOUNT_UNAVAILABLE",
+		`wallet ${walletId} settled without listing account ${accountId}`,
 		{ walletId },
 	);
 
