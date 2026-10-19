@@ -51,7 +51,7 @@ describe("KheopskitProvider lifecycle", () => {
 		vi.restoreAllMocks();
 	});
 
-	it("releases every storage listener on unmount", () => {
+	it("releases every storage listener on unmount", async () => {
 		const { added, removed } = spyStorageListeners();
 
 		const { unmount } = render(
@@ -60,6 +60,7 @@ describe("KheopskitProvider lifecycle", () => {
 			</KheopskitProvider>,
 		);
 		unmount();
+		await Promise.resolve();
 
 		expect(added).toHaveLength(1);
 		expect(removed).toEqual(added);

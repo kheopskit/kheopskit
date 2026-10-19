@@ -29,6 +29,7 @@ import { type AccountsFrame, getAccounts$ } from "./accounts";
 import { resolveConfig } from "./config";
 import { abortedError, walletPendingError } from "./errors";
 import { getHydratedSnapshot } from "./hydration";
+import { reconnectCandidates$ } from "./reconnectPolicy";
 import { createKheopskitStore } from "./store";
 import type {
 	BaseWallet,
@@ -164,6 +165,14 @@ export const getKheopskit$ = <
 				if (closed) throw abortedError(placeholder.id, "connect");
 				await live.connect(options);
 			},
+			disconnect: async () => {
+				if (closed) return;
+				const live = latest?.wallets.find(
+					(w) => w.id === placeholder.id && !w.isPlaceholder,
+				);
+				if (live) return live.disconnect();
+				store.forgetWallet(placeholder.id);
+			},
 		});
 
 		const settleWithState = (
@@ -218,10 +227,7 @@ export const getKheopskit$ = <
 			liveWallets$,
 			accountFrames$.pipe(startWith(noAnswerYet)),
 			isDiscovering$,
-			store.observable.pipe(
-				map((s) => s.remembered ?? []),
-				take(1),
-			),
+			reconnectCandidates$(store),
 		]).pipe(
 			map(([wallets, { accounts, answered }, isDiscovering, remembered]) =>
 				cachedWallets.every((cached) => {

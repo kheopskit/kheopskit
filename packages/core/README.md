@@ -180,7 +180,9 @@ A placeholder wallet is never connected. Its `connect()` waits for kheopskit to
 discover the live wallet with the same id and connects that one. It rejects
 with `WALLET_PENDING` if hydration ends first, and with `ABORTED` if its
 `signal` fires or the last subscriber unsubscribes while it waits. Its
-`disconnect()` resolves at once. A cached wallet that kheopskit has already
+`disconnect()` forgets the wallet and resolves at once, so kheopskit does not
+reconnect it when it injects. Once the live wallet is discovered, it calls the
+live wallet's `disconnect()` instead. A cached wallet that kheopskit has already
 discovered is no longer a placeholder. It carries its live `connect()` and
 `disconnect()` and shows `status: "connecting"` while its reconnect runs, and
 its `connect()` joins that reconnect. A Polkadot wallet's `extension` stays
@@ -197,7 +199,8 @@ its `connect()` joins that reconnect. A Polkadot wallet's `extension` stays
 3. Every discovered wallet that hydrated as `connecting` has settled. It has
    settled when connected once its account list has been read (an empty list
    counts) or connected with no cached accounts, disconnected with `error`
-   set, or disconnected and not remembered when hydration began.
+   set, or disconnected and not remembered. A wallet remembered after
+   hydration began does not count.
 
 At `hydrationTimeout` (default 3000 ms) hydration ends whatever is pending, and
 a wallet whose reconnect is still pending stays `connecting`. The timeout wins
@@ -209,8 +212,9 @@ over a longer grace period, so an app that raises `hydrationGracePeriod` sets
   ends.
 - A failed reconnect ends that wallet's wait, even when the reconnect policy
   still permits a retry.
-- A remembered wallet the user disconnects during or right after its reconnect
-  holds hydration, and shows its cached accounts, until `hydrationTimeout`.
+- A remembered wallet the user disconnects while its reconnect still waits for
+  the extension stays remembered, so it holds hydration, and shows its cached
+  accounts, until `hydrationTimeout`.
 - A prompt the extension opens for a revoked site holds hydration until the
   user answers or `hydrationTimeout` elapses.
 - "Its account list has been read" relies on a signal that the built-in
@@ -278,6 +282,12 @@ never changes again, no retry runs. A manual `connect()` or `disconnect()` on a
 remembered wallet ends its automatic reconnect for the session. A
 `disconnect()` while the automatic reconnect still waits for the extension
 aborts it without forgetting the wallet, so the next load reconnects it.
+Forgetting a wallet with `store.forgetWallet(walletId)`, or calling
+`disconnect()` on its placeholder before it injects, ends its automatic
+reconnect for the rest of the session, even if the wallet is remembered again.
+The next load reconnects it only if it is remembered by then.
+`store.forgetWallet(walletId)` does not stop an attempt that already
+waits for the extension. The wallet's `disconnect()` does.
 Automatic reconnect also ends when the wallet disappears mid-attempt, and the
 wallet stays remembered for the next load.
 

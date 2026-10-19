@@ -99,8 +99,10 @@ export type BaseWallet = {
 	 * connects that one, rejecting with `WALLET_PENDING` if hydration ends first
 	 * and `ABORTED` if its `signal` fires or the subscription ends. On
 	 * `getHydratedSnapshot` it rejects with `WALLET_PENDING`. Its `disconnect()`
-	 * resolves at once. Set on every wallet of `kheopskit$` and of the hydrated
-	 * snapshot; plugins leave it unset.
+	 * resolves at once, and on `kheopskit$` forgets the wallet first so it is
+	 * not reconnected when it injects, or calls the live wallet's
+	 * `disconnect()` once that one is discovered. Set on every wallet of
+	 * `kheopskit$` and of the hydrated snapshot; plugins leave it unset.
 	 */
 	isPlaceholder?: boolean;
 	/**
@@ -493,7 +495,8 @@ export type KheopskitConfig<
 	 * settles at once unless it hydrated as `connecting`. Then it settles when
 	 * connected once its account list has been read (an empty list counts) or
 	 * connected with no cached accounts, disconnected with `error` set, or
-	 * disconnected and not remembered when hydration began. At
+	 * disconnected and not remembered (a wallet remembered after hydration
+	 * began does not count). At
 	 * `hydrationTimeout` hydration ends whatever is pending, and a wallet whose
 	 * reconnect is still pending stays `connecting`.
 	 *
@@ -511,9 +514,9 @@ export type KheopskitConfig<
 	 *   or name changing), which may never happen, so waiting for it would
 	 *   hold most failed reconnects until `hydrationTimeout`. A retry that
 	 *   does run shows on the live wallet's `status`, not as a placeholder.
-	 * - A remembered wallet the user disconnects during or right after its
-	 *   reconnect holds hydration, and shows its cached accounts, until
-	 *   `hydrationTimeout`.
+	 * - A remembered wallet the user disconnects while its reconnect still
+	 *   waits for the extension stays remembered, so it holds hydration, and
+	 *   shows its cached accounts, until `hydrationTimeout`.
 	 * - A prompt the extension opens for a revoked site holds hydration until
 	 *   the user answers or `hydrationTimeout` elapses.
 	 *
