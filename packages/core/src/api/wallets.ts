@@ -6,12 +6,16 @@ import {
 	Observable,
 	of,
 	shareReplay,
-	take,
 	tap,
+	withLatestFrom,
 } from "rxjs";
 import { sortWallets } from "../utils/sortWallets";
 import { KheopskitError } from "./errors";
-import { createReconnectPolicy, reconnectAccepts } from "./reconnectPolicy";
+import {
+	createReconnectPolicy,
+	reconnectAccepts,
+	reconnectCandidates$,
+} from "./reconnectPolicy";
 import type { KheopskitStore } from "./store";
 import type {
 	BaseWallet,
@@ -27,13 +31,6 @@ export const getWallets$ = (
 	store: KheopskitStore,
 	registryReads$?: Observable<void>,
 ) => {
-	// lock the list of wallets to auto reconnect on first call
-	const rememberedWalletIds$ = store.observable.pipe(
-		map((s) => s.remembered ?? []),
-		take(1),
-		shareReplay({ bufferSize: 1, refCount: true }),
-	);
-
 	return new Observable<(BaseWallet | WalletConnectWallet)[]>((subscriber) => {
 		const ctx: PlatformContext = { config, store, registryReads$ };
 		const observables = config.platforms.map((plugin) =>
@@ -101,8 +98,9 @@ export const getWallets$ = (
 		const subWallets = wallets$.subscribe(subscriber);
 		if (subscriber.closed) return subWallets;
 
-		const subAutoReconnect = combineLatest([rawWallets$, rememberedWalletIds$])
+		const subAutoReconnect = rawWallets$
 			.pipe(
+				withLatestFrom(reconnectCandidates$(store)),
 				filter(
 					([, walletIds]) =>
 						config.autoReconnect !== false && walletIds.length > 0,

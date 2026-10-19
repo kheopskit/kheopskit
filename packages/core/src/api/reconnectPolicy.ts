@@ -1,3 +1,14 @@
+import { isEqual } from "lodash-es";
+import {
+	distinctUntilChanged,
+	map,
+	type Observable,
+	scan,
+	switchMap,
+	take,
+} from "rxjs";
+import type { WalletId } from "../utils/WalletId";
+import type { KheopskitStore } from "./store";
 import type { BaseWallet, KheopskitConfig } from "./types";
 
 // `maxAttempts` caps retries: wallets$ re-emits on every discovery change, so a
@@ -61,3 +72,24 @@ export const reconnectAccepts = (
 	wallet: BaseWallet,
 ): boolean =>
 	typeof autoReconnect === "function" ? autoReconnect(wallet) : autoReconnect;
+
+// Wallets remembered at subscribe and never forgotten since: a connect during
+// the session never adds a reconnect, and a forget cancels one for good.
+export const reconnectCandidates$ = (
+	store: KheopskitStore,
+): Observable<WalletId[]> => {
+	const remembered$ = store.observable.pipe(map((s) => s.remembered ?? []));
+	return remembered$.pipe(
+		take(1),
+		switchMap((initial) =>
+			remembered$.pipe(
+				scan(
+					(remaining, current) =>
+						remaining.filter((id) => current.includes(id)),
+					initial,
+				),
+			),
+		),
+		distinctUntilChanged<WalletId[]>(isEqual),
+	);
+};

@@ -274,7 +274,7 @@ try {
 
 The list holds the injected wallets the user connected. Kheopskit adds a
 wallet on every successful connect, whatever `config.autoReconnect` says, and
-removes it when a connected wallet is disconnected. The WalletConnect
+removes it on every `disconnect()`, whatever the wallet's status. The WalletConnect
 connector is never added; AppKit restores its own session. The `autoReconnect`
 config option keeps its name and meaning. It decides whether the remembered
 wallets reconnect on load.
@@ -492,8 +492,8 @@ stays silent. Any other failure sets `wallet.error`, keeps the wallet
 remembered and is retried on the next change to the wallet list, 3 attempts in
 total. A manual `connect()` or `disconnect()` on a remembered wallet ends its
 automatic reconnect for the session. A `disconnect()` while the automatic
-reconnect still waits for the extension aborts it without forgetting the
-wallet, so the next load reconnects it. Automatic reconnect also ends when the
+reconnect still waits for the extension aborts it and forgets the wallet, so
+the next load does not reconnect it. Automatic reconnect also ends when the
 wallet disappears mid-attempt; the wallet stays remembered for the next load.
 Nothing is written to `console.error` any more; `debug: true` logs the failure
 with `console.debug`.
@@ -763,8 +763,6 @@ now lists none holds hydration until `hydrationTimeout`.
   may never happen, so waiting
   for it would hold most failed reconnects until `hydrationTimeout`. A retry
   that does run shows on the live wallet's `status`, not as a placeholder.
-- A remembered wallet the user disconnects during or right after its reconnect
-  holds hydration, and shows its cached accounts, until `hydrationTimeout`.
 - A prompt the extension opens for a revoked site holds hydration until the
   user answers or `hydrationTimeout` elapses. After a refusal the wallet is
   forgotten, so the next load opens no prompt.
