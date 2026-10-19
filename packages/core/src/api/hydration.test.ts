@@ -257,6 +257,37 @@ describe("cached state of platforms the config does not enable", () => {
 		);
 	});
 
+	it("drops a cached WalletConnect account when no cached wallet row survives", () => {
+		localStorage.clear();
+		const store = createKheopskitStore();
+		store.setCachedState([], [walletConnectBob]);
+
+		const { accounts } = getHydratedSnapshot(store, {
+			platforms: [polkadot()],
+			autoReconnect: true,
+		});
+
+		expect(accounts).toEqual([]);
+	});
+
+	it("keeps the accounts of surviving wallets only", () => {
+		localStorage.clear();
+		const store = createKheopskitStore();
+		const subwallet = cachedWalletOf("polkadot:subwallet-js", "SubWallet");
+		store.setCachedState(
+			[talisman],
+			[talismanAlice, cachedAccountOf(subwallet, BOB), walletConnectBob],
+		);
+
+		const { accounts } = getHydratedSnapshot(store, {
+			platforms: [polkadot()],
+			autoReconnect: true,
+			walletConnect: walletConnectPlugin,
+		});
+
+		expect(accounts.map((a) => a.id)).toEqual([talismanAlice.id]);
+	});
+
 	describe("through getKheopskit$", () => {
 		beforeEach(() => {
 			vi.useFakeTimers();
