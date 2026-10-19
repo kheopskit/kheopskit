@@ -341,15 +341,16 @@ describe("waitForAccount", () => {
 			.at(-1)
 			?.accounts.find((candidate) => candidate.id === accountId);
 
-		const waiting = kit.waitForAccount(accountId);
-		const settlement = settlementOf(waiting);
+		let resolvedWith: unknown;
+		kit.waitForAccount(accountId).then((account) => {
+			resolvedWith = account;
+		});
 		await flushMicrotasks();
 
 		expect({
 			isPlaceholder: live?.isPlaceholder,
-			settlement: settlement(),
-			emitted: (await waiting) === live,
-		}).toEqual({ isPlaceholder: false, settlement: "resolved", emitted: true });
+			resolvedWithLive: resolvedWith !== undefined && resolvedWith === live,
+		}).toEqual({ isPlaceholder: false, resolvedWithLive: true });
 	});
 
 	it("keeps waiting while the extension injects after hydrationTimeout but before the page load, and resolves at the reconnect", async () => {
