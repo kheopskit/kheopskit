@@ -50,6 +50,12 @@ const cachedAccounts: CachedAccount[] = [
 	},
 ];
 
+const walletConnectPlugin: WalletConnectPlugin = {
+	type: "walletconnect",
+	metadata: { name: "Test Dapp", description: "", url: "", icons: [] },
+	getWallet$: () => of(null),
+};
+
 const makeStore = (wallets = cachedWallets) => {
 	localStorage.clear();
 	const store = createKheopskitStore();
@@ -155,7 +161,10 @@ describe("getHydratedSnapshot", () => {
 				isConnected: true,
 			},
 		]);
-		const { wallets } = getHydratedSnapshot(store, config(false));
+		const { wallets } = getHydratedSnapshot(store, {
+			...config(false),
+			walletConnect: walletConnectPlugin,
+		});
 
 		expect(wallets.map((w) => [w.id, w.status, w.isConnected])).toEqual([
 			[polkadotWalletId, "disconnected", false],
@@ -223,12 +232,6 @@ describe("cached state of platforms the config does not enable", () => {
 		return store;
 	};
 
-	const walletConnectPlugin: WalletConnectPlugin = {
-		type: "walletconnect",
-		metadata: { name: "Test Dapp", description: "", url: "", icons: [] },
-		getWallet$: () => of(null),
-	};
-
 	it("hydrates only the Polkadot injected wallet and its accounts when WalletConnect is not configured", () => {
 		const { wallets, accounts } = getHydratedSnapshot(seedStore(), {
 			platforms: [polkadot()],
@@ -270,7 +273,7 @@ describe("cached state of platforms the config does not enable", () => {
 				{ platforms: [polkadot()], hydrationGracePeriod: 500 },
 				{ store: seedStore() },
 			).subscribe((state) => emissions.push(state));
-			await vi.advanceTimersByTimeAsync(1000);
+			await vi.advanceTimersByTimeAsync(5000);
 			sub.unsubscribe();
 
 			expect(emissions[0]?.wallets.map((w) => w.id)).toEqual([talisman.id]);
@@ -307,7 +310,7 @@ describe("cached state of platforms the config does not enable", () => {
 				{ platforms: [polkadot()], hydrationGracePeriod: 500 },
 				{ store },
 			).subscribe();
-			await vi.advanceTimersByTimeAsync(1000);
+			await vi.advanceTimersByTimeAsync(5000);
 			sub.unsubscribe();
 			unannounce();
 

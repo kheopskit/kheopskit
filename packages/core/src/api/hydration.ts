@@ -2,7 +2,7 @@ import { hydrateAccount, hydrateWallet } from "../utils/hydrateState";
 import { getCachedIcon } from "../utils/iconCache";
 import { sortAccounts } from "../utils/sortAccounts";
 import { sortWallets } from "../utils/sortWallets";
-import { acceptsCachedAccount } from "./platform";
+import { acceptsCachedAccount, acceptsCachedWallet } from "./platform";
 import { reconnectAccepts } from "./reconnectPolicy";
 import type { KheopskitStore } from "./store";
 import type {
@@ -33,11 +33,13 @@ export type GetHydratedSnapshotOptions = {
 
 /**
  * Builds the cached-state snapshot every consumer must agree on: read the
- * store's cached state, hydrate wallets/accounts into placeholders, apply the
- * `autoReconnect` rule (a cached connected wallet it rejects becomes
- * `disconnected` and loses its cached accounts), filter accounts through each
- * platform plugin's `acceptsCachedAccount` hook, and sort with the same
- * comparators the live pipeline uses.
+ * store's cached state, drop the wallets and accounts of platforms the config
+ * does not enable (and the WalletConnect row without `config.walletConnect`),
+ * hydrate the rest into placeholders, apply the `autoReconnect` rule (a cached
+ * connected wallet it rejects becomes `disconnected` and loses its cached
+ * accounts), filter accounts through each platform plugin's
+ * `acceptsCachedAccount` hook, and sort with the same comparators the live
+ * pipeline uses. An account survives only with its wallet.
  *
  * This is the single implementation behind the observable's initial seed and
  * both React snapshot sources (`serverValue`/`initialValue`). They must produce
@@ -46,12 +48,16 @@ export type GetHydratedSnapshotOptions = {
  */
 export const getHydratedSnapshot = (
 	store: KheopskitStore,
-	config: Pick<KheopskitConfig, "platforms" | "autoReconnect">,
+	config: Pick<
+		KheopskitConfig,
+		"platforms" | "autoReconnect" | "walletConnect"
+	>,
 	options: GetHydratedSnapshotOptions = {},
 ): HydratedSnapshot => {
 	const cached = store.getCachedState();
 
 	const wallets = cached.wallets
+		.filter((wallet) => acceptsCachedWallet(wallet, config))
 		.map(hydrateWallet)
 		.map((wallet) =>
 			wallet.status === "connecting" &&
@@ -69,12 +75,12 @@ export const getHydratedSnapshot = (
 		})
 		.sort(sortWallets);
 
-	const disconnected = new Set(
-		wallets.filter((w) => w.status === "disconnected").map((w) => w.id),
+	const walletsWithAccounts = new Set(
+		wallets.filter((w) => w.status !== "disconnected").map((w) => w.id),
 	);
 
 	const accounts = cached.accounts
-		.filter((account) => !disconnected.has(account.walletId))
+		.filter((account) => walletsWithAccounts.has(account.walletId))
 		.filter((account) => acceptsCachedAccount(account, config.platforms))
 		.map(hydrateAccount)
 		.sort(sortAccounts);

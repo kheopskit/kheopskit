@@ -1,15 +1,33 @@
-import type { CachedAccount, KheopskitPlatform } from "./types";
+import type {
+	CachedAccount,
+	CachedWallet,
+	KheopskitConfig,
+	KheopskitPlatform,
+} from "./types";
 
 /**
- * Whether a cached account should survive SSR hydration, per its platform
- * plugin's `acceptsCachedAccount` hook. Plugins without the hook (and platforms
- * with no enabled plugin) accept all — matching the pre-plugin behavior where
- * only Polkadot accounts were filtered (by key type).
+ * Whether a cached wallet survives hydration: an injected wallet needs a
+ * plugin for its platform, the WalletConnect row needs `config.walletConnect`.
+ */
+export const acceptsCachedWallet = (
+	cached: CachedWallet,
+	config: Pick<KheopskitConfig, "platforms" | "walletConnect">,
+): boolean =>
+	cached.type === "walletconnect"
+		? config.walletConnect !== undefined
+		: config.platforms.some((p) => p.platform === cached.platform);
+
+/**
+ * Whether a cached account survives hydration: its platform needs a plugin,
+ * and that plugin's `acceptsCachedAccount` hook, when it has one, must accept
+ * it.
  */
 export const acceptsCachedAccount = (
 	cached: CachedAccount,
 	platforms: readonly KheopskitPlatform[],
 ): boolean => {
 	const plugin = platforms.find((p) => p.platform === cached.platform);
-	return plugin?.acceptsCachedAccount?.(cached) ?? true;
+	return (
+		plugin !== undefined && (plugin.acceptsCachedAccount?.(cached) ?? true)
+	);
 };
