@@ -38,7 +38,7 @@ export type KheopskitErrorCode =
 	| "UNSUPPORTED_VERSION"
 	/** The requested chain cannot be used for this operation (e.g. a Solana cluster with no CAIP-2 id over WalletConnect). */
 	| "UNSUPPORTED_CHAIN"
-	/** `getKheopskit$` received a config value it cannot use. The message names the fix. */
+	/** `createKheopskit` received a config value it cannot use. The message names the fix. */
 	| "INVALID_CONFIG";
 
 /**

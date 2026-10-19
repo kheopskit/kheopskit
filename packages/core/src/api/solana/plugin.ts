@@ -19,7 +19,7 @@ export type SolanaPluginOptions = {
 };
 
 /**
- * Solana platform plugin. Pass to `getKheopskit$({ platforms: [solana()] })`.
+ * Solana platform plugin. Pass to `createKheopskit({ platforms: [solana()] })`.
  *
  * @example
  * ```ts

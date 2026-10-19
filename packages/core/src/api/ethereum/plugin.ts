@@ -4,7 +4,7 @@ import type { EthereumAccount, EthereumWallet } from "./types";
 import { getEthereumWallets$ } from "./wallets";
 
 /**
- * Ethereum platform plugin. Pass to `getKheopskit$({ platforms: [ethereum()] })`.
+ * Ethereum platform plugin. Pass to `createKheopskit({ platforms: [ethereum()] })`.
  *
  * @example
  * ```ts

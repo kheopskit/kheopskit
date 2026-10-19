@@ -31,7 +31,7 @@ export type PolkadotPluginOptions = {
 };
 
 /**
- * Polkadot platform plugin. Pass to `getKheopskit$({ platforms: [polkadot()] })`.
+ * Polkadot platform plugin. Pass to `createKheopskit({ platforms: [polkadot()] })`.
  *
  * @example
  * ```ts

@@ -70,5 +70,7 @@ export const kheopskitConfig = {
 			: undefined,
 } satisfies CreateKheopskitConfig<Platforms>;
 
-export const { KheopskitProvider, useWallets, useAccounts } =
-	createKheopskit(kheopskitConfig);
+export const { KheopskitProvider, useWallets, useAccounts } = createKheopskit(
+	kheopskitConfig,
+	{ ssr: true },
+);

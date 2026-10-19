@@ -334,7 +334,7 @@ const getWalletConnectWallet$ = (
  * ```ts
  * import { walletConnect } from "@kheopskit/core/walletconnect";
  *
- * getKheopskit$({
+ * createKheopskit({
  *   platforms: [polkadot()],
  *   walletConnect: walletConnect({ projectId, metadata, networks }),
  * });
