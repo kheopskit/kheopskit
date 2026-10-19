@@ -87,15 +87,15 @@ export const App = () => (
 
 ## Quick start without React
 
-`getKheopskit$` returns an RxJS observable of the same state, for any framework or none.
+`createKheopskit` from `@kheopskit/core` returns `kheopskit$`, an RxJS observable of the same state, for any framework or none. Subscribe `kheopskit$` once at app start; the pipeline runs while something subscribes.
 
 ```ts
-import { getKheopskit$ } from "@kheopskit/core";
+import { createKheopskit } from "@kheopskit/core";
 import { solana } from "@kheopskit/core/solana";
 
-getKheopskit$({ platforms: [solana()], autoReconnect: true }).subscribe(
-	({ wallets, accounts }) => console.log(wallets, accounts),
-);
+export const { kheopskit$ } = createKheopskit({ platforms: [solana()], autoReconnect: true });
+
+kheopskit$.subscribe(({ wallets, accounts }) => console.log(wallets, accounts));
 ```
 
 ## Rules that prevent the common bugs
