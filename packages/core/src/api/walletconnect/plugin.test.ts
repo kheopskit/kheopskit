@@ -535,17 +535,19 @@ describe("walletConnect() appKitOptions", () => {
 	};
 
 	it("forwards app options to AppKit while kheopskit keeps the keys it owns", async () => {
-		const injectedOverride = { methods: { polkadot: ["polkadot_injected"] } };
+		const untypedAppKitOptions: Record<string, unknown> = {
+			featuredWalletIds: ["wallet-a", "wallet-b"],
+			features: { analytics: false },
+			allWallets: "SHOW",
+			projectId: "injected",
+			universalProviderConfigOverride: {
+				methods: { polkadot: ["polkadot_injected"] },
+			},
+		};
 
 		const appKitOptions = await captureAppKitOptions({
 			...options,
-			appKitOptions: {
-				featuredWalletIds: ["wallet-a", "wallet-b"],
-				features: { analytics: false },
-				allWallets: "SHOW",
-				projectId: "injected",
-				universalProviderConfigOverride: injectedOverride,
-			},
+			appKitOptions: untypedAppKitOptions,
 		});
 
 		expect(appKitOptions?.featuredWalletIds).toEqual(["wallet-a", "wallet-b"]);
@@ -562,6 +564,16 @@ describe("walletConnect() appKitOptions", () => {
 				],
 			},
 		});
+	});
+
+	it("rejects the keys kheopskit owns at compile time", () => {
+		const accept = (appKitOptions: WalletConnectOptions["appKitOptions"]) =>
+			appKitOptions;
+		// @ts-expect-error kheopskit owns projectId
+		accept({ projectId: "other" });
+		// @ts-expect-error kheopskit owns networks
+		accept({ networks: [] });
+		expect(accept({ featuredWalletIds: ["wallet-a"] })).toBeDefined();
 	});
 
 	it("hides the all-wallets list when the app sets no options", async () => {

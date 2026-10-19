@@ -82,8 +82,9 @@ walletConnect({
 ```
 
 kheopskit sets `projectId`, `metadata`, `networks`, `themeMode`,
-`themeVariables` and `universalProviderConfigOverride` itself, and those values
-win over the same keys in `appKitOptions`. `allWallets` defaults to `"HIDE"`,
+`themeVariables` and `universalProviderConfigOverride` itself. `appKitOptions`
+does not accept those keys, and kheopskit's values win if one gets through
+untyped. `allWallets` defaults to `"HIDE"`,
 and `appKitOptions` can override it.
 
 ## Usage

@@ -38,12 +38,23 @@ export type WalletConnectOptions = {
 	 * Extra Reown AppKit `createAppKit` options (e.g. `featuredWalletIds`,
 	 * `features`, `allWallets`), forwarded as-is; see
 	 * https://docs.reown.com/appkit/javascript/core/options.
-	 * kheopskit always sets `projectId`, `metadata`, `networks`, `themeMode`,
-	 * `themeVariables` and `universalProviderConfigOverride`, so those keys
-	 * are ignored here.
+	 * kheopskit sets `projectId`, `metadata`, `networks`, `themeMode`,
+	 * `themeVariables` and `universalProviderConfigOverride` itself, so those
+	 * keys are rejected here.
 	 */
-	appKitOptions?: Record<string, unknown>;
+	appKitOptions?: AppKitOptions;
 };
+
+type KheopskitOwnedAppKitKey =
+	| "projectId"
+	| "metadata"
+	| "networks"
+	| "themeMode"
+	| "themeVariables"
+	| "universalProviderConfigOverride";
+
+type AppKitOptions = Record<string, unknown> &
+	Partial<Record<KheopskitOwnedAppKitKey, never>>;
 
 /**
  * Dynamically import @reown/appkit/core to avoid loading browser-only code
