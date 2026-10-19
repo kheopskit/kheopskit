@@ -414,4 +414,22 @@ describe("createInstance", () => {
 			raw: seen[0] === raw,
 		}).toEqual({ count: 2, same: true, presentedAgain: true, raw: false });
 	});
+
+	it("keeps a wallet's object across emissions while the run keeps its raw wallet", () => {
+		const first = stateWith(walletId, async () => {});
+		const second = { ...first, isDiscovering: true } as KheopskitState;
+		const states = new Subject<KheopskitState>();
+		const kit = createInstance(() => states, store);
+		const seen: KheopskitState[] = [];
+
+		const subscription = kit.kheopskit$.subscribe((state) => seen.push(state));
+		states.next(first);
+		states.next(second);
+		subscription.unsubscribe();
+
+		expect({
+			states: seen.length,
+			sameWallet: seen[0]?.wallets[0] === seen[1]?.wallets[0],
+		}).toEqual({ states: 2, sameWallet: true });
+	});
 });

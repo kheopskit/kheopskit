@@ -58,19 +58,24 @@ export const walletActions = (
 	};
 };
 
+type Wallet = KheopskitState["wallets"][number];
+
 export const createPresenter = (pipeline: LivePipeline<KheopskitState>) => {
-	const presented = new WeakMap<KheopskitState, KheopskitState>();
-	return (state: KheopskitState): KheopskitState => {
-		let live = presented.get(state);
+	const presentedStates = new WeakMap<KheopskitState, KheopskitState>();
+	const presentedWallets = new WeakMap<Wallet, Wallet>();
+	const presentWallet = (wallet: Wallet): Wallet => {
+		let live = presentedWallets.get(wallet);
 		if (!live) {
-			live = {
-				...state,
-				wallets: state.wallets.map((wallet) => ({
-					...wallet,
-					...walletActions(pipeline, wallet.id),
-				})),
-			};
-			presented.set(state, live);
+			live = { ...wallet, ...walletActions(pipeline, wallet.id) };
+			presentedWallets.set(wallet, live);
+		}
+		return live;
+	};
+	return (state: KheopskitState): KheopskitState => {
+		let live = presentedStates.get(state);
+		if (!live) {
+			live = { ...state, wallets: state.wallets.map(presentWallet) };
+			presentedStates.set(state, live);
 		}
 		return live;
 	};
