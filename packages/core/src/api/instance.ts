@@ -66,12 +66,15 @@ export type Kheopskit<P extends readonly KheopskitPlatform[]> = {
 	readonly store: KheopskitStore;
 	/**
 	 * Resolves with the account once the live run lists it as a live account,
-	 * at once when it already does. Waits while the run hydrates or the
-	 * account's wallet is `connecting`. Rejects `ACCOUNT_UNAVAILABLE` once
-	 * neither holds and the account is still not live. Rejects `ABORTED` when
-	 * nothing subscribes `kheopskit$` by the end of the calling task, when the
-	 * last subscriber leaves, or when `signal` fires. It never starts or holds
-	 * the pipeline.
+	 * at once when it already does. Waits while the run hydrates, while
+	 * discovery runs and has not listed the account's wallet, while that
+	 * wallet is `connecting`, and while it is connected but lists no account
+	 * yet. Rejects `ACCOUNT_UNAVAILABLE` once none of these holds and the
+	 * account is still not live. A connected wallet that lists no accounts
+	 * keeps the wait open until `signal` fires or the last subscriber leaves.
+	 * Rejects `ABORTED` when nothing subscribes `kheopskit$` by the end of the
+	 * calling task, when the last subscriber leaves, or when `signal` fires. It
+	 * never starts or holds the pipeline.
 	 */
 	readonly waitForAccount: WaitForAccount<
 		Exclude<AccountOf<P[number]>, { isPlaceholder: true }>
@@ -97,9 +100,18 @@ const lookUpAccount = <S extends KheopskitState>(
 			candidate.id === accountId && !candidate.isPlaceholder,
 	);
 	if (account) return { status: "live", account };
+	return mayStillList(state, walletId) ? undefined : { status: "unavailable" };
+};
+
+const mayStillList = (state: KheopskitState, walletId: WalletId) => {
+	if (state.isHydrating) return true;
 	const wallet = state.wallets.find((candidate) => candidate.id === walletId);
-	if (state.isHydrating || wallet?.status === "connecting") return undefined;
-	return { status: "unavailable" };
+	if (!wallet) return state.isDiscovering;
+	if (wallet.status === "connecting") return true;
+	return (
+		wallet.isConnected &&
+		!state.accounts.some((candidate) => candidate.walletId === walletId)
+	);
 };
 
 const didNotWait: Record<PipelineEnd, string> = {
