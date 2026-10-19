@@ -32,14 +32,14 @@ export type GetHydratedSnapshotOptions = {
 };
 
 /**
- * Builds the cached-state snapshot every consumer must agree on: read the
- * store's cached state, drop the wallets and accounts of platforms the config
- * does not enable (and the WalletConnect row without `config.walletConnect`),
- * hydrate the rest into placeholders, apply the `autoReconnect` rule (a cached
- * connected wallet it rejects becomes `disconnected` and loses its cached
- * accounts), filter accounts through each platform plugin's
- * `acceptsCachedAccount` hook, and sort with the same comparators the live
- * pipeline uses. An account of a dropped wallet is dropped with it.
+ * Builds placeholder wallets and accounts from the store's cached state,
+ * sorted like the live pipeline. Omits wallets of platforms missing from
+ * `config.platforms`, the WalletConnect row when `config.walletConnect` is
+ * unset, and every account of a platform missing from `config.platforms` or
+ * of an omitted wallet. A cached connected injected wallet that
+ * `autoReconnect` rejects comes back `disconnected`, and a wallet that comes
+ * back `disconnected` has no accounts. Each remaining account must pass its
+ * platform plugin's `acceptsCachedAccount` hook.
  *
  * This is the single implementation behind the observable's initial seed and
  * both React snapshot sources (`serverValue`/`initialValue`). They must produce
