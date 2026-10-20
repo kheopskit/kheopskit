@@ -1,6 +1,6 @@
 {
 	"name": "@kheopskit/core",
-	"version": "6.0.0-rc.3",
+	"version": "6.0.0-rc.4",
 	"description": "Framework-agnostic wallet and account discovery for Polkadot, Ethereum and Solana dapps. Upgrading from v5? Read MIGRATING_TO_V6.md, shipped in this package.",
 	"private": false,
 	"sideEffects": false,

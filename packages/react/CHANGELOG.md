@@ -1,5 +1,23 @@
 # @kheopskit/react
 
+## 6.0.0-rc.4
+
+### Minor Changes
+
+- [#166](https://github.com/kheopskit/kheopskit/pull/166) [`3c2bad1`](https://github.com/kheopskit/kheopskit/commit/3c2bad12e121cede1e95d93d7967d7bb96192180) Thanks [@0xKheops](https://github.com/0xKheops)! - Breaking: `getKheopskit$` and its `GetKheopskitOptions` type are removed from `@kheopskit/core`; create one instance with `createKheopskit(config, options)` and subscribe its `kheopskit$` once at app start. A `@kheopskit/react` provider that receives `ssrCookies` needs an instance created with `createKheopskit(config, { ssr: true })`; without it, `ssrCookies` is a type error. On the server, a store that `createKheopskit` creates ignores `rememberWallet`, `forgetWallet` and `setCachedState`, so module code shared by every request cannot change it.
+  
+  Added: `createKheopskit` in `@kheopskit/core` returns `kheopskit$` and `store`. Every subscriber of `kheopskit$` shares one pipeline, which runs while something subscribes, and a wallet's `connect()` and `disconnect()` act on the pipeline running when they are called. `@kheopskit/react`'s `createKheopskit` is built on it. `@kheopskit/core/internal` gains the instance plumbing that `@kheopskit/react` uses; it is not public API.
+
+- [#167](https://github.com/kheopskit/kheopskit/pull/167) [`4817131`](https://github.com/kheopskit/kheopskit/commit/4817131306f04ec74d81f95e8727a24c37f1acdb) Thanks [@0xKheops](https://github.com/0xKheops)! - Added: `createKheopskit` returns `waitForAccount(accountId, { signal })`, which resolves with the live account once the running instance lists it, rejects `ACCOUNT_UNAVAILABLE` when the account's wallet settled listing other accounts but not this one or is not connected (a connected wallet that lists no accounts keeps the wait open until `signal` fires), and rejects `ABORTED` like a wallet's `connect()`. `@kheopskit/react`'s `createKheopskit` returns it too.
+
+- [#162](https://github.com/kheopskit/kheopskit/pull/162) [`da040e1`](https://github.com/kheopskit/kheopskit/commit/da040e1f1e8e84a21e7abd4481111ff077c0efdb) Thanks [@0xKheops](https://github.com/0xKheops)! - Added: `walletConnect({ appKitOptions })` forwards any other Reown `createAppKit` option to AppKit, such as `featuredWalletIds`, `features` or `allWallets`. The keys kheopskit sets (`projectId`, `metadata`, `networks`, `themeMode`, `themeVariables`, `universalProviderConfigOverride`) are rejected by the type and keep their kheopskit values.
+
+### Patch Changes
+
+- [#164](https://github.com/kheopskit/kheopskit/pull/164) [`0e03c4b`](https://github.com/kheopskit/kheopskit/commit/0e03c4bdc7aafa1d2c5649b3673e41da44d3052e) Thanks [@0xKheops](https://github.com/0xKheops)! - Docs: SSR examples and snippets forward only the `kheopskit` cookie as `ssrCookies`, never the whole cookie header. The core README adds a "Knowing when wallets have settled" recipe and states what the cookie and `localStorage` hold.
+
+- [#163](https://github.com/kheopskit/kheopskit/pull/163) [`1cc653d`](https://github.com/kheopskit/kheopskit/commit/1cc653d954f02b670f05639fd83b34da29ded5d6) Thanks [@0xKheops](https://github.com/0xKheops)! - Fixed: wallets and accounts cached for a platform missing from `platforms` no longer show on the first frame, in the SSR markup or as hydration placeholders. The cached WalletConnect row and its accounts likewise need `walletConnect` in the config, and a WalletConnect account needs its platform in `platforms`. Remembered wallets of a removed platform are not reconnected and stay remembered, so adding the platform back restores their reconnect.
+
 ## 6.0.0-rc.3
 
 ### Patch Changes
