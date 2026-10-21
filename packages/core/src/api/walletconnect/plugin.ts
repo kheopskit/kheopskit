@@ -135,6 +135,30 @@ const namespaceOf: Record<WalletPlatform, string> = {
 };
 const allPlatforms: WalletPlatform[] = ["polkadot", "ethereum", "solana"];
 
+const methodsByNamespace: Record<string, string[]> = {
+	polkadot: ["polkadot_signTransaction", "polkadot_signMessage"],
+	solana: [
+		"solana_signTransaction",
+		"solana_signMessage",
+		"solana_signAndSendTransaction",
+	],
+};
+
+// AppKit turns every overridden namespace into a pairing request, and rejects
+// the pairing when one of them has no chains.
+const methodsFor = (networks: unknown[]): Record<string, string[]> => {
+	const namespaces = new Set(
+		networks.map(
+			(network) => (network as { chainNamespace?: string }).chainNamespace,
+		),
+	);
+	return Object.fromEntries(
+		Object.entries(methodsByNamespace).filter(([namespace]) =>
+			namespaces.has(namespace),
+		),
+	);
+};
+
 const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
 	// Exposed on the wallet as the (decoupled) AppKitInstance escape hatch.
 	const appKitInstance = appKit as unknown as AppKitInstance;
@@ -318,17 +342,7 @@ const getWalletConnectWallet$ = (
 								themeMode: walletConnect.themeMode,
 								themeVariables: walletConnect.themeVariables as never,
 								universalProviderConfigOverride: {
-									methods: {
-										polkadot: [
-											"polkadot_signTransaction",
-											"polkadot_signMessage",
-										],
-										solana: [
-											"solana_signTransaction",
-											"solana_signMessage",
-											"solana_signAndSendTransaction",
-										],
-									},
+									methods: methodsFor(walletConnect.networks),
 								},
 							}),
 						)
