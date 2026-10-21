@@ -1,5 +1,11 @@
 # @kheopskit/react
 
+## 6.0.0-rc.6
+
+### Patch Changes
+
+- [#170](https://github.com/kheopskit/kheopskit/pull/170) [`98abf8d`](https://github.com/kheopskit/kheopskit/commit/98abf8d9fa298224e339a1701fab33d86703c233) Thanks [@0xKheops](https://github.com/0xKheops)! - Changed: injected Polkadot wallets that implement `signer.createTransaction` now build the transaction themselves, when the installed polkadot-api exports `getAccountTxCreator` from `polkadot-api/pjs-signer`. This signs on chains whose transaction extensions pjs-signer does not know, such as Paseo Asset Hub's `AsScarcity`. Other wallets and polkadot-api versions keep signing with `signPayload`.
+
 ## 6.0.0-rc.5
 
 ### Patch Changes
