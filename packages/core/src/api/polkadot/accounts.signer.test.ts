@@ -12,20 +12,20 @@ import type {
 } from "./types";
 import { latestAccounts } from "./wallets";
 
+const getAccountTxCreator = vi.hoisted(() =>
+	vi.fn(
+		(_address: string, createTransaction: (payload: object) => unknown) =>
+			createTransaction,
+	),
+);
+
 vi.mock("polkadot-api/pjs-signer", async (importOriginal) => {
 	const real = await importOriginal<typeof import("polkadot-api/pjs-signer")>();
 	return {
 		...real,
 		getTxCreatorFromPjs: vi.fn(real.getTxCreatorFromPjs),
 		getPolkadotSignerFromPjs: undefined,
-		getAccountTxCreator: vi.fn(
-			(
-				address: string,
-				createTransaction: (payload: object) => Promise<string>,
-			) =>
-				(payload: object) =>
-					createTransaction({ ...payload, signer: address }),
-		),
+		getAccountTxCreator,
 	};
 });
 
@@ -94,6 +94,7 @@ const walletConnectWalletListing = (address: string) =>
 it("builds the signer with the detected factory and passes ecdsa for ethereum accounts", async () => {
 	const factory = vi.mocked(pjs.getTxCreatorFromPjs);
 	factory.mockClear();
+	getAccountTxCreator.mockClear();
 	const wallet = injectedWalletOf(
 		silentExtensionListing([
 			{ address: ALICE, name: "Alice", type: "sr25519", genesisHash: null },
@@ -122,21 +123,11 @@ it("builds the signer with the detected factory and passes ecdsa for ethereum ac
 		expect.any(Function),
 		expect.any(Function),
 	]);
+	expect(getAccountTxCreator).not.toHaveBeenCalled();
 });
 
-const accountTxCreatorOf = (pjsModule: typeof pjs) =>
-	vi.mocked(
-		(
-			pjsModule as typeof pjs & {
-				getAccountTxCreator: (
-					address: string,
-					createTransaction: (payload: object) => Promise<string>,
-				) => (payload: object) => Promise<string>;
-			}
-		).getAccountTxCreator,
-	);
-
 it("lets the wallet build the transaction when it implements createTransaction", async () => {
+	getAccountTxCreator.mockClear();
 	const extension = silentExtensionListing([
 		{ address: ALICE, name: "Alice", type: "sr25519", genesisHash: null },
 	]);
@@ -149,33 +140,17 @@ it("lets the wallet build the transaction when it implements createTransaction",
 	const txCreator = account?.txCreator as unknown as (
 		payload: object,
 	) => Promise<string>;
-	const payload = { version: 1, signer: null, callData: "0x0000" };
+	const payload = { version: 1, signer: ALICE, callData: "0x0000" };
 
-	await expect(txCreator(payload)).resolves.toBe("0x1234");
-	expect(createTransaction).toHaveBeenCalledWith({
-		...payload,
-		signer: ALICE,
-	});
-	expect(extension.signer.signPayload).not.toHaveBeenCalled();
-});
-
-it("signs the payload when the wallet does not implement createTransaction", async () => {
-	const getTxCreatorFromPjs = vi.mocked(pjs.getTxCreatorFromPjs);
-	getTxCreatorFromPjs.mockClear();
-	const getAccountTxCreator = accountTxCreatorOf(pjs);
-	getAccountTxCreator.mockClear();
-	const extension = silentExtensionListing([
-		{ address: ALICE, name: "Alice", type: "sr25519", genesisHash: null },
-	]);
-
-	await firstValueFrom(
-		getPolkadotAccounts$(of([injectedWalletOf(extension)]), ["sr25519"]),
+	expect(getAccountTxCreator).toHaveBeenCalledWith(
+		ALICE,
+		expect.any(Function),
+		expect.any(Function),
+		"sr25519",
 	);
-	const signPayload = getTxCreatorFromPjs.mock.calls[0]?.[1];
-	await signPayload?.({} as Parameters<pjs.SignPayload>[0]);
-
-	expect(getAccountTxCreator).not.toHaveBeenCalled();
-	expect(extension.signer.signPayload).toHaveBeenCalledOnce();
+	await expect(txCreator(payload)).resolves.toBe("0x1234");
+	expect(createTransaction).toHaveBeenCalledWith(payload);
+	expect(extension.signer.signPayload).not.toHaveBeenCalled();
 });
 
 it("falls back to polkadotSigner with polkadot-api v2", async () => {

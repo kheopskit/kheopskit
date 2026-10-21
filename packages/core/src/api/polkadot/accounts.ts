@@ -60,8 +60,7 @@ const getInjectedWalletAccounts$ = (
 		const createTransaction = injected.signer.createTransaction?.bind(
 			injected.signer,
 		);
-		const { field, factory } = getPjsSignerField();
-		const getAccountTxCreator = (pjs as PjsSignerModule).getAccountTxCreator;
+		const { field, factory, getAccountTxCreator } = getPjsSignerField();
 		const createSigner = (address: string, type: KeypairType) =>
 			createTransaction && getAccountTxCreator
 				? getAccountTxCreator(address, createTransaction, signRaw, type)
@@ -123,22 +122,28 @@ type PjsSignerModule = {
 			PolkadotInjected["signer"]["createTransaction"]
 		>,
 		signRaw: SignRaw,
-		type?: KeypairType,
+		type: KeypairType,
 	) => unknown;
 };
 
 /**
  * polkadot-api v3 replaced `polkadotSigner` (PolkadotSigner) with `txCreator`
  * (TxCreator). Which one the app's installed version provides is detected at
- * runtime so a single @kheopskit/core release supports both.
+ * runtime so a single @kheopskit/core release supports both. Newer v3 releases
+ * add `getAccountTxCreator`, which lets the wallet build the transaction.
  */
 const getPjsSignerField = (): {
 	field: "txCreator" | "polkadotSigner";
 	factory: PjsSignerFactory;
+	getAccountTxCreator?: PjsSignerModule["getAccountTxCreator"];
 } => {
 	const module = pjs as PjsSignerModule;
 	if (module.getTxCreatorFromPjs)
-		return { field: "txCreator", factory: module.getTxCreatorFromPjs };
+		return {
+			field: "txCreator",
+			factory: module.getTxCreatorFromPjs,
+			getAccountTxCreator: module.getAccountTxCreator,
+		};
 	if (module.getPolkadotSignerFromPjs)
 		return {
 			field: "polkadotSigner",

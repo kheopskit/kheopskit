@@ -33,23 +33,14 @@ export type PolkadotInjectedAccount = {
 };
 
 /**
- * `@polkadot-api/tx-creator`'s `TxPayloadV1`, which stable polkadot-api
- * releases do not export. Kheopskit hands it to the wallet as is.
+ * The payload polkadot-api's `TxCreator` receives, read from the installed
+ * version. polkadot-api v2 has no `TxCreator`, so it is `never` there.
  */
-type TxPayloadV1 = {
-	version: 1;
-	signer: string | null;
-	callData: string;
-	extensions: Array<{ id: string; extra: string; additionalSigned: string }>;
-	txExtVersion: number | null;
-	context: {
-		metadata: string;
-		token: { symbol: string; decimals: number } | null;
-		bestBlockHeight: number;
-		bestBlockHash: string;
-		genesisHash: string;
-	};
-};
+type TxPayloadV1 = InjectedPolkadotAccount extends {
+	txCreator: (payload: infer Payload, ...rest: never[]) => unknown;
+}
+	? Payload
+	: never;
 
 /**
  * The object `window.injectedWeb3[id].enable(appName)` resolved to, typed
