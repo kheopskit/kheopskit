@@ -230,6 +230,43 @@ describe("kheopskitRun$ discovery while the WalletConnect connector loads", () =
 		const settled = states.find((s) => s.isDiscovering === false);
 		expect(settled?.wallets.map((w) => w.id)).toEqual(["polkadot:talisman"]);
 	});
+
+	it("lists the extensions before the connector loads and ends discovery once it lists the connector", async () => {
+		setReadyState("interactive");
+		install({ name: "talisman" });
+		const states: KheopskitState[] = [];
+		subscription = kheopskitRun$(
+			{ platforms: [polkadot()], walletConnect: walletConnectPlugin },
+			{ store: memoryStore() },
+		).subscribe((state) => states.push(state));
+
+		await fireLoad();
+		await vi.advanceTimersByTimeAsync(1100);
+		expect(states.at(-1)?.wallets.map((w) => w.id)).toEqual([
+			"polkadot:talisman",
+		]);
+		expect(states.at(-1)?.isDiscovering).toBe(true);
+
+		connector$.next({
+			id: WALLET_CONNECT_WALLET_ID,
+			type: "walletconnect",
+			platforms: [],
+			appKit: {} as AppKitInstance,
+			name: "WalletConnect",
+			icon: "",
+			status: "disconnected",
+			isConnected: false,
+			connect: async () => {},
+			disconnect: async () => {},
+		});
+		await vi.advanceTimersByTimeAsync(20);
+
+		const settled = states.find((s) => s.isDiscovering === false);
+		expect(settled?.wallets.map((w) => w.id)).toEqual([
+			"polkadot:talisman",
+			WALLET_CONNECT_WALLET_ID,
+		]);
+	});
 });
 
 describe("kheopskitRun$ account changes", () => {

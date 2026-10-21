@@ -6,6 +6,7 @@ import {
 	Observable,
 	of,
 	shareReplay,
+	startWith,
 	tap,
 	withLatestFrom,
 } from "rxjs";
@@ -30,6 +31,11 @@ export const getWallets$ = (
 	config: KheopskitConfig,
 	store: KheopskitStore,
 	registryReads$?: Observable<void>,
+	walletConnect$ = config.walletConnect?.getWallet$({
+		config,
+		store,
+		registryReads$,
+	}),
 ) => {
 	return new Observable<(BaseWallet | WalletConnectWallet)[]>((subscriber) => {
 		const ctx: PlatformContext = { config, store, registryReads$ };
@@ -56,11 +62,14 @@ export const getWallets$ = (
 			: of<BaseWallet[]>([]);
 
 		// The single, platform-less WalletConnect connector is appended here (not
-		// emitted per platform). It sorts last (see sortWallets).
-		const walletConnect$ = config.walletConnect?.getWallet$(ctx);
+		// emitted per platform). It sorts last (see sortWallets). Platform wallets
+		// are listed without waiting for AppKit to load.
 		const unsortedWallets$: Observable<(BaseWallet | WalletConnectWallet)[]> =
 			walletConnect$
-				? combineLatest([platformWallets$, walletConnect$]).pipe(
+				? combineLatest([
+						platformWallets$,
+						walletConnect$.pipe(startWith(null)),
+					]).pipe(
 						map(([platformWallets, walletConnect]) =>
 							walletConnect
 								? [...platformWallets, walletConnect]

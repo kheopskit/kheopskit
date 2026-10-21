@@ -4,6 +4,7 @@ import {
 	concat,
 	debounceTime,
 	distinctUntilChanged,
+	EMPTY,
 	filter,
 	ignoreElements,
 	map,
@@ -207,7 +208,10 @@ export const kheopskitRun$ = <
 		const registryReads$ = createRegistryReads$().pipe(
 			shareReplay({ bufferSize: 1, refCount: true }),
 		);
-		const liveWallets$ = getWallets$(kc, store, registryReads$);
+		const walletConnect$ = kc.walletConnect
+			?.getWallet$({ config: kc, store, registryReads$ })
+			.pipe(shareReplay({ bufferSize: 1, refCount: true }));
+		const liveWallets$ = getWallets$(kc, store, registryReads$, walletConnect$);
 		const accountFrames$ = getAccounts$(kc, liveWallets$);
 		const liveAccounts$ = accountFrames$.pipe(
 			map(({ accounts }) => accounts.map(asLive)),
@@ -216,6 +220,7 @@ export const kheopskitRun$ = <
 		const isDiscovering$ = concat(
 			of(true),
 			registryReads$.pipe(ignoreElements()),
+			(walletConnect$ ?? EMPTY).pipe(take(1), ignoreElements()),
 			liveWallets$.pipe(
 				take(1),
 				map(() => false),

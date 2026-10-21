@@ -547,6 +547,7 @@ describe("walletConnect() appKitOptions", () => {
 
 		const appKitOptions = await captureAppKitOptions({
 			...options,
+			networks: [{ chainNamespace: "polkadot" }, { chainNamespace: "solana" }],
 			appKitOptions: untypedAppKitOptions,
 		});
 
@@ -562,6 +563,23 @@ describe("walletConnect() appKitOptions", () => {
 					"solana_signMessage",
 					"solana_signAndSendTransaction",
 				],
+			},
+		});
+	});
+
+	it("overrides methods only for the namespaces of the configured networks", async () => {
+		const appKitOptions = await captureAppKitOptions({
+			...options,
+			networks: [
+				{ chainNamespace: "polkadot" },
+				{ chainNamespace: "polkadot" },
+				{ chainNamespace: "eip155" },
+			],
+		});
+
+		expect(appKitOptions?.universalProviderConfigOverride).toEqual({
+			methods: {
+				polkadot: ["polkadot_signTransaction", "polkadot_signMessage"],
 			},
 		});
 	});

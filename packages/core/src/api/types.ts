@@ -350,8 +350,7 @@ export type PlatformContext = {
 	 * Moments to re-read a registry that has no announce event. Emits at
 	 * subscribe and on a tail restarted at window `load`, and completes after
 	 * the last read. {@link KheopskitState.isDiscovering} turns `false` on the
-	 * first wallet list after that, which waits for a WalletConnect connector
-	 * still loading.
+	 * first wallet list after that and after a WalletConnect connector loads.
 	 */
 	registryReads$?: Observable<void>;
 };
