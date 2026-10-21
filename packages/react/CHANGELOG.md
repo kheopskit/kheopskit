@@ -1,5 +1,13 @@
 # @kheopskit/react
 
+## 6.0.0-rc.5
+
+### Patch Changes
+
+- [#168](https://github.com/kheopskit/kheopskit/pull/168) [`0f58896`](https://github.com/kheopskit/kheopskit/commit/0f58896af3fcf1ba2bd8d17bed40c74a60adb8be) Thanks [@0xKheops](https://github.com/0xKheops)! - Fixed: with `walletConnect`, `wallets` lists the injected wallets without waiting for Reown AppKit to download and start. The WalletConnect wallet joins the list once AppKit loads, and `isDiscovering` still stays `true` until then.
+
+- [#168](https://github.com/kheopskit/kheopskit/pull/168) [`0f58896`](https://github.com/kheopskit/kheopskit/commit/0f58896af3fcf1ba2bd8d17bed40c74a60adb8be) Thanks [@0xKheops](https://github.com/0xKheops)! - Fixed: `walletConnect()` asks AppKit for Polkadot and Solana methods only when `networks` includes a network of that namespace. Before, a Polkadot-only dapp sent an empty Solana namespace, and Reown rejected the pairing, so the modal closed without a QR code.
+
 ## 6.0.0-rc.4
 
 ### Minor Changes
