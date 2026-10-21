@@ -4,6 +4,7 @@ import {
 	of,
 	type Subscription,
 	take,
+	toArray,
 } from "rxjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SyncableStorage } from "../utils/storage";
@@ -581,21 +582,20 @@ describe("getWallets$ WalletConnect connector", () => {
 		localStorage.clear();
 	});
 
-	it("appends the plugin's connector after the platform wallets", async () => {
+	it("lists the platform wallets first, then appends the plugin's connector after them", async () => {
 		const config = resolveConfig({
 			platforms: [enginePlugin(platformSources(), {})],
 			walletConnect: fakePlugin,
 			autoReconnect: false,
 		});
 
-		const wallets = await firstValueFrom(
-			getWallets$(config, createKheopskitStore()),
+		const emissions = await firstValueFrom(
+			getWallets$(config, createKheopskitStore()).pipe(take(2), toArray()),
 		);
 
-		expect(wallets.map((w) => w.id)).toEqual([
-			"polkadot:a",
-			"polkadot:b",
-			"walletconnect",
+		expect(emissions.map((wallets) => wallets.map((w) => w.id))).toEqual([
+			["polkadot:a", "polkadot:b"],
+			["polkadot:a", "polkadot:b", "walletconnect"],
 		]);
 	});
 
