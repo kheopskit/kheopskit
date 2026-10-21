@@ -18,6 +18,14 @@ vi.mock("polkadot-api/pjs-signer", async (importOriginal) => {
 		...real,
 		getTxCreatorFromPjs: vi.fn(real.getTxCreatorFromPjs),
 		getPolkadotSignerFromPjs: undefined,
+		getAccountTxCreator: vi.fn(
+			(
+				address: string,
+				createTransaction: (payload: object) => Promise<string>,
+			) =>
+				(payload: object) =>
+					createTransaction({ ...payload, signer: address }),
+		),
 	};
 });
 
@@ -116,6 +124,60 @@ it("builds the signer with the detected factory and passes ecdsa for ethereum ac
 	]);
 });
 
+const accountTxCreatorOf = (pjsModule: typeof pjs) =>
+	vi.mocked(
+		(
+			pjsModule as typeof pjs & {
+				getAccountTxCreator: (
+					address: string,
+					createTransaction: (payload: object) => Promise<string>,
+				) => (payload: object) => Promise<string>;
+			}
+		).getAccountTxCreator,
+	);
+
+it("lets the wallet build the transaction when it implements createTransaction", async () => {
+	const extension = silentExtensionListing([
+		{ address: ALICE, name: "Alice", type: "sr25519", genesisHash: null },
+	]);
+	const createTransaction = vi.fn(async () => "0x1234");
+	extension.signer.createTransaction = createTransaction;
+
+	const [account] = await firstValueFrom(
+		getPolkadotAccounts$(of([injectedWalletOf(extension)]), ["sr25519"]),
+	);
+	const txCreator = account?.txCreator as unknown as (
+		payload: object,
+	) => Promise<string>;
+	const payload = { version: 1, signer: null, callData: "0x0000" };
+
+	await expect(txCreator(payload)).resolves.toBe("0x1234");
+	expect(createTransaction).toHaveBeenCalledWith({
+		...payload,
+		signer: ALICE,
+	});
+	expect(extension.signer.signPayload).not.toHaveBeenCalled();
+});
+
+it("signs the payload when the wallet does not implement createTransaction", async () => {
+	const getTxCreatorFromPjs = vi.mocked(pjs.getTxCreatorFromPjs);
+	getTxCreatorFromPjs.mockClear();
+	const getAccountTxCreator = accountTxCreatorOf(pjs);
+	getAccountTxCreator.mockClear();
+	const extension = silentExtensionListing([
+		{ address: ALICE, name: "Alice", type: "sr25519", genesisHash: null },
+	]);
+
+	await firstValueFrom(
+		getPolkadotAccounts$(of([injectedWalletOf(extension)]), ["sr25519"]),
+	);
+	const signPayload = getTxCreatorFromPjs.mock.calls[0]?.[1];
+	await signPayload?.({} as Parameters<pjs.SignPayload>[0]);
+
+	expect(getAccountTxCreator).not.toHaveBeenCalled();
+	expect(extension.signer.signPayload).toHaveBeenCalledOnce();
+});
+
 it("falls back to polkadotSigner with polkadot-api v2", async () => {
 	vi.resetModules();
 	const getPolkadotSignerFromPjs = vi.fn(() => ({
@@ -124,6 +186,7 @@ it("falls back to polkadotSigner with polkadot-api v2", async () => {
 	vi.doMock("polkadot-api/pjs-signer", () => ({
 		getTxCreatorFromPjs: undefined,
 		getPolkadotSignerFromPjs,
+		getAccountTxCreator: undefined,
 	}));
 	const { clearAllCachedObservables } = await import(
 		"../../utils/getCachedObservable"

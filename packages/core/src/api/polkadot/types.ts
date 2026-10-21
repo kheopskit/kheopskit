@@ -33,6 +33,12 @@ export type PolkadotInjectedAccount = {
 };
 
 /**
+ * polkadot-api's transaction payload, which stable releases do not export,
+ * trimmed to its identifying fields. Kheopskit hands it to the wallet as is.
+ */
+type TxPayloadV1 = { version: 1; signer: string | null; callData: string };
+
+/**
  * The object `window.injectedWeb3[id].enable(appName)` resolved to, typed
  * structurally (pjs-signer does not export its type). `metadata` and
  * `provider` are the optional members of `@polkadot/extension-inject`'s
@@ -55,6 +61,12 @@ export type PolkadotInjected = {
 			data: string;
 			type: PolkadotSignRawType;
 		}) => Promise<{ id: number; signature: `0x${string}` }>;
+		/**
+		 * Builds and signs the whole transaction from a polkadot-api `TxPayloadV1`,
+		 * so the wallet encodes transaction extensions pjs-signer does not know.
+		 * Only some wallets implement it.
+		 */
+		createTransaction?: (payload: TxPayloadV1) => Promise<string>;
 	};
 	metadata?: unknown;
 	provider?: unknown;
