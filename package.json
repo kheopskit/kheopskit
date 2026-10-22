@@ -55,7 +55,7 @@
 		"@kheopskit/core": "workspace:*",
 		"@kheopskit/react": "workspace:*",
 		"@polkadot-api/descriptors": "file:.papi/descriptors",
-		"polkadot-api": "^3.2.1"
+		"polkadot-api": "^3.3.0"
 	},
 	"simple-git-hooks": {
 		"pre-commit": "pnpm biome check --staged --error-on-warnings --no-errors-on-unmatched"

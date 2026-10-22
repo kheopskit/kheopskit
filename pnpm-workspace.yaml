@@ -31,4 +31,7 @@ overrides:
 
 minimumReleaseAge: 4320
 minimumReleaseAgeExclude:
-  - hono
+  - polkadot-api@3.3.0
+  - "@polkadot-api/*"
+  - rollup@4.64.12
+  - "@rollup/*"
