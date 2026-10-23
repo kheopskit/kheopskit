@@ -32,6 +32,8 @@ Once your PR is reviewed and merged, the CI will automatically create (or update
 
 #### 3. Merge the "Version Packages" PR
 
+A PR merges into `main` only once the Quality, E2E and zizmor checks pass; `gh pr merge --auto --squash` merges it as soon as they do. The "Version Packages" PR is opened with `GITHUB_TOKEN`, so its workflow runs wait for a maintainer's approval: approve them from the PR, or close and reopen it, before merging.
+
 When you're ready to release, merge the "Version Packages" PR. This triggers the publish workflow which:
 - Builds the packages and checks the emitted type declarations (`pnpm check:dts`)
 - Publishes packages to npm
