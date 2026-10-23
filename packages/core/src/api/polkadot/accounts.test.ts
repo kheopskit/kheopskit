@@ -172,6 +172,27 @@ describe("getPolkadotAccounts$", () => {
 		expect(account?.partOfPortfolio).toBe(false);
 	});
 
+	it("re-emits an account whose readonly flag or key type changes", async () => {
+		const { fake, wallet } = await fakeInjectedWallet([alice]);
+		const emissions: [boolean | undefined, string][] = [];
+		const subscription = getPolkadotAccounts$(of([wallet]), [
+			"sr25519",
+			"ed25519",
+		]).subscribe(([account]) => {
+			if (account) emissions.push([account.readonly, account.type]);
+		});
+
+		fake.setAccounts([{ ...alice, readonly: true }]);
+		fake.setAccounts([{ ...alice, readonly: true, type: "ed25519" }]);
+
+		expect(emissions).toEqual([
+			[undefined, "sr25519"],
+			[true, "sr25519"],
+			[true, "ed25519"],
+		]);
+		subscription.unsubscribe();
+	});
+
 	it("unsubscribes the extension's account subscription on teardown and on disconnect", async () => {
 		const tornDown = createMockExtension([alice]);
 		const wallet = injectedWalletWith(tornDown.extension);

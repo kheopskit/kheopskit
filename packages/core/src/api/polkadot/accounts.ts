@@ -273,5 +273,7 @@ export const getPolkadotAccounts$ = (
 		getWalletConnectAccounts$,
 		mapAccounts: (accounts) =>
 			accounts.filter((account) => polkadotAccountTypes.includes(account.type)),
+		accountChangeKey: (account) =>
+			`${account.id}|${account.type}|${account.readonly ? 1 : 0}`,
 	});
 };
