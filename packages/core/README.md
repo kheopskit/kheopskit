@@ -493,6 +493,12 @@ directly with wallets that are already connected, waits until each of them has
 answered. `kheopskit$` subscribes before any wallet is connected, so it never
 waits.
 
+A wallet whose account stream errors, such as an extension whose
+`accounts.subscribe` throws, stays `connected` and lists no accounts until it
+reconnects. Kheopskit logs a warning and sets no `wallet.error`. The next cache
+write stores the wallet with no accounts. Every other wallet keeps its accounts.
+To retry, call `disconnect()` and then `connect()`.
+
 `state.accounts` is grouped by platform (Polkadot, Ethereum, Solana), then by
 wallet (Talisman first, then by wallet name). Inside a wallet, accounts keep
 the order the extension lists them in. `state.wallets` follows the same
