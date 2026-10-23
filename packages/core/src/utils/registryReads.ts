@@ -10,7 +10,9 @@ import {
 } from "rxjs";
 import { pageLoaded$ } from "./pageLoad";
 
-const READ_TAIL_MS = [100, 300, 600, 1100];
+export const DISCOVERY_WINDOW_MS = 1100;
+
+const READ_TAIL_MS = [100, 300, 600, DISCOVERY_WINDOW_MS];
 
 const tail$: Observable<void> = merge(
 	of(undefined),

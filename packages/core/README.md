@@ -691,6 +691,11 @@ extension. It has no test-runner dependency, so it works with vitest and jest.
 - `cachedWalletOf(walletId, name)` and `cachedAccountOf(wallet, address,
   name?)` build the entries `store.setCachedState(wallets, accounts)` takes, so
   a test seeds a previous session without writing the persisted shape.
+- `DISCOVERY_WINDOW_MS`, `DEFAULT_HYDRATION_GRACE_PERIOD_MS` and
+  `DEFAULT_HYDRATION_TIMEOUT_MS` let a test advance fake timers past
+  kheopskit's timings instead of copying the numbers. `DISCOVERY_WINDOW_MS`
+  counts from `load` or from subscribe, whichever is later, and the
+  `walletConnect()` plugin can hold discovery longer, until AppKit answers.
 
 A vitest test that seeds a remembered wallet and checks that it reconnects:
 

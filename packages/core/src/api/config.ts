@@ -8,12 +8,15 @@ import type { KheopskitConfig, KheopskitPlatform } from "./types";
  */
 export const DEFAULT_STORAGE_KEY = "kheopskit";
 
+export const DEFAULT_HYDRATION_GRACE_PERIOD_MS = 500;
+export const DEFAULT_HYDRATION_TIMEOUT_MS = 3000;
+
 const DEFAULTS = {
 	autoReconnect: true,
 	debug: false,
 	storageKey: DEFAULT_STORAGE_KEY,
-	hydrationGracePeriod: 500,
-	hydrationTimeout: 3000,
+	hydrationGracePeriod: DEFAULT_HYDRATION_GRACE_PERIOD_MS,
+	hydrationTimeout: DEFAULT_HYDRATION_TIMEOUT_MS,
 } satisfies Omit<KheopskitConfig, "platforms" | "walletConnect">;
 
 export const resolveConfig = <
