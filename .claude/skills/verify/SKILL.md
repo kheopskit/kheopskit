@@ -78,7 +78,7 @@ import {
 The helpers module provides these exports:
 
 - `test`, `expect` come from `e2e/fixtures.ts`. They inject the mock wallets into every page, and they fail the test on any `console.error` or page error. A test that expects an error takes the `consoleErrors` fixture, asserts its exact contents, and then empties it with `consoleErrors.length = 0`.
-- `walletConnectConfigured` is `true` when the app was built with a WalletConnect project ID. `run.sh` detects it the same way doctor does. Assert the `WalletConnect` row only when it is `true`.
+- `walletConnectConfigured` is `true` when the app has a WalletConnect project ID. `run.sh` resolves it the way the build does, through Vite's `loadEnv` or Next's `@next/env`, from the shell and the app's `.env*` files. It reads the current environment, so with `--no-build` keep the environment of the last build. Assert the `WalletConnect` row only when it is `true`.
 - `walletsTable(page)` is the table with an `Accounts` column header. `accountsTable(page)` is the table with an `Address` column header. Both tables contain wallet names, so always scope rows to one of them.
 - `MOCK_WALLETS[platform]` holds `{ wallet, account }` row-name regexes for `polkadot`, `ethereum`, and `solana`.
 - `snap(page, testInfo, "01-name")` writes `01-name.png` (full page, animations settled) and `01-name.aria.yml` (an ARIA snapshot).
