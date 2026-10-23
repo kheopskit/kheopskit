@@ -175,7 +175,17 @@ export const createPlatformAccounts$ = <
 							connection.answered = true;
 							emit();
 						},
-						error: (error) => subscriber.error(error),
+						error: (error) => {
+							console.warn(
+								`[kheopskit] Could not list the accounts of ${wallet.id}`,
+								error,
+							);
+							connection.accounts = [];
+							connection.answered = true;
+							connection.completed = true;
+							emit();
+							completeIfDone();
+						},
 						complete: () => {
 							connection.completed = true;
 							completeIfDone();

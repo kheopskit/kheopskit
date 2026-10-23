@@ -1,5 +1,5 @@
-import { BehaviorSubject, Observable, of, Subject } from "rxjs";
-import { describe, expect, it } from "vitest";
+import { BehaviorSubject, Observable, of, Subject, throwError } from "rxjs";
+import { describe, expect, it, vi } from "vitest";
 import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../utils/WalletId";
 import { createPlatformAccounts$ } from "./platformAccounts";
 import type {
@@ -240,6 +240,39 @@ describe("createPlatformAccounts$", () => {
 		emit(B, [account(B, "b1")]);
 		expect(frames.at(-1)).toEqual({ accounts: ["a1", "b1"], answered: [A, B] });
 		sub.unsubscribe();
+	});
+
+	it("a wallet whose stream errors lists no accounts and leaves the other wallets' accounts flowing", () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const wallets$ = new BehaviorSubject([injected(A), injected(B)]);
+		const sources = createSources();
+		const emissions: string[][] = [];
+		let failed: unknown;
+		const sub = createPlatformAccounts$<BaseWallet, BaseWalletAccount>({
+			wallets$,
+			getInjectedAccounts$: (wallet) =>
+				wallet.id === B
+					? throwError(() => new Error("bridge stopped"))
+					: sources.accountsOf(wallet),
+			getWalletConnectAccounts$: sources.accountsOf,
+		}).subscribe({
+			next: (accounts) => emissions.push(accounts.map((a) => a.address)),
+			error: (error) => {
+				failed = error;
+			},
+		});
+
+		sources.emit(A, [account(A, "a1")]);
+		sources.emit(A, [account(A, "a1"), account(A, "a2")]);
+
+		expect(failed).toBeUndefined();
+		expect(emissions).toEqual([["a1"], ["a1", "a2"]]);
+		expect(warn).toHaveBeenCalledWith(
+			`[kheopskit] Could not list the accounts of ${B}`,
+			expect.any(Error),
+		);
+		sub.unsubscribe();
+		warn.mockRestore();
 	});
 
 	it("restarts the WalletConnect connector's stream when its session's platforms change", () => {
