@@ -51,28 +51,16 @@ jobs:
             echo "The root package version was not bumped - include the root 'kheopskit' package in changesets."
             exit 1
           fi
-      - name: Get PR Number from Commit Message
-        id: pr_number
-        env:
-          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+      - name: Create GitHub Release from the package changelogs
         run: |
-          PR_NUMBER=$(echo "$HEAD_COMMIT_MESSAGE" | sed -n '1s/^Version Packages.* (#\([0-9][0-9]*\))$/\1/p')
-          if [ -z "$PR_NUMBER" ]; then
-            echo "No PR number found in commit message: $HEAD_COMMIT_MESSAGE"
-            exit 1
-          fi
-          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-      - name: Create GitHub Release from Version Packages PR Body
-        run: |
-          BODY=$(gh pr view "$PR_NUMBER" --json body -q .body)
-          # Remove everything up to and including '#Releases' (case-insensitive, handles possible whitespace)
-          CLEAN_BODY=$(echo "$BODY" | sed -E '1,/^# [Rr]eleases[[:space:]]*$/d')
-          # Remove the section about the root package (## kheopskit ... until next ## or end of file)
-          CLEAN_BODY=$(echo "$CLEAN_BODY" | awk '/^## kheopskit(@[0-9A-Za-z.-]+)?/ {skip=1} /^## / && !/^## kheopskit(@[0-9A-Za-z.-]+)?/ {skip=0} !skip')
+          NOTES=""
+          for PKG in core react; do
+            SECTION=$(awk -v heading="## $VERSION" '$0 == heading {found=1; next} found && /^## / {exit} found END {exit !found}' "packages/$PKG/CHANGELOG.md")
+            NOTES+="## @kheopskit/$PKG@$VERSION"$'\n'"$SECTION"$'\n'
+          done
           PRERELEASE=()
           if [[ "$VERSION" == *-* ]]; then PRERELEASE=(--prerelease); fi
-          echo "$CLEAN_BODY" | gh release create "v$VERSION" --title "v$VERSION" --target "$GITHUB_SHA" "${PRERELEASE[@]}" --notes-file -
+          echo "$NOTES" | gh release create "v$VERSION" --title "v$VERSION" --target "$GITHUB_SHA" "${PRERELEASE[@]}" --notes-file -
         env:
-          PR_NUMBER: ${{ steps.pr_number.outputs.number }}
           VERSION: ${{ steps.get_version.outputs.version }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
