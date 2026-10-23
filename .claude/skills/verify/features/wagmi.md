@@ -26,6 +26,6 @@ Preconditions:
 
 ## Gotchas
 
-- Wagmi auto-selects any announced EIP-6963 connector, so `Active connector: Mock Ethereum Wallet` appears even when the wallet is not connected in Kheopskit. That line is not proof of a Kheopskit connection.
+- Wagmi reconnects on load to any EIP-6963 connector whose `eth_accounts` returns an address. The mock always returns one, so `Active connector: Mock Ethereum Wallet` appears, with its button disabled, even when the wallet is not connected in Kheopskit. That line is not proof of a Kheopskit connection.
 - The page has `Sign` buttons in both the Accounts rows and this card. Scope to the card with `const card = page.locator("div", { has: page.getByText("Best practice with Kheopskit") }).last()`, then use `card.getByRole("combobox")` and `card.getByRole("button", { name: "Sign" })`.
 - The `Account` select lists only Ethereum accounts, labelled `<walletName> - <address>`.

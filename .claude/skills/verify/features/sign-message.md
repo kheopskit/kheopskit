@@ -33,4 +33,4 @@ Preconditions:
 
 - Toasts vanish after about 4 s. Take the snapshot right after the assertion.
 - Several toasts stack when you sign repeatedly. Use `.first()` on `getByText`.
-- With a real Polkadot extension, `signBytes` wraps the payload in `<Bytes>…</Bytes>`. The signature is valid only for that wrapped form.
+- `signBytes` sends the hex payload with `type: "bytes"`. A real Polkadot extension such as Talisman wraps it in `<Bytes>…</Bytes>` before signing, so the signature is valid only for that wrapped form.

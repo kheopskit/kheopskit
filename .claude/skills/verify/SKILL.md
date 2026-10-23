@@ -28,7 +28,7 @@ Run this first, and again whenever something looks off:
 .claude/skills/verify/scripts/doctor.sh
 ```
 
-Read-only. It checks node >=24, `@playwright/test`, the Playwright chromium install, whether `packages/*/dist` and each app build are older than their sources, and who holds each app's ports. It exits 1 on `FAIL`. `WARN` lines about stale builds are fine when you let `run.sh` rebuild.
+Read-only. It checks node >=24, `@playwright/test`, the Playwright chromium install, whether `packages/*/dist` and each app build are older than their sources, whether each app has a WalletConnect project ID, and who holds each app's ports. It exits 1 on `FAIL`. `WARN` lines about stale builds are fine when you let `run.sh` rebuild.
 
 ## Ports and isolation
 
@@ -70,13 +70,15 @@ import {
 	saveJson,
 	snap,
 	test,
+	walletConnectConfigured,
 	walletsTable,
 } from "../../.claude/skills/verify/helpers";
 ```
 
 The helpers module provides these exports:
 
-- `test`, `expect` come from `e2e/fixtures.ts`. They inject the mock wallets into every page, and they fail the test on any `console.error` or page error.
+- `test`, `expect` come from `e2e/fixtures.ts`. They inject the mock wallets into every page, and they fail the test on any `console.error` or page error. A test that expects an error takes the `consoleErrors` fixture, asserts its exact contents, and then empties it with `consoleErrors.length = 0`.
+- `walletConnectConfigured` is `true` when the app was built with a WalletConnect project ID. `run.sh` detects it the same way doctor does. Assert the `WalletConnect` row only when it is `true`.
 - `walletsTable(page)` is the table with an `Accounts` column header. `accountsTable(page)` is the table with an `Address` column header. Both tables contain wallet names, so always scope rows to one of them.
 - `MOCK_WALLETS[platform]` holds `{ wallet, account }` row-name regexes for `polkadot`, `ethereum`, and `solana`.
 - `snap(page, testInfo, "01-name")` writes `01-name.png` (full page, animations settled) and `01-name.aria.yml` (an ARIA snapshot).
@@ -133,8 +135,8 @@ Proof standards:
 
 ## Gotchas
 
-- Every app's `.env` has a real WalletConnect project ID, so a `WalletConnect` row (platform `—`) always appears and AppKit reaches the network. Offline, AppKit logs console errors, and the `e2e/fixtures` console-error assertion fails. That failure is environmental, not a regression. Re-run online before you report it.
+- WalletConnect is opt-in. Each app reads its project ID (`VITE_WALLET_CONNECT_PROJECT_ID`, or `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` on nextjs-react) from the shell or from a gitignored `.env*` file, and every `.env.example` leaves it empty. Without it there is no `WalletConnect` row. Doctor prints which apps have one. With one, a `WalletConnect` row (platform `—`) appears and AppKit reaches the network. Offline, AppKit then logs console errors and the `e2e/fixtures` console-error assertion fails. That failure is environmental, not a regression. Re-run online before you report it.
 - Sonner toasts disappear after about 4 s. Assert on them and call `snap` immediately after the click.
 - The `Sign` button is disabled while Kheopskit hydrates. Wait for `toBeEnabled()` before you click it.
-- The Wagmi block auto-selects any EIP-6963 connector (`Active connector: Mock Ethereum Wallet`) even when that wallet is not connected in Kheopskit. Do not read that line as proof of a Kheopskit connection.
+- Wagmi reconnects on load to any EIP-6963 connector whose `eth_accounts` returns an address. The mock always returns one, so `Active connector: Mock Ethereum Wallet` shows even when that wallet is not connected in Kheopskit. Do not read that line as proof of a Kheopskit connection.
 - `pnpm build:packages` rewrites `packages/*/dist`. A running `tsdown --watch` writes to the same directory. That is harmless, but the last writer wins.

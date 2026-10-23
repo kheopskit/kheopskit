@@ -3,6 +3,8 @@ import type { Page, TestInfo } from "@playwright/test";
 
 export { expect, test } from "../../../e2e/fixtures";
 
+export const walletConnectConfigured = process.env.VERIFY_WALLETCONNECT === "1";
+
 export const walletsTable = (page: Page) =>
 	page
 		.getByRole("table")

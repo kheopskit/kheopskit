@@ -59,6 +59,12 @@ for app in "${APPS[@]}"; do
 		ok "$app build up to date"
 	fi
 
+	if has_walletconnect_project_id "$app"; then
+		ok "$app has a WalletConnect project ID: expect a WalletConnect row"
+	else
+		ok "$app has no WalletConnect project ID: no WalletConnect row (set $(walletconnect_env_var "$app") in examples/$app/.env to add it)"
+	fi
+
 	for kind in verify e2e dev; do
 		port="$("${kind}_port" "$app")"
 		pid="$(listener_pid "$port")"

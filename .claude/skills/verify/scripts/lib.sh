@@ -62,3 +62,20 @@ build_app() {
 		exit 4
 	fi
 }
+
+walletconnect_env_var() {
+	case "$1" in
+	nextjs-react) echo NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID ;;
+	*) echo VITE_WALLET_CONNECT_PROJECT_ID ;;
+	esac
+}
+
+has_walletconnect_project_id() {
+	local var file
+	var="$(walletconnect_env_var "$1")"
+	[[ -n "${!var:-}" ]] && return 0
+	for file in .env .env.local .env.production .env.production.local; do
+		grep -Eqs "^${var}=[\"']?[^\"'[:space:]]" "$REPO_ROOT/examples/$1/$file" && return 0
+	done
+	return 1
+}

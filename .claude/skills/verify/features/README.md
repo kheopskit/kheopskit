@@ -47,8 +47,9 @@ Driven since then:
 - `sign-in-polkadot` on vite-react (`sign-message.spec.ts`, #138).
 - The `auto-reconnect` `Connecting…` label (`persistence.spec.ts`, #140; `e2e/tests/reconnect-status.spec.ts` on every app).
 - `discovery-settled` on every app (`e2e/tests/discovery-at-load.spec.ts`, #134).
+- On 2026-10-24, on vite-react: `discovery-*`, `connect-pending`, `connect-error`, `accounts-list`, `accounts-order`, `disconnect-forgets`, `no-empty-flash`, `no-reorder`, `wagmi-connectors`, the mock path of [submit-tx](./submit-tx.md), and `tx-polkadot` with Talisman 3.11.0 on Polkadot Asset Hub.
 
-Everything else, including all of [submit-tx](./submit-tx.md), was written from source and has not been driven. Treat it as a draft until a run confirms it.
+`tx-ethereum` and `tx-solana` on a real wallet have not been driven. Treat them as drafts until a run confirms them.
 
 ## Features
 
