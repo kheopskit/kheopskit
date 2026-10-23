@@ -55,7 +55,7 @@ jobs:
         run: |
           NOTES=""
           for PKG in core react; do
-            SECTION=$(awk -v heading="## $VERSION" '$0 == heading {found=1; next} found && /^## / {exit} found END {exit !found}' "packages/$PKG/CHANGELOG.md")
+            SECTION=$(awk -v heading="## $VERSION" '$0 == heading {found=1; next} found && /^## / {exit} found {print} END {exit !found}' "packages/$PKG/CHANGELOG.md")
             NOTES+="## @kheopskit/$PKG@$VERSION"$'\n'"$SECTION"$'\n'
           done
           PRERELEASE=()
