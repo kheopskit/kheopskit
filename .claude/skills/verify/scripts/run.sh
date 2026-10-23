@@ -33,8 +33,9 @@ git -C "$REPO_ROOT" status --short >>"$evidence/git-head.txt"
 
 [[ $build -eq 1 ]] && build_app "$app" "$evidence/build.log"
 
+walletconnect_id="$(walletconnect_project_id "$app")"
 walletconnect=0
-has_walletconnect_project_id "$app" && walletconnect=1
+[[ -n "$walletconnect_id" ]] && walletconnect=1
 
 set +e
 VERIFY_APP="$app" VERIFY_WALLETCONNECT="$walletconnect" VERIFY_SPEC="$spec" VERIFY_EVIDENCE_DIR="$evidence" \
