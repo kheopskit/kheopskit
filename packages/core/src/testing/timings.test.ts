@@ -6,9 +6,11 @@ import {
 } from "@kheopskit/core";
 import { polkadot } from "@kheopskit/core/polkadot";
 import {
+	cachedAccountOf,
 	cachedWalletOf,
 	createFakePolkadotExtension,
 	createMemoryStorage,
+	DEFAULT_HYDRATION_GRACE_PERIOD_MS,
 	DEFAULT_HYDRATION_TIMEOUT_MS,
 	DISCOVERY_WINDOW_MS,
 	type FakePolkadotExtension,
@@ -31,9 +33,28 @@ const start = () => {
 	});
 };
 
+const alice = {
+	address: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+	name: "Alice",
+	type: "sr25519" as const,
+};
+
+const install = (enable: "resolve" | "hold") => {
+	talisman = createFakePolkadotExtension({
+		name: "talisman",
+		accounts: [alice],
+		enable,
+	});
+	const wallet = cachedWalletOf(talisman.walletId, "Talisman");
+	store.rememberWallet(talisman.walletId);
+	store.setCachedState(
+		[wallet],
+		[cachedAccountOf(wallet, alice.address, alice.name)],
+	);
+};
+
 beforeEach(() => {
 	vi.useFakeTimers();
-	talisman = createFakePolkadotExtension({ name: "talisman", enable: "hold" });
 	store = createKheopskitStore({ storage: createMemoryStorage() });
 });
 
@@ -45,6 +66,7 @@ afterEach(() => {
 });
 
 it("discovery ends DISCOVERY_WINDOW_MS after a loaded page subscribes", async () => {
+	install("hold");
 	start();
 
 	await vi.advanceTimersByTimeAsync(DISCOVERY_WINDOW_MS - 1);
@@ -54,11 +76,20 @@ it("discovery ends DISCOVERY_WINDOW_MS after a loaded page subscribes", async ()
 });
 
 it("a reconnect that never settles holds hydration for DEFAULT_HYDRATION_TIMEOUT_MS", async () => {
-	store.rememberWallet(talisman.walletId);
-	store.setCachedState([cachedWalletOf(talisman.walletId, "Talisman")], []);
+	install("hold");
 	start();
 
 	await vi.advanceTimersByTimeAsync(DEFAULT_HYDRATION_TIMEOUT_MS - 1);
+	expect(state?.isHydrating).toBe(true);
+	await vi.advanceTimersByTimeAsync(1);
+	expect(state?.isHydrating).toBe(false);
+});
+
+it("a reconnect that settles at once ends hydration at DEFAULT_HYDRATION_GRACE_PERIOD_MS", async () => {
+	install("resolve");
+	start();
+
+	await vi.advanceTimersByTimeAsync(DEFAULT_HYDRATION_GRACE_PERIOD_MS - 1);
 	expect(state?.isHydrating).toBe(true);
 	await vi.advanceTimersByTimeAsync(1);
 	expect(state?.isHydrating).toBe(false);
