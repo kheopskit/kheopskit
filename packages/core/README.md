@@ -246,7 +246,7 @@ await account.txCreator.signBytes(bytes);
 
 Reading a handle without narrowing gives `undefined` in the type, so the
 compiler rejects a call on it. The plain fields of the cache (Ethereum
-`chainId`, Polkadot key `type`) are restored on placeholders. Solana `chains`
+`chainId`, Polkadot key `type` and `readonly`) are restored on placeholders. Solana `chains`
 is not cached, so a placeholder Solana account has none.
 
 A placeholder wallet is never connected. Its `connect()` waits for kheopskit to
@@ -546,7 +546,7 @@ cookie in a compact form, to stay under the cookie size limit:
 
 `r` is `remembered`, `w` holds `[id, name, isConnected, type]` per wallet and
 `a` holds `[walletId, address, name, chainId, polkadotType, platform]` per
-account. The cookie is URI-encoded, lasts one year, and is set with `path=/`,
+account, followed by `1` for a watch-only (`readonly`) Polkadot account. The cookie is URI-encoded, lasts one year, and is set with `path=/`,
 `SameSite=Lax`, and `Secure` on HTTPS. Kheopskit warns in the console when the
 encoded value exceeds 3072 bytes. On the server, pass only this cookie as
 `ssrCookies`, never the whole cookie header: a value handed to a client
@@ -555,7 +555,7 @@ component ends up in the HTML, httpOnly session cookies included.
 The `kheopskit` entry, in the cookie or in `localStorage`, holds only the ids of
 the wallets the user connected, each cached wallet's id, name, type and
 connected flag, and each cached account's address, name, wallet, chain id,
-Polkadot key type and platform. Apart from the wallet icons in
+Polkadot key type, watch-only flag and platform. Apart from the wallet icons in
 `kheopskit-icons`, kheopskit stores nothing else. With the `walletConnect()`
 plugin, Reown AppKit keeps its own session data in the browser.
 
