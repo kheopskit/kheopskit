@@ -75,7 +75,7 @@ walletconnect_project_id() {
 	case "$1" in
 	nextjs-react)
 		(cd "$dir" && node -e '
-process.env.NODE_ENV ??= "production";
+process.env.NODE_ENV ||= "production";
 const { loadEnvConfig } = require(require.resolve("@next/env", { paths: [require.resolve("next/package.json")] }));
 const { combinedEnv } = loadEnvConfig(".", false, { info() {}, error() {} });
 process.stdout.write(combinedEnv.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID ?? "");
@@ -84,7 +84,7 @@ process.stdout.write(combinedEnv.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID ?? "");
 	*)
 		(cd "$dir" && node --input-type=module -e '
 import { loadEnv } from "vite";
-process.env.NODE_ENV ??= "production";
+process.env.NODE_ENV ||= "production";
 process.stdout.write(loadEnv("production", ".", "VITE_").VITE_WALLET_CONNECT_PROJECT_ID ?? "");
 ')
 		;;
