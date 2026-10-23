@@ -33,7 +33,7 @@ type CompactWalletEntry = [WalletId, string, 0 | 1, 0 | 1];
 type CompactPolkadotAccountType = 0 | 1 | 2 | 3;
 // platform: 0=polkadot, 1=ethereum, 2=solana
 type CompactPlatformCode = 0 | 1 | 2;
-type CompactAccountEntry = [
+type CompactAccountFields = [
 	WalletId,
 	string,
 	string | null,
@@ -43,8 +43,13 @@ type CompactAccountEntry = [
 	// connector's walletId is platform-less, so platform can't be derived from
 	// it); absent in entries written by older versions, where it's derived from
 	// the walletId instead.
-	(CompactPlatformCode | null)?,
+	CompactPlatformCode | null,
 ];
+// Polkadot `readonly` flag (1 = watch-only). Written for watch-only accounts
+// only; absent in entries written by older versions.
+type CompactAccountEntry =
+	| Partial<CompactAccountFields>
+	| [...CompactAccountFields, 1 | null];
 
 type CompactStoreV1 = {
 	v: 1;
@@ -52,7 +57,7 @@ type CompactStoreV1 = {
 	r?: WalletId[];
 	// wallets: [id, name, isConnected(0|1), type(0=injected,1=walletconnect)?]
 	w?: CompactWalletEntry[];
-	// accounts: [walletId, address, name?, chainId?, polkadotType?, platform?]
+	// accounts: [walletId, address, name?, chainId?, polkadotType?, platform?, polkadotReadonly?]
 	a?: CompactAccountEntry[];
 };
 
@@ -146,16 +151,17 @@ const toCompactStore = (data: KheopskitStoreData): CompactStoreV1 => {
 		],
 	);
 
-	const accounts = data.cachedAccounts?.map(
-		(account): CompactAccountEntry => [
+	const accounts = data.cachedAccounts?.map((account): CompactAccountEntry => {
+		const entry: CompactAccountFields = [
 			account.walletId,
 			account.address,
 			account.name ?? null,
 			account.chainId ?? null,
 			toCompactPolkadotAccountType(account.polkadotAccountType),
 			toCompactPlatform(account.platform),
-		],
-	);
+		];
+		return account.polkadotReadonly ? [...entry, 1] : entry;
+	});
 
 	return {
 		v: 1,
@@ -202,6 +208,7 @@ const fromCompactStore = (data: CompactStoreV1): KheopskitStoreData => {
 			chainId,
 			polkadotAccountType,
 			platformCode,
+			polkadotReadonly,
 		] = item;
 		if (!isValidWalletId(walletId) || typeof address !== "string" || !address)
 			continue;
@@ -224,6 +231,8 @@ const fromCompactStore = (data: CompactStoreV1): KheopskitStoreData => {
 				platform === "polkadot"
 					? fromCompactPolkadotAccountType(polkadotAccountType)
 					: undefined,
+			polkadotReadonly:
+				platform === "polkadot" && polkadotReadonly === 1 ? true : undefined,
 			walletId,
 			walletName: walletNameMap.get(walletId) ?? walletId,
 		});

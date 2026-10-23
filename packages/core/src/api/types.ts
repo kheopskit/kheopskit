@@ -651,6 +651,8 @@ export type CachedAccount = {
 	chainId?: number;
 	/** Cached key type for Polkadot accounts. */
 	polkadotAccountType?: PolkadotAccountType;
+	/** Cached `readonly` flag for Polkadot accounts, `true` for a watch-only account. */
+	polkadotReadonly?: boolean;
 	walletId: WalletId;
 	walletName: string;
 };

@@ -86,7 +86,8 @@ export const hydrateAccount = (
 	// platform-specific account types once narrowed by `platform`.
 	...(cached.platform === "ethereum" && { chainId: cached.chainId }),
 	...(cached.platform === "polkadot" && {
-		type: cached.polkadotAccountType,
+		type: cached.polkadotAccountType ?? "sr25519",
+		...(cached.polkadotReadonly && { readonly: true }),
 	}),
 	...(cached.platform === "solana" && { chains: [] }),
 });
@@ -127,6 +128,11 @@ export const serializeAccount = (
 	polkadotAccountType:
 		account.platform === "polkadot"
 			? (account as { type?: PolkadotAccountType }).type
+			: undefined,
+	polkadotReadonly:
+		account.platform === "polkadot" &&
+		(account as { readonly?: boolean }).readonly
+			? true
 			: undefined,
 	walletId: account.walletId as WalletId,
 	walletName: account.walletName,

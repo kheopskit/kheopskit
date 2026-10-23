@@ -4,6 +4,7 @@ import { hydrateAccount, serializeAccount } from "../utils/hydrateState";
 import { parseCookie, type SyncableStorage } from "../utils/storage";
 import type { WalletAccountId } from "../utils/WalletAccountId";
 import type { WalletId } from "../utils/WalletId";
+import type { PolkadotAccount } from "./polkadot/types";
 import type { KheopskitStoreData } from "./types";
 
 describe("createKheopskitStore", () => {
@@ -268,6 +269,53 @@ describe("createKheopskitStore", () => {
 
 			expect(cached.accounts).toHaveLength(1);
 			expect(cached.accounts[0]?.polkadotAccountType).toBe("ethereum");
+		});
+
+		it("restores a watch-only polkadot account as a readonly placeholder through compact cookie storage", () => {
+			const kstore = createKheopskitStore({ ssrCookies: "" });
+			const account = (address: string, readonly?: boolean) => {
+				const live: PolkadotAccount = {
+					id: `polkadot:talisman::${address}` as WalletAccountId,
+					platform: "polkadot",
+					type: "sr25519",
+					address,
+					walletId: "polkadot:talisman" as WalletId,
+					walletName: "Talisman",
+					readonly,
+					txCreator: {} as never,
+					signRaw: {} as never,
+				};
+				return serializeAccount(live);
+			};
+			kstore.setCachedState(
+				[
+					{
+						id: "polkadot:talisman" as WalletId,
+						platform: "polkadot",
+						type: "injected",
+						name: "Talisman",
+						isConnected: true,
+					},
+				],
+				[
+					account("5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", true),
+					account("5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty"),
+				],
+			);
+
+			const placeholders = createKheopskitStore({ ssrCookies: document.cookie })
+				.getCachedState()
+				.accounts.map(hydrateAccount);
+
+			expect(
+				placeholders.map((placeholder) => [
+					placeholder.address,
+					(placeholder as PolkadotAccount).readonly,
+				]),
+			).toEqual([
+				["5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", true],
+				["5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty", undefined],
+			]);
 		});
 
 		it("restores a solana account name through compact cookie storage", () => {

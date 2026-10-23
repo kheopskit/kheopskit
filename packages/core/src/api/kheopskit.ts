@@ -502,7 +502,7 @@ const arraysEqual = (a: string[], b: string[]) =>
 // changing. Declared locally (not imported from the platform packages) so this
 // core entry stays free of platform SDK types — see check:isolation.
 type EthereumAccountFields = { chainId?: number };
-type PolkadotAccountFields = { type?: string };
+type PolkadotAccountFields = { type?: string; readonly?: boolean };
 type SolanaAccountFields = { chains?: string[] };
 
 /**
@@ -520,7 +520,7 @@ const accountPlatformKey = (account: BaseWalletAccount): string => {
 		case "ethereum":
 			return `${account.id}|${(account as EthereumAccountFields).chainId ?? ""}`;
 		case "polkadot":
-			return `${account.id}|${(account as PolkadotAccountFields).type ?? ""}`;
+			return `${account.id}|${(account as PolkadotAccountFields).type ?? ""}|${(account as PolkadotAccountFields).readonly ? 1 : 0}`;
 		case "solana":
 			return `${account.id}|${((account as SolanaAccountFields).chains ?? []).join(",")}`;
 		default:
