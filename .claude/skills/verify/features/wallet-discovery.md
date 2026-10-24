@@ -25,9 +25,10 @@ Preconditions:
 - **Polkadot row.** Run `walletsTable(page).getByRole("row", { name: /mock-polkadot-wallet/ })`. The row is visible, contains `polkadot`, and has a `Connect` button.
 - **Ethereum row.** Use the row name `/Mock Ethereum Wallet/`. The row contains `ethereum` and a blue icon.
 - **Solana row.** Use the row name `/Mock Solana Wallet/`. The row contains `solana` and a purple icon.
-- **WalletConnect row.** Only with a project ID in the app's `.env`. Use the row name `/WalletConnect/`. Its first cell is `—`.
+- **Settled.** Wait for `page.getByText("Looking for wallets…")` to be hidden. The WalletConnect row joins after the injected rows, once AppKit loads.
+- **WalletConnect row.** Use the row name `/WalletConnect/`. When `walletConnectConfigured` is `true`, its first cell is `—`. Otherwise the row count is `0`.
 - **Counts.** Every row has a cell with exact text `0`: `row.getByRole("cell", { name: "0", exact: true })`.
-- **Proof.** Run `snap(page, testInfo, "01-discovered")`. The ARIA snapshot lists three rows, four with a WalletConnect project ID.
+- **Proof.** After the settled step, run `snap(page, testInfo, "01-discovered")`. The ARIA snapshot lists three rows, four with a WalletConnect project ID.
 
 ## Driving `discovery-settled`
 
@@ -43,7 +44,7 @@ Preconditions:
 
 ## Gotchas
 
-- `page.goto` waits for `load` by default, and `Looking for wallets…` is gone by then. To see the page before `load`, navigate with `{ waitUntil: "commit" }`.
+- `Looking for wallets…` is still visible when a default `page.goto` returns, because discovery ends 1100 ms after `load`. To see the page before `load`, navigate with `{ waitUntil: "commit" }`.
 - The Polkadot mock has no icon. Its row name is the extension key `mock-polkadot-wallet`, not a display name.
 - On the real-wallet path, the list reflects the extensions installed in the user's Chrome. Assert only on wallets you know are there.
 - Clicking `Connect` on the WalletConnect row opens the AppKit modal and needs a phone wallet. It is not provable on the mock path.

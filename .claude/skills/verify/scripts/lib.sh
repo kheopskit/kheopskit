@@ -62,3 +62,31 @@ build_app() {
 		exit 4
 	fi
 }
+
+walletconnect_env_var() {
+	case "$1" in
+	nextjs-react) echo NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID ;;
+	*) echo VITE_WALLET_CONNECT_PROJECT_ID ;;
+	esac
+}
+
+walletconnect_project_id() {
+	local dir="$REPO_ROOT/examples/$1"
+	case "$1" in
+	nextjs-react)
+		(cd "$dir" && node -e '
+process.env.NODE_ENV ||= "production";
+const { loadEnvConfig } = require(require.resolve("@next/env", { paths: [require.resolve("next/package.json")] }));
+const { combinedEnv } = loadEnvConfig(".", false, { info() {}, error() {} });
+process.stdout.write(combinedEnv.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID ?? "");
+')
+		;;
+	*)
+		(cd "$dir" && node --input-type=module -e '
+import { loadEnv } from "vite";
+process.env.NODE_ENV ||= "production";
+process.stdout.write(loadEnv("production", ".", "VITE_").VITE_WALLET_CONNECT_PROJECT_ID ?? "");
+')
+		;;
+	esac
+}

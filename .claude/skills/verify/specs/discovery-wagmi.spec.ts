@@ -1,4 +1,11 @@
-import { expect, MOCK_WALLETS, snap, test, walletsTable } from "../helpers";
+import {
+	expect,
+	MOCK_WALLETS,
+	snap,
+	test,
+	walletConnectConfigured,
+	walletsTable,
+} from "../helpers";
 
 test("discovery rows", async ({ page }, testInfo) => {
 	await page.goto("/");
@@ -11,8 +18,11 @@ test("discovery rows", async ({ page }, testInfo) => {
 			row.getByRole("cell", { name: "0", exact: true }),
 		).toBeVisible();
 	}
+	await expect(page.getByText("Looking for wallets…")).toBeHidden();
 	const wc = walletsTable(page).getByRole("row", { name: /WalletConnect/ });
-	await expect(wc.getByRole("cell").first()).toHaveText("—");
+	if (walletConnectConfigured)
+		await expect(wc.getByRole("cell").first()).toHaveText("—");
+	else await expect(wc).toHaveCount(0);
 	await snap(page, testInfo, "01-discovered");
 });
 

@@ -33,8 +33,12 @@ git -C "$REPO_ROOT" status --short >>"$evidence/git-head.txt"
 
 [[ $build -eq 1 ]] && build_app "$app" "$evidence/build.log"
 
+walletconnect_id="$(walletconnect_project_id "$app")"
+walletconnect=0
+[[ -n "$walletconnect_id" ]] && walletconnect=1
+
 set +e
-VERIFY_APP="$app" VERIFY_SPEC="$spec" VERIFY_EVIDENCE_DIR="$evidence" \
+VERIFY_APP="$app" VERIFY_WALLETCONNECT="$walletconnect" VERIFY_SPEC="$spec" VERIFY_EVIDENCE_DIR="$evidence" \
 	pnpm --dir "$REPO_ROOT" exec playwright test \
 	-c .claude/skills/verify/playwright.config.ts "$@" 2>&1 | tee "$evidence/playwright.log"
 status=${PIPESTATUS[0]}
