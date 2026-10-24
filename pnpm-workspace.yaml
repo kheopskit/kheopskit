@@ -30,6 +30,7 @@ overrides:
   "launch-editor@<2.14.2": ^2.14.2
   "follow-redirects@<1.16.1": ^1.16.1
   "zod@>=4.0.0 <4.6.6": ^4.6.6
+  "abitype>zod@>=4.0.0 <4.6.6": ^3.22.0 || ^4.6.6
 
 auditConfig:
   ignoreGhsas:
