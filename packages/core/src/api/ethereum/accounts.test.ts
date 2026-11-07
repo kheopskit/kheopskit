@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { WALLET_CONNECT_WALLET_ID, type WalletId } from "../../utils/WalletId";
 import type { LiveWalletConnectWallet } from "../platformAccounts";
 import type { AppKitInstance } from "../types";
-import type { EthereumInjectedWallet } from "./types";
+import type { EthereumAccount, EthereumInjectedWallet } from "./types";
 
 // Valid Ethereum address for tests
 const MOCK_ADDRESS = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
@@ -221,6 +221,33 @@ describe("Ethereum chain ID tracking", () => {
 			expect(results[1]?.[0]?.chainId).toBeUndefined();
 		});
 
+		it("restores chainId from the connect event after a reconnect", async () => {
+			const provider = createMockProvider();
+			provider.request.mockImplementation(async ({ method }) => {
+				if (method === "eth_accounts") return [MOCK_ADDRESS];
+				if (method === "eth_chainId") return "0x1";
+				return null;
+			});
+
+			const wallet = createMockInjectedWallet(provider);
+			const { getEthereumAccounts$ } = await importAccounts();
+
+			let latest: EthereumAccount[] = [];
+			const sub = getEthereumAccounts$(of([wallet])).subscribe((accounts) => {
+				latest = accounts;
+			});
+			await new Promise((r) => setTimeout(r, 10));
+
+			provider._emit("accountsChanged", []);
+			provider._emit("disconnect", { code: 4901 });
+			provider._emit("connect", { chainId: "0x89" });
+			provider._emit("accountsChanged", [MOCK_ADDRESS]);
+			await new Promise((r) => setTimeout(r, 10));
+			sub.unsubscribe();
+
+			expect(latest).toMatchObject([{ address: MOCK_ADDRESS, chainId: 137 }]);
+		});
+
 		it("removes all listeners on teardown", async () => {
 			const provider = createMockProvider();
 			provider.request.mockImplementation(async ({ method }) => {
@@ -239,12 +266,14 @@ describe("Ethereum chain ID tracking", () => {
 			expect(provider._listenerCount("accountsChanged")).toBe(1);
 			expect(provider._listenerCount("chainChanged")).toBe(1);
 			expect(provider._listenerCount("disconnect")).toBe(1);
+			expect(provider._listenerCount("connect")).toBe(1);
 
 			sub.unsubscribe();
 
 			expect(provider._listenerCount("accountsChanged")).toBe(0);
 			expect(provider._listenerCount("chainChanged")).toBe(0);
 			expect(provider._listenerCount("disconnect")).toBe(0);
+			expect(provider._listenerCount("connect")).toBe(0);
 		});
 
 		it("disconnected wallet returns empty accounts with no listeners", async () => {
