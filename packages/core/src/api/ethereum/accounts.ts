@@ -98,6 +98,10 @@ const getInjectedWalletAccounts$ = (
 				chainId$.next(normalizeEvmChainId(chainIdHex));
 			};
 
+			const handleConnect = (connectInfo: { chainId?: unknown }) => {
+				chainId$.next(normalizeEvmChainId(connectInfo?.chainId));
+			};
+
 			const handleDisconnect = () => {
 				chainId$.next(undefined);
 			};
@@ -105,6 +109,7 @@ const getInjectedWalletAccounts$ = (
 			// Subscribe to provider events
 			wallet.provider.on("accountsChanged", handleAccountsChanged);
 			wallet.provider.on("chainChanged", handleChainChanged);
+			wallet.provider.on("connect", handleConnect);
 			wallet.provider.on("disconnect", handleDisconnect);
 
 			// Fetch initial values
@@ -136,6 +141,7 @@ const getInjectedWalletAccounts$ = (
 					handleAccountsChanged,
 				);
 				wallet.provider.removeListener("chainChanged", handleChainChanged);
+				wallet.provider.removeListener("connect", handleConnect);
 				wallet.provider.removeListener("disconnect", handleDisconnect);
 				sub.unsubscribe();
 			};
