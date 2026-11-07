@@ -69,7 +69,7 @@ type HeldRequest = "eth_requestAccounts" | "eth_chainId";
 
 type FakeEthereumWallet = FakeWallet & {
 	switchChain: () => void;
-	/** Leaves the requests for `method` waiting until `release(method)`. */
+	/** Holds the answers to `method`, as computed when requested, until `release(method)`. */
 	hold: (method: HeldRequest) => void;
 	release: (method: HeldRequest) => void;
 };
@@ -85,14 +85,18 @@ const installEthereumWallet = (): FakeEthereumWallet => {
 	const emit = (event: string, ...args: unknown[]) => {
 		for (const listener of listeners.get(event) ?? []) listener(...args);
 	};
+	const answerOf = (method: string) => {
+		if (method === "eth_requestAccounts") authorized = [ETH_ALICE];
+		if (method === "eth_requestAccounts" || method === "eth_accounts")
+			return authorized;
+		if (method === "eth_chainId") return chainId;
+		throw new Error(`unexpected request ${method}`);
+	};
 	const provider = {
 		request: async ({ method }: { method: string }) => {
+			const answer = answerOf(method);
 			await held.get(method as HeldRequest)?.answered;
-			if (method === "eth_requestAccounts") authorized = [ETH_ALICE];
-			if (method === "eth_requestAccounts" || method === "eth_accounts")
-				return authorized;
-			if (method === "eth_chainId") return chainId;
-			throw new Error(`unexpected request ${method}`);
+			return answer;
 		},
 		on: (event: string, listener: Listener) => {
 			const set = listeners.get(event) ?? new Set<Listener>();
@@ -386,44 +390,40 @@ it("an Ethereum chain change emits the accounts on the new chain once", async ()
 	]);
 });
 
-it("an Ethereum connect approved after a chain switch lists the accounts on the new chain only", async () => {
-	const wallet = installEthereumWallet();
-	installed = wallet;
-	loadPage(wallet);
-	wallet.hold("eth_requestAccounts");
+it.each([
+	{
+		change: "a chain switch",
+		held: "eth_requestAccounts",
+		accounts: ["Alice @137"],
+	},
+	{ change: "a chain switch", held: "eth_chainId", accounts: ["Alice @137"] },
+	{
+		change: "an account change",
+		held: "eth_requestAccounts",
+		accounts: ["Bob @1"],
+	},
+	{ change: "an account change", held: "eth_chainId", accounts: ["Bob @1"] },
+] as const)(
+	"an Ethereum connect lists the wallet's accounts as of $change while $held is answered",
+	async ({ change, held, accounts }) => {
+		const wallet = installEthereumWallet();
+		installed = wallet;
+		loadPage(wallet);
+		wallet.hold(held);
 
-	expect(
-		await framesDuring(async () => {
-			const connecting = listedWallet().connect();
-			await betweenProviderEvents();
-			wallet.switchChain();
-			await betweenProviderEvents();
-			wallet.release("eth_requestAccounts");
-			await connecting;
-		}),
-	).toEqual([
-		{ wallets: ["connecting"], accounts: [] },
-		{ wallets: ["connected"], accounts: ["Alice @137"] },
-	]);
-});
-
-it("an Ethereum connect whose account changes while its chain is read lists the new account only", async () => {
-	const wallet = installEthereumWallet();
-	installed = wallet;
-	loadPage(wallet);
-	wallet.hold("eth_chainId");
-
-	expect(
-		await framesDuring(async () => {
-			const connecting = listedWallet().connect();
-			await betweenProviderEvents();
-			wallet.changeAccounts();
-			await betweenProviderEvents();
-			wallet.release("eth_chainId");
-			await connecting;
-		}),
-	).toEqual([
-		{ wallets: ["connecting"], accounts: [] },
-		{ wallets: ["connected"], accounts: ["Bob @1"] },
-	]);
-});
+		expect(
+			await framesDuring(async () => {
+				const connecting = listedWallet().connect();
+				await betweenProviderEvents();
+				if (change === "a chain switch") wallet.switchChain();
+				else wallet.changeAccounts();
+				await betweenProviderEvents();
+				wallet.release(held);
+				await connecting;
+			}),
+		).toEqual([
+			{ wallets: ["connecting"], accounts: [] },
+			{ wallets: ["connected"], accounts },
+		]);
+	},
+);

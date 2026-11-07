@@ -66,27 +66,35 @@ type ReportedAccounts = { addresses: string[]; chainId: number | undefined };
 const lastReported = new WeakMap<EIP1193Provider, ReportedAccounts>();
 
 export const requestAccountsOnChain = async (provider: EIP1193Provider) => {
-	const reported: ReportedAccounts = { addresses: [], chainId: undefined };
+	const accountChanges: string[][] = [];
+	const chainChanges: (number | undefined)[] = [];
 	const handleAccountsChanged = (addresses: string[]) => {
-		reported.addresses = addresses;
+		accountChanges.push(addresses);
 	};
 	const handleChainChanged = (chainId: unknown) => {
-		reported.chainId = normalizeEvmChainId(chainId);
+		chainChanges.push(normalizeEvmChainId(chainId));
 	};
 	provider.on("accountsChanged", handleAccountsChanged);
 	provider.on("chainChanged", handleChainChanged);
 	try {
-		reported.addresses = await provider.request({
+		const addresses = await provider.request({
 			method: "eth_requestAccounts",
 		});
-		reported.chainId = await provider
+		const chainChangesBeforeRead = chainChanges.length;
+		const chainId = await provider
 			.request({ method: "eth_chainId" })
 			.then(normalizeEvmChainId, () => undefined);
+		lastReported.set(provider, {
+			addresses: accountChanges.at(-1) ?? addresses,
+			chainId:
+				chainChanges.length > chainChangesBeforeRead
+					? chainChanges.at(-1)
+					: chainId,
+		});
 	} finally {
 		provider.removeListener("accountsChanged", handleAccountsChanged);
 		provider.removeListener("chainChanged", handleChainChanged);
 	}
-	lastReported.set(provider, reported);
 };
 
 const getInjectedWalletAccounts$ = (
