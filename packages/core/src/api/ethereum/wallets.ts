@@ -9,6 +9,7 @@ import { getWalletId } from "../../utils/WalletId";
 import { isEip1193UserRejection } from "../errors";
 import { createInjectedWallets$ } from "../injectedWallets";
 import type { KheopskitStore } from "../store";
+import { requestAccountsOnChain } from "./accounts";
 import type { EthereumInjectedWallet } from "./types";
 
 /**
@@ -46,11 +47,7 @@ export const getEthereumWallets$ = (store: KheopskitStore) =>
 	createInjectedWallets$<EIP6963ProviderDetail, EthereumInjectedWallet>(store, {
 		sources$: providersDetails$,
 		getWalletId: (pd) => getWalletId("ethereum", pd.info.rdns),
-		connect: async (pd) => {
-			await (pd.provider as EIP1193Provider).request({
-				method: "eth_requestAccounts",
-			});
-		},
+		connect: (pd) => requestAccountsOnChain(pd.provider as EIP1193Provider),
 		isUserRejection: isEip1193UserRejection,
 		// Drop the cached account observable so a later reconnect rebuilds it
 		// against the current provider, not a stale closure.

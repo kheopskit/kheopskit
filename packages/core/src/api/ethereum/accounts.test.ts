@@ -221,6 +221,67 @@ describe("Ethereum chain ID tracking", () => {
 			expect(results[1]?.[0]?.chainId).toBeUndefined();
 		});
 
+		it.each([
+			{ event: "chainChanged", args: ["0x89"] },
+			{ event: "connect", args: [{ chainId: "0x89" }] },
+		])(
+			"keeps the chain of a $event event sent while the first eth_chainId answer was on its way",
+			async ({ event, args }) => {
+				const provider = createMockProvider();
+				let answerChain: (chainId: string) => void = () => {};
+				provider.request.mockImplementation(async ({ method }) => {
+					if (method === "eth_accounts") return [MOCK_ADDRESS];
+					if (method === "eth_chainId")
+						return new Promise((resolve) => {
+							answerChain = resolve;
+						});
+					return null;
+				});
+				const { getEthereumAccounts$ } = await importAccounts();
+				let latest: EthereumAccount[] = [];
+				const sub = getEthereumAccounts$(
+					of([createMockInjectedWallet(provider)]),
+				).subscribe((accounts) => {
+					latest = accounts;
+				});
+
+				provider._emit(event, ...args);
+				answerChain("0x1");
+				await new Promise((r) => setTimeout(r, 10));
+				sub.unsubscribe();
+
+				expect(latest).toMatchObject([{ chainId: 137 }]);
+			},
+		);
+
+		it("keeps the accounts of an accountsChanged event sent while the first eth_accounts answer was on its way", async () => {
+			const provider = createMockProvider();
+			const OTHER_ADDRESS = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359";
+			let answerAccounts: (accounts: string[]) => void = () => {};
+			provider.request.mockImplementation(async ({ method }) => {
+				if (method === "eth_accounts")
+					return new Promise((resolve) => {
+						answerAccounts = resolve;
+					});
+				if (method === "eth_chainId") return "0x1";
+				return null;
+			});
+			const { getEthereumAccounts$ } = await importAccounts();
+			let latest: EthereumAccount[] = [];
+			const sub = getEthereumAccounts$(
+				of([createMockInjectedWallet(provider)]),
+			).subscribe((accounts) => {
+				latest = accounts;
+			});
+
+			provider._emit("accountsChanged", [OTHER_ADDRESS]);
+			answerAccounts([MOCK_ADDRESS]);
+			await new Promise((r) => setTimeout(r, 10));
+			sub.unsubscribe();
+
+			expect(latest.map((account) => account.address)).toEqual([OTHER_ADDRESS]);
+		});
+
 		it("restores chainId from the connect event after a reconnect", async () => {
 			const provider = createMockProvider();
 			provider.request.mockImplementation(async ({ method }) => {
