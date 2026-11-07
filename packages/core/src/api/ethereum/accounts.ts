@@ -6,6 +6,7 @@ import {
 	of,
 	ReplaySubject,
 	shareReplay,
+	tap,
 } from "rxjs";
 import {
 	createWalletClient,
@@ -60,6 +61,20 @@ const toCaipNetworkId = (value: unknown): string | undefined => {
 	return chainId === undefined ? undefined : `eip155:${chainId}`;
 };
 
+type ReportedAccounts = { addresses: string[]; chainId: number | undefined };
+
+const lastReported = new WeakMap<EIP1193Provider, ReportedAccounts>();
+
+export const requestAccountsOnChain = async (provider: EIP1193Provider) => {
+	const [addresses, chainId] = await Promise.all([
+		provider.request({ method: "eth_requestAccounts" }),
+		provider
+			.request({ method: "eth_chainId" })
+			.then(normalizeEvmChainId, () => undefined),
+	]);
+	lastReported.set(provider, { addresses, chainId });
+};
+
 const getInjectedWalletAccounts$ = (
 	wallet: EthereumInjectedWallet,
 ): Observable<EthereumAccount[]> => {
@@ -69,6 +84,11 @@ const getInjectedWalletAccounts$ = (
 		new Observable<EthereumAccount[]>((subscriber) => {
 			const addresses$ = new ReplaySubject<string[]>(1);
 			const chainId$ = new ReplaySubject<number | undefined>(1);
+			const reported = lastReported.get(wallet.provider);
+			if (reported) {
+				addresses$.next(reported.addresses);
+				chainId$.next(reported.chainId);
+			}
 
 			const getAccount = (
 				address: string,
@@ -129,6 +149,9 @@ const getInjectedWalletAccounts$ = (
 			// Combine addresses + chainId into account list
 			const sub = combineLatest([addresses$, chainId$])
 				.pipe(
+					tap(([addresses, chainId]) =>
+						lastReported.set(wallet.provider, { addresses, chainId }),
+					),
 					map(([addresses, chainId]) =>
 						addresses.map((addr) => getAccount(addr, chainId)),
 					),

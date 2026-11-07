@@ -517,29 +517,38 @@ describe("waitForAccount", () => {
 	});
 });
 
-describe("waitForAccount on Ethereum, while eth_accounts has not answered", () => {
+describe("waitForAccount on Ethereum, while the wallet lists no account", () => {
 	const walletId = `ethereum:${ETH_RDNS}` as const;
 	const accountId = `${walletId}::${ETH_ADDRESS}` as const;
 	const holds: Subscription[] = [];
-	let answerAccounts: Array<(addresses: string[]) => void>;
+	let listAccount: () => void;
 	let unannounce: () => void;
 	let store: KheopskitStore;
 
 	beforeEach(() => {
 		vi.useFakeTimers();
-		answerAccounts = [];
+		let authorized: string[] = [];
+		const accountsChanged = new Set<(addresses: string[]) => void>();
+		listAccount = () => {
+			authorized = [ETH_ADDRESS];
+			for (const listener of accountsChanged) listener(authorized);
+		};
 		const provider = {
 			request: async ({ method }: { method: string }) => {
-				if (method === "eth_requestAccounts") return [ETH_ADDRESS];
+				if (method === "eth_requestAccounts" || method === "eth_accounts")
+					return authorized;
 				if (method === "eth_chainId") return "0x1";
-				if (method === "eth_accounts")
-					return new Promise<string[]>((resolve) =>
-						answerAccounts.push(resolve),
-					);
 				throw new Error(`unexpected request ${method}`);
 			},
-			on: () => {},
-			removeListener: () => {},
+			on: (event: string, listener: (addresses: string[]) => void) => {
+				if (event === "accountsChanged") accountsChanged.add(listener);
+			},
+			removeListener: (
+				event: string,
+				listener: (addresses: string[]) => void,
+			) => {
+				if (event === "accountsChanged") accountsChanged.delete(listener);
+			},
 		};
 		unannounce = announceProvider({
 			info: {
@@ -577,7 +586,7 @@ describe("waitForAccount on Ethereum, while eth_accounts has not answered", () =
 		};
 	};
 
-	it("keeps waiting after a fresh connect, and resolves once eth_accounts answers", async () => {
+	it("keeps waiting after a fresh connect, and resolves once the wallet lists the account", async () => {
 		const kit = createKheopskit(
 			{ platforms: [ethereum()], autoReconnect: false },
 			{ store },
@@ -587,22 +596,22 @@ describe("waitForAccount on Ethereum, while eth_accounts has not answered", () =
 		await connect();
 		const settlement = settlementOf(kit.waitForAccount(accountId));
 		await vi.advanceTimersByTimeAsync(5000);
-		const beforeAnswer = observed(settlement);
-		for (const answer of answerAccounts.splice(0)) answer([ETH_ADDRESS]);
+		const beforeListed = observed(settlement);
+		listAccount();
 		await vi.advanceTimersByTimeAsync(100);
 
-		expect({ beforeAnswer, afterAnswer: settlement() }).toEqual({
-			beforeAnswer: {
+		expect({ beforeListed, afterListed: settlement() }).toEqual({
+			beforeListed: {
 				settlement: "pending",
 				isHydrating: false,
 				isConnected: true,
 				accounts: 0,
 			},
-			afterAnswer: "resolved",
+			afterListed: "resolved",
 		});
 	});
 
-	it("keeps waiting after a reload whose eth_accounts outlasts hydrationTimeout, and resolves once it answers", async () => {
+	it("keeps waiting after a reload whose reconnect lists no account past hydrationTimeout, and resolves once the wallet lists it", async () => {
 		const wallet = cachedWalletOf(walletId, "Fake");
 		store.setCachedState([wallet], [cachedAccountOf(wallet, ETH_ADDRESS)]);
 		store.rememberWallet(walletId);
@@ -610,18 +619,18 @@ describe("waitForAccount on Ethereum, while eth_accounts has not answered", () =
 		const { observed } = subscribed(kit);
 		const settlement = settlementOf(kit.waitForAccount(accountId));
 		await vi.advanceTimersByTimeAsync(10_000);
-		const beforeAnswer = observed(settlement);
-		for (const answer of answerAccounts.splice(0)) answer([ETH_ADDRESS]);
+		const beforeListed = observed(settlement);
+		listAccount();
 		await vi.advanceTimersByTimeAsync(100);
 
-		expect({ beforeAnswer, afterAnswer: settlement() }).toEqual({
-			beforeAnswer: {
+		expect({ beforeListed, afterListed: settlement() }).toEqual({
+			beforeListed: {
 				settlement: "pending",
 				isHydrating: false,
 				isConnected: true,
 				accounts: 0,
 			},
-			afterAnswer: "resolved",
+			afterListed: "resolved",
 		});
 	});
 });

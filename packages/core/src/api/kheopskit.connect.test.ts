@@ -1087,7 +1087,7 @@ describe("kheopskitRun$ connect semantics", () => {
 		sub.unsubscribe();
 	});
 
-	it("on Ethereum, connect resolves once the wallet shows connected, the accounts follow in a later emission, and a previous connection's late eth_accounts answer never shows", async () => {
+	it("on Ethereum, connect resolves on the emission that shows the wallet connected with its accounts, and a previous connection's late eth_accounts answer never shows", async () => {
 		const OLD = "0x2222222222222222222222222222222222222222";
 		const NEW = "0x3333333333333333333333333333333333333333";
 		const eth = installFakeEthereumProvider({ address: NEW });
@@ -1105,26 +1105,20 @@ describe("kheopskitRun$ connect semantics", () => {
 		await wallet().disconnect();
 		await wallet().connect();
 		expect(eth.pendingAccountRequests()).toBe(2);
-		expect(ethFramesFrom(emissions, start)).toEqual([
+		const frames = [
 			{ status: "connecting", isConnected: false, accounts: [] },
-			{ status: "connected", isConnected: true, accounts: [] },
+			{ status: "connected", isConnected: true, accounts: [NEW] },
 			{ status: "disconnected", isConnected: false, accounts: [] },
 			{ status: "connecting", isConnected: false, accounts: [] },
-			{ status: "connected", isConnected: true, accounts: [] },
-		]);
+			{ status: "connected", isConnected: true, accounts: [NEW] },
+		];
+		expect(ethFramesFrom(emissions, start)).toEqual(frames);
 
 		eth.releaseAccounts([OLD]);
 		await settleMicrotasks();
 		eth.releaseAccounts([NEW]);
 		await settleMicrotasks();
-		expect(ethFramesFrom(emissions, start)).toEqual([
-			{ status: "connecting", isConnected: false, accounts: [] },
-			{ status: "connected", isConnected: true, accounts: [] },
-			{ status: "disconnected", isConnected: false, accounts: [] },
-			{ status: "connecting", isConnected: false, accounts: [] },
-			{ status: "connected", isConnected: true, accounts: [] },
-			{ status: "connected", isConnected: true, accounts: [NEW] },
-		]);
+		expect(ethFramesFrom(emissions, start)).toEqual(frames);
 
 		sub.unsubscribe();
 	});
@@ -1153,7 +1147,7 @@ describe("kheopskitRun$ connect semantics", () => {
 		await walletIn(emissions.at(-1), a.walletId).connect();
 		await walletIn(emissions.at(-1), b.walletId).connect();
 		await settleMicrotasks();
-		expect(addresses(emissions.at(-1))).toEqual([b.address]);
+		expect(addresses(emissions.at(-1))).toEqual([a.address, b.address]);
 
 		const beforeDisconnect = emissions.length;
 		await walletIn(emissions.at(-1), b.walletId).disconnect();
@@ -1161,12 +1155,11 @@ describe("kheopskitRun$ connect semantics", () => {
 		expect(ethFramesFrom(emissions, beforeDisconnect, b.walletId)).toEqual([
 			{ status: "disconnected", isConnected: false, accounts: [] },
 		]);
-		expect(addresses(emissions.at(-1))).toEqual([]);
+		expect(addresses(emissions.at(-1))).toEqual([a.address]);
 
 		a.releaseAccounts();
 		await settleMicrotasks();
 		expect(ethFramesFrom(emissions, beforeDisconnect, b.walletId)).toEqual([
-			{ status: "disconnected", isConnected: false, accounts: [] },
 			{ status: "disconnected", isConnected: false, accounts: [] },
 		]);
 		expect(addresses(emissions.at(-1))).toEqual([a.address]);
@@ -1226,7 +1219,6 @@ describe("kheopskitRun$ connect semantics", () => {
 		expect(ethFramesFrom(emissions, from, b.walletId)).toEqual([
 			{ status: "disconnected", isConnected: false, accounts: [] },
 			{ status: "connecting", isConnected: false, accounts: [] },
-			{ status: "connected", isConnected: true, accounts: [] },
 			{ status: "connected", isConnected: true, accounts: [NEW] },
 		]);
 		expect(addressesIn(emissions.at(-1))).toEqual([a.address, NEW].sort());
@@ -1250,13 +1242,12 @@ describe("kheopskitRun$ connect semantics", () => {
 		await settleMicrotasks();
 		expect(ethFramesFrom(emissions, from, b.walletId)).toEqual([
 			{ status: "connecting", isConnected: false, accounts: [] },
-			{ status: "connected", isConnected: true, accounts: [] },
 			{ status: "connected", isConnected: true, accounts: [B] },
 		]);
 
 		b.emitAccountsChanged([NEW]);
 		await settleMicrotasks();
-		expect(addressesIn(emissions.at(-1))).toEqual([NEW]);
+		expect(addressesIn(emissions.at(-1))).toEqual([a.address, NEW].sort());
 		expect(a.pendingAccountRequests()).toBe(1);
 
 		a.releaseAccounts();
@@ -1276,7 +1267,7 @@ describe("kheopskitRun$ connect semantics", () => {
 		await walletIn(emissions.at(-1), b.walletId).connect();
 		await walletIn(emissions.at(-1), a.walletId).connect();
 		await settleMicrotasks();
-		expect(addressesIn(emissions.at(-1))).toEqual([OLD]);
+		expect(addressesIn(emissions.at(-1))).toEqual([a.address, OLD].sort());
 		expect(a.pendingAccountRequests()).toBe(1);
 
 		const from = emissions.length;
@@ -1291,10 +1282,9 @@ describe("kheopskitRun$ connect semantics", () => {
 		expect(ethFramesFrom(emissions, from, b.walletId)).toEqual([
 			{ status: "disconnected", isConnected: false, accounts: [] },
 			{ status: "connecting", isConnected: false, accounts: [] },
-			{ status: "connected", isConnected: true, accounts: [] },
 			{ status: "connected", isConnected: true, accounts: [NEW] },
 		]);
-		expect(addressesIn(emissions.at(-1))).toEqual([NEW]);
+		expect(addressesIn(emissions.at(-1))).toEqual([a.address, NEW].sort());
 		expect(a.accountRequests()).toBe(1);
 		expect(a.pendingAccountRequests()).toBe(1);
 
