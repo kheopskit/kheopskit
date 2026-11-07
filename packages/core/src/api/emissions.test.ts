@@ -65,16 +65,28 @@ const installPolkadotWallet = (): FakeWallet => {
 	};
 };
 
-const installEthereumWallet = (): FakeWallet & { switchChain: () => void } => {
+type FakeEthereumWallet = FakeWallet & {
+	switchChain: () => void;
+	/** Leaves the next `eth_requestAccounts` waiting until `approve()`. */
+	holdApproval: () => void;
+	approve: () => void;
+};
+
+const installEthereumWallet = (): FakeEthereumWallet => {
 	let authorized: string[] = [];
 	let chainId = "0x1";
+	let approval: Promise<void> | undefined;
+	let approve = () => {};
 	const listeners = new Map<string, Set<Listener>>();
 	const emit = (event: string, ...args: unknown[]) => {
 		for (const listener of listeners.get(event) ?? []) listener(...args);
 	};
 	const provider = {
 		request: async ({ method }: { method: string }) => {
-			if (method === "eth_requestAccounts") authorized = [ETH_ALICE];
+			if (method === "eth_requestAccounts") {
+				await approval;
+				authorized = [ETH_ALICE];
+			}
 			if (method === "eth_requestAccounts" || method === "eth_accounts")
 				return authorized;
 			if (method === "eth_chainId") return chainId;
@@ -109,6 +121,12 @@ const installEthereumWallet = (): FakeWallet & { switchChain: () => void } => {
 			chainId = "0x89";
 			emit("chainChanged", chainId);
 		},
+		holdApproval: () => {
+			approval = new Promise((resolve) => {
+				approve = resolve;
+			});
+		},
+		approve: () => approve(),
 		disconnectAll: async () => {
 			authorized = [];
 			emit("accountsChanged", authorized);
@@ -357,6 +375,27 @@ it("an Ethereum chain change emits the accounts on the new chain once", async ()
 	await connectedPage(wallet);
 
 	expect(await framesDuring(wallet.switchChain)).toEqual([
+		{ wallets: ["connected"], accounts: ["Alice @137"] },
+	]);
+});
+
+it("an Ethereum connect approved after a chain switch lists the accounts on the new chain only", async () => {
+	const wallet = installEthereumWallet();
+	installed = wallet;
+	loadPage(wallet);
+	wallet.holdApproval();
+
+	expect(
+		await framesDuring(async () => {
+			const connecting = listedWallet().connect();
+			await betweenProviderEvents();
+			wallet.switchChain();
+			await betweenProviderEvents();
+			wallet.approve();
+			await connecting;
+		}),
+	).toEqual([
+		{ wallets: ["connecting"], accounts: [] },
 		{ wallets: ["connected"], accounts: ["Alice @137"] },
 	]);
 });

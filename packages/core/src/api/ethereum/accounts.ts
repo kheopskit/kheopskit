@@ -66,12 +66,10 @@ type ReportedAccounts = { addresses: string[]; chainId: number | undefined };
 const lastReported = new WeakMap<EIP1193Provider, ReportedAccounts>();
 
 export const requestAccountsOnChain = async (provider: EIP1193Provider) => {
-	const [addresses, chainId] = await Promise.all([
-		provider.request({ method: "eth_requestAccounts" }),
-		provider
-			.request({ method: "eth_chainId" })
-			.then(normalizeEvmChainId, () => undefined),
-	]);
+	const addresses = await provider.request({ method: "eth_requestAccounts" });
+	const chainId = await provider
+		.request({ method: "eth_chainId" })
+		.then(normalizeEvmChainId, () => undefined);
 	lastReported.set(provider, { addresses, chainId });
 };
 
