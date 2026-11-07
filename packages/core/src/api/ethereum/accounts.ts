@@ -1,12 +1,15 @@
 import {
 	combineLatest,
 	distinctUntilChanged,
+	firstValueFrom,
 	map,
 	Observable,
 	of,
 	ReplaySubject,
+	race,
 	shareReplay,
 	tap,
+	timer,
 } from "rxjs";
 import {
 	createWalletClient,
@@ -65,6 +68,18 @@ type ReportedAccounts = { addresses: string[]; chainId: number | undefined };
 
 const lastReported = new WeakMap<EIP1193Provider, ReportedAccounts>();
 
+const CHAIN_ANSWER_TIMEOUT_MS = 2_000;
+
+const readChainId = (provider: EIP1193Provider) =>
+	firstValueFrom(
+		race(
+			provider
+				.request({ method: "eth_chainId" })
+				.then(normalizeEvmChainId, () => undefined),
+			timer(CHAIN_ANSWER_TIMEOUT_MS).pipe(map(() => undefined)),
+		),
+	);
+
 export const requestAccountsOnChain = async (provider: EIP1193Provider) => {
 	const accountChanges: string[][] = [];
 	const chainChanges: (number | undefined)[] = [];
@@ -81,9 +96,7 @@ export const requestAccountsOnChain = async (provider: EIP1193Provider) => {
 			method: "eth_requestAccounts",
 		});
 		const chainChangesBeforeRead = chainChanges.length;
-		const chainId = await provider
-			.request({ method: "eth_chainId" })
-			.then(normalizeEvmChainId, () => undefined);
+		const chainId = await readChainId(provider);
 		lastReported.set(provider, {
 			addresses: accountChanges.at(-1) ?? addresses,
 			chainId:
@@ -132,19 +145,26 @@ const getInjectedWalletAccounts$ = (
 				};
 			};
 
+			let accountEvents = 0;
+			let chainEvents = 0;
+
 			const handleAccountsChanged = (addrs: string[]) => {
+				accountEvents++;
 				addresses$.next(addrs);
 			};
 
 			const handleChainChanged = (chainIdHex: unknown) => {
+				chainEvents++;
 				chainId$.next(normalizeEvmChainId(chainIdHex));
 			};
 
 			const handleConnect = (connectInfo: { chainId?: unknown }) => {
+				chainEvents++;
 				chainId$.next(normalizeEvmChainId(connectInfo?.chainId));
 			};
 
 			const handleDisconnect = () => {
+				chainEvents++;
 				chainId$.next(undefined);
 			};
 
@@ -154,19 +174,28 @@ const getInjectedWalletAccounts$ = (
 			wallet.provider.on("connect", handleConnect);
 			wallet.provider.on("disconnect", handleDisconnect);
 
-			// Fetch initial values
+			const accountEventsBeforeRead = accountEvents;
+			const accountsOutdated = () => accountEvents !== accountEventsBeforeRead;
 			wallet.provider
 				.request({ method: "eth_accounts" })
-				.then((addrs: string[]) => addresses$.next(addrs))
+				.then((addrs: string[]) => {
+					if (!accountsOutdated()) addresses$.next(addrs);
+				})
 				.catch((err) => {
 					console.error("Failed to get accounts", err);
-					addresses$.next([]);
+					if (!accountsOutdated()) addresses$.next([]);
 				});
 
+			const chainEventsBeforeRead = chainEvents;
+			const chainOutdated = () => chainEvents !== chainEventsBeforeRead;
 			wallet.provider
 				.request({ method: "eth_chainId" })
-				.then(handleChainChanged)
-				.catch(() => chainId$.next(undefined));
+				.then((chainIdHex: unknown) => {
+					if (!chainOutdated()) chainId$.next(normalizeEvmChainId(chainIdHex));
+				})
+				.catch(() => {
+					if (!chainOutdated()) chainId$.next(undefined);
+				});
 
 			// Combine addresses + chainId into account list
 			const sub = combineLatest([addresses$, chainId$])

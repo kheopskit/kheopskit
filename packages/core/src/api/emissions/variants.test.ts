@@ -105,10 +105,10 @@ const scenarios = <W extends FakeWallet>({
 		const page = loadPage();
 		await settle();
 		expectSteadyFrames(page.frames);
-		expect(wallet.promptsShown(), "prompts opened by the page load").toBe(
-			promptsBefore,
-		);
-		return shownOf(wallet.label, page.frames);
+		return {
+			shown: shownOf(wallet.label, page.frames),
+			prompts: `${wallet.promptsShown() - promptsBefore} prompts`,
+		};
 	};
 	return {
 		withWallet: (run: (wallet: W) => Promise<string[]>) => () => run(install()),
@@ -183,15 +183,29 @@ const scenarios = <W extends FakeWallet>({
 				shows: ["connected", `connected: ${alice}`],
 			},
 			"a reload": {
-				run: () => reload(install()),
-				shows: [`connecting: ${alice} (cached)`, `connected: ${alice}`],
+				run: async () => {
+					const { shown, prompts } = await reload(install());
+					return [...shown, prompts];
+				},
+				shows: [
+					`connecting: ${alice} (cached)`,
+					`connected: ${alice}`,
+					"0 prompts",
+				],
 			},
 			"a reload after a Disconnect All in the wallet": {
-				run: () => {
+				run: async () => {
 					const wallet = install();
-					return reload(wallet, wallet.disconnectAll);
+					return (await reload(wallet, wallet.disconnectAll)).shown;
 				},
 				shows: [`connecting: ${alice} (cached)`, "disconnected"],
+			},
+			"a page load after a Disconnect All in the wallet": {
+				run: async () => {
+					const wallet = install();
+					return [(await reload(wallet, wallet.disconnectAll)).prompts];
+				},
+				shows: ["0 prompts"],
 			},
 		} satisfies Record<string, Scenario>,
 	};
@@ -239,6 +253,22 @@ const describeVariants = <B extends object>(
 
 const REVOKED_RELOAD: KnownGap = { issue: 200 };
 
+const promptsWhenRevoked = (except: string[] = []): KnownGap => ({
+	issue: 198,
+	except,
+});
+
+const REVOKED_WITHOUT_PROMPT = {
+	polkadot: [
+		'revoked: "grants no account"',
+		'revoked: {"enableRejects":"No accounts are authorised to connect"}',
+	],
+	ethereum: [
+		'revoked: "answers no account"',
+		'revoked: {"code":4100,"message":"The requested account has not been authorized"}',
+	],
+};
+
 describeVariants(
 	"a Polkadot",
 	variantsOf<PolkadotBehavior>(POLKADOT_BASELINE, {
@@ -260,13 +290,19 @@ describeVariants(
 			alice: "Alice",
 			bob: "Bob",
 		}).scenarios,
-	{ "a reload after a Disconnect All in the wallet": REVOKED_RELOAD },
+	{
+		"a reload after a Disconnect All in the wallet": REVOKED_RELOAD,
+		"a page load after a Disconnect All in the wallet": promptsWhenRevoked(
+			REVOKED_WITHOUT_PROMPT.polkadot,
+		),
+	},
 );
 
 const ethereumScenarios = (behavior: EthereumBehavior) => {
 	const {
 		scenarios: shared,
 		withWallet,
+		loadPage,
 		connectedPage,
 		shownDuring,
 	} = scenarios<FakeEthereumWallet>({
@@ -284,6 +320,16 @@ const ethereumScenarios = (behavior: EthereumBehavior) => {
 				),
 			),
 			shows: ["connected: Alice @137"],
+		},
+		"a connect to a wallet that never answers eth_chainId": {
+			run: withWallet(async (wallet) => {
+				wallet.stallChainRead();
+				const page = loadPage();
+				return shownDuring(wallet, page, () =>
+					page.wallet(wallet.label).connect(),
+				);
+			}),
+			shows: ["connecting", "connected: Alice"],
 		},
 	};
 };
@@ -336,6 +382,9 @@ describeVariants(
 			],
 		},
 		"a reload after a Disconnect All in the wallet": REVOKED_RELOAD,
+		"a page load after a Disconnect All in the wallet": promptsWhenRevoked(
+			REVOKED_WITHOUT_PROMPT.ethereum,
+		),
 	},
 );
 
@@ -369,6 +418,7 @@ describeVariants(
 			],
 		},
 		"a reload after a Disconnect All in the wallet": REVOKED_RELOAD,
+		"a page load after a Disconnect All in the wallet": promptsWhenRevoked(),
 	},
 );
 
