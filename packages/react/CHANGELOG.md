@@ -1,5 +1,11 @@
 # @kheopskit/react
 
+## 6.0.1
+
+### Patch Changes
+
+- [#193](https://github.com/kheopskit/kheopskit/pull/193) [`9b27768`](https://github.com/kheopskit/kheopskit/commit/9b2776849925029cf22c5d2ad4deddc25d68c572) Thanks [@0xKheops](https://github.com/0xKheops)! - Fixed: injected Ethereum accounts take their chain from the EIP-1193 `connect` event, so they no longer report no chain after the wallet disconnects and reconnects the site (for example, Talisman's Disconnect All then Connect All).
+
 ## 6.0.0
 
 ### Major Changes
