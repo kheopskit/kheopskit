@@ -92,7 +92,8 @@ const landing = (labels: Label[], shown: Shown = "connected"): Shows[] =>
 
 /**
  * The order the fakes' reconnects land in: Solana wallets answer one message,
- * Polkadot and Ethereum wallets two, and each wallet starts in the listed order.
+ * Polkadot and Ethereum wallets two, SubWallet on Ethereum three, and each
+ * wallet starts in the listed order.
  */
 const RECONNECT_ORDER: Label[] = [
 	"Talisman/solana",
