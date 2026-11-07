@@ -16,6 +16,8 @@ import type { BaseWallet, KheopskitConfig } from "./types";
 export type ReconnectPolicyOptions = {
 	/** @default 3 */
 	maxAttempts?: number;
+	/** A failure this accepts ends the wallet's attempts, whatever `maxAttempts` leaves. */
+	isFinalFailure?: (error: unknown) => boolean;
 };
 
 type ReconnectAttemptState =
@@ -26,6 +28,7 @@ type ReconnectAttemptState =
 
 export const createReconnectPolicy = ({
 	maxAttempts = 3,
+	isFinalFailure = () => false,
 }: ReconnectPolicyOptions = {}) => {
 	const states = new Map<string, ReconnectAttemptState>();
 
@@ -53,7 +56,11 @@ export const createReconnectPolicy = ({
 			return true;
 		} catch (err) {
 			const attempts = before?.kind === "failed" ? before.attempts + 1 : 1;
-			recordOutcome({ kind: "failed", attempts });
+			recordOutcome(
+				isFinalFailure(err)
+					? { kind: "settled" }
+					: { kind: "failed", attempts },
+			);
 			throw err;
 		}
 	};
