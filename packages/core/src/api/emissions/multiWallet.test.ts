@@ -409,9 +409,9 @@ describe("kheopskit$ emissions for a user with Talisman, SubWallet, MetaMask and
 					{ "SubWallet/polkadot": "connected" },
 					{ "MetaMask/ethereum": "connected" },
 					{ "Phantom/ethereum": "connected" },
-					{ "SubWallet/ethereum": "connected" },
 					failed,
-					{ ...retrying, "Talisman/ethereum": "connected, accounts cached" },
+					{ ...retrying, "SubWallet/ethereum": "connected" },
+					{ "Talisman/ethereum": "connected, accounts cached" },
 					failed,
 				]),
 				frame(HYDRATING, "connected", {

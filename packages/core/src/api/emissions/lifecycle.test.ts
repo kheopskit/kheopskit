@@ -4,7 +4,12 @@ import type { SyncableStorage } from "../../utils/storage";
 import { ethereum } from "../ethereum/plugin";
 import { polkadot } from "../polkadot/plugin";
 import { solana } from "../solana/plugin";
-import { installTalisman, uninstallAll } from "./fakeWallets";
+import {
+	type FakeEthereumWallet,
+	installSubWallet,
+	installTalisman,
+	uninstallAll,
+} from "./fakeWallets";
 import { closeAllPages, openPage, settle } from "./page";
 
 let storage: SyncableStorage;
@@ -308,27 +313,40 @@ describe("kheopskit$ emissions of Talisman on Ethereum", () => {
 			},
 		]);
 	});
+});
 
-	it("a connect whose account switch reaches the page before the chain answer lists the new account only", async () => {
-		const { wallet, loadPage } = talismanOn("ethereum");
-		const page = loadPage();
-		wallet.holdChainRead();
+describe("kheopskit$ emissions of SubWallet on Ethereum while it reconnects its RPC", () => {
+	it.each([
+		{
+			change: "an account switch",
+			act: (wallet: FakeEthereumWallet) => wallet.setAccounts(["Bob"]),
+			accounts: ["SubWallet/ethereum Bob @1"],
+		},
+		{
+			change: "a chain switch",
+			act: (wallet: FakeEthereumWallet) => wallet.switchChain("0x89"),
+			accounts: ["SubWallet/ethereum Alice @137"],
+		},
+	])(
+		"a connect lists the wallet's accounts as of $change sent before SubWallet's stale chain answer",
+		async ({ act, accounts }) => {
+			const wallet = installSubWallet().ethereum;
+			const page = openPage(storage, { platforms: [ethereum()] });
+			wallet.stallChainRead();
 
-		expect(
-			await page.framesDuring(async () => {
-				const connecting = page.wallet(wallet.label).connect();
-				await vi.advanceTimersByTimeAsync(10);
-				wallet.setAccounts(["Bob"]);
-				await vi.advanceTimersByTimeAsync(10);
-				wallet.answerChainRead();
-				await connecting;
-			}),
-		).toEqual([
-			{ wallets: ["Talisman/ethereum connecting"], accounts: [] },
-			{
-				wallets: ["Talisman/ethereum connected"],
-				accounts: ["Talisman/ethereum Bob @1"],
-			},
-		]);
-	});
+			expect(
+				await page.framesDuring(async () => {
+					const connecting = page.wallet(wallet.label).connect();
+					await vi.advanceTimersByTimeAsync(10);
+					act(wallet);
+					await vi.advanceTimersByTimeAsync(10);
+					wallet.answerChainRead();
+					await connecting;
+				}),
+			).toEqual([
+				{ wallets: ["SubWallet/ethereum connecting"], accounts: [] },
+				{ wallets: ["SubWallet/ethereum connected"], accounts },
+			]);
+		},
+	);
 });

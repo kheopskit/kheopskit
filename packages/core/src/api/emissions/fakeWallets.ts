@@ -223,8 +223,12 @@ type Listener = (...args: unknown[]) => void;
 export type FakeEthereumWallet = FakeWallet & {
 	/** The user switches the wallet to another chain. */
 	switchChain: (chainId: `0x${string}`) => void;
-	/** The wallet answers the next `eth_chainId` only once `answerChainRead()` runs. */
-	holdChainRead: () => void;
+	/**
+	 * The wallet reads the chain for the next `eth_chainId`, then waits until
+	 * `answerChainRead()` before answering with it, as SubWallet does while it
+	 * reconnects its RPC.
+	 */
+	stallChainRead: () => void;
 	answerChainRead: () => void;
 };
 
@@ -238,6 +242,7 @@ const installEthereumWallet = ({
 	disconnectAllEvents,
 	approvalEvents,
 	emitsAccountsWithAnswers = false,
+	authorizesBeforeAccounts = false,
 }: {
 	rdns: string;
 	name: string;
@@ -247,6 +252,8 @@ const installEthereumWallet = ({
 	disconnectAllEvents: "accountsChanged" | "accountsChanged, disconnect";
 	/** The events the wallet sends once the user approves the site. */
 	approvalEvents: "accountsChanged" | "connect, accountsChanged";
+	/** SubWallet's provider asks its background to authorize the site before it reads the accounts. */
+	authorizesBeforeAccounts?: boolean;
 	/** MetaMask's provider emits `accountsChanged` itself when an accounts answer differs from the last list it saw. */
 	emitsAccountsWithAnswers?: boolean;
 }): FakeEthereumWallet => {
@@ -255,7 +262,7 @@ const installEthereumWallet = ({
 	let access: SiteAccess = "new";
 	let granted = accounts;
 	let chainId = "0x1";
-	let heldChainRead: (() => void) | undefined;
+	let stalledChainRead: (() => void) | undefined;
 	let lastSeen: string[] = [];
 	const listeners = new Map<string, Set<Listener>>();
 	const visible = () =>
@@ -280,6 +287,7 @@ const installEthereumWallet = ({
 			return addresses;
 		});
 	const requestAccounts = async () => {
+		if (authorizesBeforeAccounts) await deliver(() => {});
 		if (access === "revoked" && revokedConnect !== "prompt") {
 			if (revokedConnect === "answer no account") return answerAccounts([]);
 			const message = revokedConnect.reject;
@@ -306,13 +314,12 @@ const installEthereumWallet = ({
 			if (method === "eth_requestAccounts") return requestAccounts();
 			if (method === "eth_accounts") return answerAccounts(visible());
 			if (method === "eth_chainId") {
-				if (heldChainRead) {
-					const answered = new Promise<void>((resolve) => {
-						heldChainRead = resolve;
+				const read = chainId;
+				if (stalledChainRead)
+					await new Promise<void>((resolve) => {
+						stalledChainRead = resolve;
 					});
-					await answered;
-				}
-				return deliver(() => chainId);
+				return deliver(() => read);
 			}
 			throw new Error(`unexpected request ${method}`);
 		},
@@ -360,12 +367,12 @@ const installEthereumWallet = ({
 			chainId = next;
 			send("chainChanged", chainId);
 		},
-		holdChainRead: () => {
-			heldChainRead = () => {};
+		stallChainRead: () => {
+			stalledChainRead = () => {};
 		},
 		answerChainRead: () => {
-			const answer = heldChainRead;
-			heldChainRead = undefined;
+			const answer = stalledChainRead;
+			stalledChainRead = undefined;
 			answer?.();
 		},
 		uninstall: unannounce,
@@ -513,6 +520,7 @@ export const installSubWallet = (person: Person = "Alice") => ({
 		rdns: "app.subwallet",
 		name: "SubWallet",
 		accounts: [person],
+		authorizesBeforeAccounts: true,
 		revokedConnect: "prompt",
 		disconnectAllEvents: "accountsChanged",
 		approvalEvents: "accountsChanged",
