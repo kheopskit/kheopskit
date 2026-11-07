@@ -65,28 +65,30 @@ const installPolkadotWallet = (): FakeWallet => {
 	};
 };
 
+type HeldRequest = "eth_requestAccounts" | "eth_chainId";
+
 type FakeEthereumWallet = FakeWallet & {
 	switchChain: () => void;
-	/** Leaves the next `eth_requestAccounts` waiting until `approve()`. */
-	holdApproval: () => void;
-	approve: () => void;
+	/** Leaves the requests for `method` waiting until `release(method)`. */
+	hold: (method: HeldRequest) => void;
+	release: (method: HeldRequest) => void;
 };
 
 const installEthereumWallet = (): FakeEthereumWallet => {
 	let authorized: string[] = [];
 	let chainId = "0x1";
-	let approval: Promise<void> | undefined;
-	let approve = () => {};
+	const held = new Map<
+		HeldRequest,
+		{ answered: Promise<void>; release: () => void }
+	>();
 	const listeners = new Map<string, Set<Listener>>();
 	const emit = (event: string, ...args: unknown[]) => {
 		for (const listener of listeners.get(event) ?? []) listener(...args);
 	};
 	const provider = {
 		request: async ({ method }: { method: string }) => {
-			if (method === "eth_requestAccounts") {
-				await approval;
-				authorized = [ETH_ALICE];
-			}
+			await held.get(method as HeldRequest)?.answered;
+			if (method === "eth_requestAccounts") authorized = [ETH_ALICE];
 			if (method === "eth_requestAccounts" || method === "eth_accounts")
 				return authorized;
 			if (method === "eth_chainId") return chainId;
@@ -121,12 +123,17 @@ const installEthereumWallet = (): FakeEthereumWallet => {
 			chainId = "0x89";
 			emit("chainChanged", chainId);
 		},
-		holdApproval: () => {
-			approval = new Promise((resolve) => {
-				approve = resolve;
+		hold: (method) => {
+			let release = () => {};
+			const answered = new Promise<void>((resolve) => {
+				release = resolve;
 			});
+			held.set(method, { answered, release });
 		},
-		approve: () => approve(),
+		release: (method) => {
+			held.get(method)?.release();
+			held.delete(method);
+		},
 		disconnectAll: async () => {
 			authorized = [];
 			emit("accountsChanged", authorized);
@@ -383,7 +390,7 @@ it("an Ethereum connect approved after a chain switch lists the accounts on the 
 	const wallet = installEthereumWallet();
 	installed = wallet;
 	loadPage(wallet);
-	wallet.holdApproval();
+	wallet.hold("eth_requestAccounts");
 
 	expect(
 		await framesDuring(async () => {
@@ -391,11 +398,32 @@ it("an Ethereum connect approved after a chain switch lists the accounts on the 
 			await betweenProviderEvents();
 			wallet.switchChain();
 			await betweenProviderEvents();
-			wallet.approve();
+			wallet.release("eth_requestAccounts");
 			await connecting;
 		}),
 	).toEqual([
 		{ wallets: ["connecting"], accounts: [] },
 		{ wallets: ["connected"], accounts: ["Alice @137"] },
+	]);
+});
+
+it("an Ethereum connect whose account changes while its chain is read lists the new account only", async () => {
+	const wallet = installEthereumWallet();
+	installed = wallet;
+	loadPage(wallet);
+	wallet.hold("eth_chainId");
+
+	expect(
+		await framesDuring(async () => {
+			const connecting = listedWallet().connect();
+			await betweenProviderEvents();
+			wallet.changeAccounts();
+			await betweenProviderEvents();
+			wallet.release("eth_chainId");
+			await connecting;
+		}),
+	).toEqual([
+		{ wallets: ["connecting"], accounts: [] },
+		{ wallets: ["connected"], accounts: ["Bob @1"] },
 	]);
 });
