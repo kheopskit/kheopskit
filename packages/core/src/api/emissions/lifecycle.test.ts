@@ -101,15 +101,18 @@ describe.each([
 			]);
 		});
 
-		it("disconnect shows the wallet disconnected without accounts", async () => {
-			const page = await connectedPage();
+		it.skipIf(platform === solana)(
+			"disconnect shows the wallet disconnected without accounts",
+			async () => {
+				const page = await connectedPage();
 
-			expect(
-				await page.framesDuring(() =>
-					page.wallet(`Talisman/${platform().platform}`).disconnect(),
-				),
-			).toEqual([{ wallets: [talisman("disconnected")], accounts: [] }]);
-		});
+				expect(
+					await page.framesDuring(() =>
+						page.wallet(`Talisman/${platform().platform}`).disconnect(),
+					),
+				).toEqual([{ wallets: [talisman("disconnected")], accounts: [] }]);
+			},
+		);
 
 		it("an account change in the wallet emits the new account list once", async () => {
 			const wallet = install();
@@ -170,6 +173,23 @@ describe.each([
 		});
 	},
 );
+
+it("disconnect on Solana shows the wallet connected without accounts, then disconnected (#197)", async () => {
+	const { label } = installSolanaWallet({
+		name: "Talisman",
+		accounts: ["Alice"],
+	});
+	const page = openPage(storage, { platforms: [solana()] });
+	await settle();
+	await page.wallet(label).connect();
+
+	expect(
+		await page.framesDuring(() => page.wallet(label).disconnect()),
+	).toEqual([
+		{ wallets: ["Talisman/solana connected"], accounts: [] },
+		{ wallets: ["Talisman/solana disconnected"], accounts: [] },
+	]);
+});
 
 describe("kheopskit$ emissions of one Ethereum wallet", () => {
 	const install = () =>

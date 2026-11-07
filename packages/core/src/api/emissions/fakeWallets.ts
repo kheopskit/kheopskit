@@ -280,9 +280,7 @@ export const installSolanaWallet = ({
 			},
 			"standard:disconnect": {
 				version: "1.0.0",
-				disconnect: async () => {
-					authorized = [];
-				},
+				disconnect: async () => setAccounts([]),
 			},
 			"standard:events": {
 				version: "1.0.0",
