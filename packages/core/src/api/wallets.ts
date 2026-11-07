@@ -43,11 +43,7 @@ export const getWallets$ = (
 			plugin.getWallets$(ctx),
 		);
 
-		const reconnectPolicy = createReconnectPolicy({
-			isFinalFailure: (error) =>
-				error instanceof KheopskitError &&
-				(error.code === "USER_REJECTED" || error.code === "ABORTED"),
-		});
+		const reconnectPolicy = createReconnectPolicy();
 
 		const settleOnUserCall = <W extends BaseWallet>(wallet: W): W => ({
 			...wallet,
@@ -98,8 +94,11 @@ export const getWallets$ = (
 				await reconnectPolicy.attempt(wallet.id, () => wallet.connect());
 			} catch (err) {
 				if (subscriber.closed) return;
-				if (err instanceof KheopskitError && err.code === "USER_REJECTED")
-					store.forgetWallet(wallet.id);
+				if (err instanceof KheopskitError) {
+					if (err.code === "USER_REJECTED") store.forgetWallet(wallet.id);
+					if (err.code === "USER_REJECTED" || err.code === "ABORTED")
+						reconnectPolicy.settle(wallet.id);
+				}
 				if (config.debug)
 					console.debug("[kheopskit] reconnect of %s failed", wallet.id, err);
 			}

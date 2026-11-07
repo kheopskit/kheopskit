@@ -81,8 +81,10 @@ export const openPage = (
 		framesDuring: async (act: () => unknown) => {
 			await settle();
 			const from = frames.length;
-			await act();
+			const acted = Promise.resolve().then(act);
+			acted.catch(() => {});
 			await settle();
+			await acted;
 			return frames.slice(from);
 		},
 	};

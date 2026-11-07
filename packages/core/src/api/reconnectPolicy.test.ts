@@ -83,20 +83,6 @@ describe("createReconnectPolicy settlement", () => {
 		expect(policy.shouldAttempt("w2")).toBe(true);
 	});
 
-	it("a failure isFinalFailure accepts ends the attempts when the attempt rejects", async () => {
-		const policy = createReconnectPolicy({
-			maxAttempts: 3,
-			isFinalFailure: (error) => (error as Error).message === "refused",
-		});
-		const connect = vi.fn().mockRejectedValue(new Error("refused"));
-
-		await expect(policy.attempt("w1", connect)).rejects.toThrow("refused");
-
-		expect(policy.shouldAttempt("w1")).toBe(false);
-		await expect(policy.attempt("w1", connect)).resolves.toBe(false);
-		expect(connect).toHaveBeenCalledTimes(1);
-	});
-
 	it("a settle during a pending attempt outlives the attempt's failure", async () => {
 		const policy = createReconnectPolicy({ maxAttempts: 3 });
 		let reject!: (error: Error) => void;

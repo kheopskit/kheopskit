@@ -34,12 +34,13 @@ const SHOWN = {
 	connecting: { wallet: "connecting", accounts: "none" },
 	connected: { wallet: "connected", accounts: "live" },
 	"connected without accounts": { wallet: "connected", accounts: "none" },
+	"connected, accounts cached": { wallet: "connected", accounts: "cached" },
 	reconnecting: { wallet: "connecting", accounts: "cached" },
 	"cached, not found yet": {
 		wallet: "connecting (cached)",
 		accounts: "cached",
 	},
-	"refused, accounts cached": { wallet: "disconnected", accounts: "cached" },
+	"failed, accounts cached": { wallet: "disconnected", accounts: "cached" },
 } as const;
 
 type Shown = keyof typeof SHOWN;
@@ -51,12 +52,10 @@ const DISCOVERING: Flags = { isDiscovering: true };
 const HYDRATING: Flags = { isHydrating: true };
 const SETTLED: Flags = {};
 
+type Shows = Partial<Record<Label, Shown>>;
+
 /** The frame of a page where each wallet shows `shown`, except the `overrides`. */
-const frame = (
-	flags: Flags,
-	shown: Shown,
-	overrides: Partial<Record<Label, Shown>> = {},
-): Frame => {
+const frame = (flags: Flags, shown: Shown, overrides: Shows = {}): Frame => {
 	const wallets: string[] = [];
 	const accounts: string[] = [];
 	for (const label of LABELS) {
@@ -71,15 +70,43 @@ const frame = (
 	return { ...flags, wallets, accounts };
 };
 
-const each = (labels: Label[], shown: Shown) =>
+/** One frame per change, each applied on top of the previous ones. */
+const changes = (
+	flags: Flags,
+	shown: Shown,
+	start: Shows,
+	steps: Shows[],
+): Frame[] => {
+	let current = start;
+	return steps.map((step) => {
+		current = { ...current, ...step };
+		return frame(flags, shown, current);
+	});
+};
+
+const each = (labels: Label[], shown: Shown): Shows =>
 	Object.fromEntries(labels.map((label) => [label, shown]));
 
-const POLKADOT_AND_SOLANA: Label[] = [
-	"Talisman/polkadot",
-	"SubWallet/polkadot",
+const landing = (labels: Label[], shown: Shown = "connected"): Shows[] =>
+	labels.map((label) => ({ [label]: shown }));
+
+/**
+ * The order the fakes' reconnects land in: Solana wallets answer one message,
+ * Polkadot and Ethereum wallets two, and each wallet starts in the listed order.
+ */
+const RECONNECT_ORDER: Label[] = [
 	"Talisman/solana",
 	"Phantom/solana",
+	"Talisman/polkadot",
+	"SubWallet/polkadot",
+	"Talisman/ethereum",
+	"MetaMask/ethereum",
+	"Phantom/ethereum",
+	"SubWallet/ethereum",
 ];
+
+const without = (labels: Label[], ...left: Label[]) =>
+	labels.filter((label) => !left.includes(label));
 
 let storage: SyncableStorage;
 
@@ -107,8 +134,15 @@ const installWallets = () => ({
 
 const connectedPage = async () => {
 	const page = loadPage();
-	await settle();
-	for (const label of LABELS) await page.wallet(label).connect();
+	for (const label of LABELS)
+		await page.framesDuring(() => page.wallet(label).connect());
+	return page;
+};
+
+const reloadedPage = async (beforeReload: () => void = () => {}) => {
+	(await connectedPage()).close();
+	beforeReload();
+	const page = loadPage();
 	await settle();
 	return page;
 };
@@ -133,15 +167,14 @@ describe("kheopskit$ emissions for a user with Talisman, SubWallet, MetaMask and
 		installPhantom();
 		await settle();
 
-		const talismanOnly = {
-			"SubWallet/polkadot": "absent",
-			"MetaMask/ethereum": "absent",
-			"Phantom/ethereum": "absent",
-			"SubWallet/ethereum": "absent",
-			"Phantom/solana": "absent",
-		} as const;
 		expect(page.frames).toEqual([
-			frame(DISCOVERING, "disconnected", talismanOnly),
+			frame(DISCOVERING, "disconnected", {
+				"SubWallet/polkadot": "absent",
+				"MetaMask/ethereum": "absent",
+				"Phantom/ethereum": "absent",
+				"SubWallet/ethereum": "absent",
+				"Phantom/solana": "absent",
+			}),
 			frame(DISCOVERING, "disconnected", {
 				"SubWallet/polkadot": "absent",
 				"MetaMask/ethereum": "absent",
@@ -200,87 +233,87 @@ describe("kheopskit$ emissions for a user with Talisman, SubWallet, MetaMask and
 		]);
 	});
 
-	it("Talisman's Disconnect All then Connect All on every platform empties and refills Talisman's accounts only", async () => {
+	it("Talisman's Disconnect All then Connect All on every platform empties, then refills, one platform per emission and Talisman's accounts only", async () => {
 		const { talisman } = installWallets();
 		const page = await connectedPage();
-		const talismanLabels: Label[] = [
-			"Talisman/polkadot",
-			"Talisman/ethereum",
-			"Talisman/solana",
-		];
 
 		expect(
-			await page.framesDuring(() =>
-				Promise.all([
-					talisman.polkadot.disconnectAll(),
-					talisman.ethereum.disconnectAll(),
-					talisman.solana.disconnectAll(),
-				]),
-			),
-		).toEqual([
-			frame(
+			await page.framesDuring(() => {
+				talisman.polkadot.disconnectAll();
+				talisman.ethereum.disconnectAll();
+				talisman.solana.disconnectAll();
+			}),
+		).toEqual(
+			changes(
 				SETTLED,
 				"connected",
-				each(talismanLabels, "connected without accounts"),
+				{},
+				landing(
+					["Talisman/polkadot", "Talisman/ethereum", "Talisman/solana"],
+					"connected without accounts",
+				),
 			),
-		]);
+		);
+		const emptied = each(
+			["Talisman/polkadot", "Talisman/ethereum", "Talisman/solana"],
+			"connected without accounts",
+		);
 		expect(
-			await page.framesDuring(() =>
-				Promise.all([
-					talisman.polkadot.connectAll(),
-					talisman.ethereum.connectAll(),
-					talisman.solana.connectAll(),
-				]),
-			),
-		).toEqual([
-			frame(SETTLED, "connected", {
-				"Talisman/ethereum": "connected without accounts",
+			await page.framesDuring(() => {
+				talisman.polkadot.connectAll();
+				talisman.ethereum.connectAll();
+				talisman.solana.connectAll();
 			}),
-			frame(SETTLED, "connected"),
-		]);
+		).toEqual(
+			changes(
+				SETTLED,
+				"connected",
+				emptied,
+				landing(["Talisman/polkadot", "Talisman/solana", "Talisman/ethereum"]),
+			),
+		);
 	});
 
 	describe("on reload", () => {
-		it("every wallet reconnects, Polkadot and Solana first, then Ethereum, then hydration and discovery end", async () => {
-			installWallets();
-			(await connectedPage()).close();
-
-			const page = loadPage();
-			await settle();
+		it("each wallet's reconnect lands in its own emission, without a prompt, then discovery and hydration end", async () => {
+			const wallets = installWallets();
+			const page = await reloadedPage();
 
 			expect(page.frames).toEqual([
 				frame(DISCOVERING_HYDRATING, "reconnecting"),
-				frame(
+				...changes(
 					DISCOVERING_HYDRATING,
 					"reconnecting",
-					each(POLKADOT_AND_SOLANA, "connected"),
+					{},
+					landing(RECONNECT_ORDER),
 				),
-				frame(DISCOVERING_HYDRATING, "connected"),
 				frame(DISCOVERING, "connected"),
 				frame(SETTLED, "connected"),
 			]);
+			expect(wallets.metaMask.ethereum.promptsShown()).toBe(1);
 		});
 
 		it("an uninstalled wallet shows from the cache until discovery ends, then leaves with hydration", async () => {
 			const { phantom } = installWallets();
-			(await connectedPage()).close();
-			phantom.ethereum.uninstall();
-			phantom.solana.uninstall();
+			const page = await reloadedPage(() => {
+				phantom.ethereum.uninstall();
+				phantom.solana.uninstall();
+			});
 
-			const page = loadPage();
-			await settle();
-
-			const phantomCached = {
+			const phantomCached: Shows = {
 				"Phantom/ethereum": "cached, not found yet",
 				"Phantom/solana": "cached, not found yet",
-			} as const;
+			};
 			expect(page.frames).toEqual([
 				frame(DISCOVERING_HYDRATING, "reconnecting", phantomCached),
-				frame(DISCOVERING_HYDRATING, "reconnecting", {
-					...each(POLKADOT_AND_SOLANA, "connected"),
-					...phantomCached,
-				}),
-				frame(DISCOVERING_HYDRATING, "connected", phantomCached),
+				...changes(
+					DISCOVERING_HYDRATING,
+					"reconnecting",
+					phantomCached,
+					landing(
+						without(RECONNECT_ORDER, "Phantom/ethereum", "Phantom/solana"),
+					),
+				),
 				frame(SETTLED, "connected", {
 					"Phantom/ethereum": "absent",
 					"Phantom/solana": "absent",
@@ -288,61 +321,114 @@ describe("kheopskit$ emissions for a user with Talisman, SubWallet, MetaMask and
 			]);
 		});
 
-		it("a wallet that refuses its reconnect is asked once, shows disconnected, and its cached accounts leave when hydration ends", async () => {
+		it("a wallet the user revoked shows its connect popup once; refused, it shows disconnected, its cached accounts leave with hydration, and the next load leaves it alone", async () => {
 			const { metaMask } = installWallets();
-			(await connectedPage()).close();
-			metaMask.ethereum.answerConnects("refuse");
+			const page = await reloadedPage(() => {
+				metaMask.ethereum.disconnectAll();
+				metaMask.ethereum.answerPrompts("refuse");
+			});
 
-			const page = loadPage();
-			await settle();
-
+			const mmRefused: Shows = {
+				"MetaMask/ethereum": "failed, accounts cached",
+			};
 			expect(page.frames).toEqual([
 				frame(DISCOVERING_HYDRATING, "reconnecting"),
-				frame(
-					DISCOVERING_HYDRATING,
-					"reconnecting",
-					each(POLKADOT_AND_SOLANA, "connected"),
-				),
-				frame(DISCOVERING_HYDRATING, "connected", {
-					"MetaMask/ethereum": "refused, accounts cached",
-					"Phantom/ethereum": "reconnecting",
-					"SubWallet/ethereum": "reconnecting",
-				}),
-				frame(DISCOVERING_HYDRATING, "connected", {
-					"MetaMask/ethereum": "refused, accounts cached",
-				}),
+				...changes(DISCOVERING_HYDRATING, "reconnecting", {}, [
+					{ "Talisman/solana": "connected" },
+					{ "Phantom/solana": "connected" },
+					mmRefused,
+					...landing(
+						without(
+							RECONNECT_ORDER,
+							"Talisman/solana",
+							"Phantom/solana",
+							"MetaMask/ethereum",
+						),
+					),
+				]),
 				frame(DISCOVERING, "connected", {
 					"MetaMask/ethereum": "disconnected",
 				}),
 				frame(SETTLED, "connected", { "MetaMask/ethereum": "disconnected" }),
 			]);
+			expect(metaMask.ethereum.promptsShown()).toBe(2);
+			expect(page.wallet("MetaMask/ethereum").error?.code).toBe(
+				"USER_REJECTED",
+			);
+
+			page.close();
+			const next = loadPage();
+			await settle();
+			expect(metaMask.ethereum.promptsShown()).toBe(2);
+			expect(next.frames.at(-1)).toEqual(
+				frame(SETTLED, "connected", { "MetaMask/ethereum": "disconnected" }),
+			);
 		});
 
-		it("a locked wallet holds hydration until hydrationTimeout, shows connecting without accounts, then connected once unlocked", async () => {
+		it("a wallet the user revoked keeps its popup open past hydrationTimeout, shows connecting without accounts, then connected once approved", async () => {
 			const { metaMask } = installWallets();
-			(await connectedPage()).close();
-			metaMask.ethereum.answerConnects("hold");
-
-			const page = loadPage();
+			const page = await reloadedPage(() => {
+				metaMask.ethereum.disconnectAll();
+				metaMask.ethereum.answerPrompts("hold");
+			});
+			expect(metaMask.ethereum.openPrompts()).toBe(1);
+			metaMask.ethereum.releasePrompts("approve");
 			await settle();
-			metaMask.ethereum.grantHeldConnects();
-			await settle();
 
-			const metaMaskReconnecting = {
-				"MetaMask/ethereum": "reconnecting",
-			} as const;
+			const mmWaiting: Shows = { "MetaMask/ethereum": "reconnecting" };
 			expect(page.frames).toEqual([
 				frame(DISCOVERING_HYDRATING, "reconnecting"),
-				frame(
+				...changes(
 					DISCOVERING_HYDRATING,
 					"reconnecting",
-					each(POLKADOT_AND_SOLANA, "connected"),
+					mmWaiting,
+					landing(without(RECONNECT_ORDER, "MetaMask/ethereum")),
 				),
-				frame(DISCOVERING_HYDRATING, "connected", metaMaskReconnecting),
-				frame(HYDRATING, "connected", metaMaskReconnecting),
+				frame(HYDRATING, "connected", mmWaiting),
 				frame(SETTLED, "connected", { "MetaMask/ethereum": "connecting" }),
 				frame(SETTLED, "connected"),
 			]);
+		});
+
+		it("after Talisman's Disconnect All on every platform, Talisman's Polkadot reconnect fails and is retried on other wallets' emissions (#199), and its Solana reconnect opens a prompt (#198)", async () => {
+			const { talisman } = installWallets();
+			const page = await reloadedPage(() => {
+				talisman.polkadot.disconnectAll();
+				talisman.ethereum.disconnectAll();
+				talisman.solana.disconnectAll();
+				talisman.solana.answerPrompts("hold");
+			});
+
+			const failed: Shows = { "Talisman/polkadot": "failed, accounts cached" };
+			const retrying: Shows = { "Talisman/polkadot": "reconnecting" };
+			expect(page.frames).toEqual([
+				frame(DISCOVERING_HYDRATING, "reconnecting"),
+				...changes(DISCOVERING_HYDRATING, "reconnecting", {}, [
+					failed,
+					{ ...retrying, "Phantom/solana": "connected" },
+					{ "SubWallet/polkadot": "connected" },
+					{ "MetaMask/ethereum": "connected" },
+					{ "Phantom/ethereum": "connected" },
+					{ "SubWallet/ethereum": "connected" },
+					failed,
+					{ ...retrying, "Talisman/ethereum": "connected, accounts cached" },
+					failed,
+				]),
+				frame(HYDRATING, "connected", {
+					...failed,
+					"Talisman/ethereum": "connected, accounts cached",
+					"Talisman/solana": "reconnecting",
+				}),
+				frame(SETTLED, "connected", {
+					"Talisman/polkadot": "disconnected",
+					"Talisman/ethereum": "connected without accounts",
+					"Talisman/solana": "connecting",
+				}),
+			]);
+			expect(talisman.solana.openPrompts()).toBe(1);
+			expect(page.wallet("Talisman/polkadot").error?.code).toBe(
+				"CONNECT_FAILED",
+			);
 		});
 	});
 });
