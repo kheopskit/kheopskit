@@ -90,6 +90,24 @@ export const openPage = (
 	};
 };
 
+/**
+ * What `frames` show of one wallet, as "status" or "status: account, …",
+ * without the frames where it shows the same as in the previous one.
+ */
+export const shownOf = (label: string, frames: Frame[]) => {
+	const prefix = `${label} `;
+	const strip = (item: string) => item.slice(prefix.length);
+	const shown = frames.map((frame) => {
+		const status = frame.wallets.find((w) => w.startsWith(prefix));
+		const accounts = frame.accounts.filter((a) => a.startsWith(prefix));
+		const wallet = status ? strip(status) : "absent";
+		return accounts.length
+			? `${wallet}: ${accounts.map(strip).join(", ")}`
+			: wallet;
+	});
+	return shown.filter((item, i) => item !== shown[i - 1]);
+};
+
 export const closeAllPages = () => {
 	for (const close of [...openPages]) close();
 };

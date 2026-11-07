@@ -27,26 +27,34 @@ export const personOf = (address: string): string =>
 		.find(([, candidate]) => candidate === address)?.[0] ?? address;
 
 /**
- * An extension's page script hears from its background through `postMessage`:
- * every answer and every event arrives in its own task, in the order the
- * background sent them.
+ * How the wallet's answers and events reach the page, in the order the wallet
+ * sent them: at once, in a microtask, or each in its own task after
+ * `latencyMs`, as an extension's `postMessage` transport delivers them.
  */
-const createChannel = () => {
+export type Delivery = "sync" | "microtask" | { latencyMs: number };
+
+const createChannel = (delivery: Delivery) => {
 	let tail: Promise<unknown> = Promise.resolve();
 	return <T>(message: () => T | Promise<T>): Promise<T> => {
-		const delivered = tail
-			.then(() => new Promise((resolve) => setTimeout(resolve, 0)))
-			.then(message);
+		if (delivery === "sync")
+			return new Promise<T>((resolve) => resolve(message()));
+		const delivered =
+			delivery === "microtask"
+				? tail.then(message)
+				: tail
+						.then(
+							() =>
+								new Promise((resolve) =>
+									setTimeout(resolve, delivery.latencyMs),
+								),
+						)
+						.then(message);
 		tail = delivered.catch(() => {});
 		return delivered;
 	};
 };
 
-/** How the user answers the wallet's connect prompts. */
 type PromptAnswer = "approve" | "refuse" | "hold";
-
-/** What a wallet does when a site the user revoked in the wallet asks to connect. */
-type RevokedConnect = "prompt" | "answer no account" | { reject: string };
 
 type SiteAccess = "new" | "authorized" | "revoked";
 
@@ -109,50 +117,63 @@ export const uninstallAll = () => {
 	for (const wallet of [...installed]) wallet.uninstall();
 };
 
+type Identity = { name: string; accounts?: Person[] };
+
+export type PolkadotBehavior = {
+	delivery: Delivery;
+	/** How a refused prompt reaches the site. */
+	refusal: { enableRejects: string } | { accountsGetRejects: string };
+	/** What `enable()` does for a site the user revoked in the wallet. */
+	revoked: "prompt" | "grants no account" | { enableRejects: string };
+	/** Whether `accounts.subscribe` calls back before it returns. */
+	firstListCallback: "before subscribe returns" | "delivered later";
+};
+
+export const POLKADOT_BASELINE: PolkadotBehavior = {
+	delivery: { latencyMs: 0 },
+	refusal: { enableRejects: "Rejected" },
+	revoked: "prompt",
+	firstListCallback: "delivered later",
+};
+
 type InjectedWeb3Global = { injectedWeb3?: Record<string, unknown> };
 
-const installPolkadotWallet = ({
-	key,
-	name,
-	accounts,
-	refusal,
-	revokedConnect,
-}: {
-	key: string;
-	name: string;
-	accounts: Person[];
-	/** How `enable()` fails when the user refuses its prompt. */
-	refusal: { reject: string } | { rejectAccountsGet: string };
-	revokedConnect: RevokedConnect;
-}): FakeWallet => {
+export const installPolkadotWallet = (
+	{ name, accounts = ["Alice"] }: Identity,
+	behavior: PolkadotBehavior = POLKADOT_BASELINE,
+	key = name,
+): FakeWallet => {
 	const toAccount = (person: Person) => ({
 		address: ADDRESSES.polkadot[person],
 		name: person,
 		type: "sr25519" as const,
 	});
-	const deliver = createChannel();
+	const deliver = createChannel(behavior.delivery);
 	const prompts = createPrompts();
+	const { refusal, revoked } = behavior;
 	let access: SiteAccess = "new";
 	let granted = accounts;
 	const listeners = new Set<(list: ReturnType<typeof toAccount>[]) => void>();
 	const visible = () => (access === "authorized" ? granted.map(toAccount) : []);
 	const notify = () => {
 		const list = visible();
-		for (const listener of listeners) deliver(() => listener(list));
+		for (const listener of listeners) void deliver(() => listener(list));
 	};
 	const signature = `0x${"01".repeat(64)}` as const;
 	const injected = (refused: boolean): PolkadotInjected => ({
 		accounts: {
 			get: () =>
 				deliver(() => {
-					if (refused && "rejectAccountsGet" in refusal)
-						throw new Error(refusal.rejectAccountsGet);
+					if (refused && "accountsGetRejects" in refusal)
+						throw new Error(refusal.accountsGetRejects);
 					return visible();
 				}),
 			subscribe: (listener) => {
 				listeners.add(listener);
 				const list = visible();
-				deliver(() => listener(list));
+				if (behavior.firstListCallback === "before subscribe returns")
+					listener(list);
+				else void deliver(() => listener(list));
 				return () => {
 					listeners.delete(listener);
 				};
@@ -164,26 +185,21 @@ const installPolkadotWallet = ({
 		},
 	});
 	const enable = async () => {
-		if (access === "revoked" && revokedConnect !== "prompt") {
-			const answer =
-				revokedConnect === "answer no account"
-					? undefined
-					: new Error(revokedConnect.reject);
+		if (access === "revoked" && revoked !== "prompt")
 			return deliver(() => {
-				if (answer) throw answer;
+				if (revoked !== "grants no account")
+					throw new Error(revoked.enableRejects);
 				return injected(false);
 			});
-		}
 		if (access === "authorized") return deliver(() => injected(false));
-		const answer = await prompts.ask();
-		if (answer === "approve") {
+		if ((await prompts.ask()) === "approve") {
 			access = "authorized";
 			granted = accounts;
 			return deliver(() => injected(false));
 		}
-		if ("rejectAccountsGet" in refusal) return deliver(() => injected(true));
+		if ("accountsGetRejects" in refusal) return deliver(() => injected(true));
 		return deliver(() => {
-			throw new Error(refusal.reject);
+			throw new Error(refusal.enableRejects);
 		});
 	};
 	const entry = { version: "1.0.0", enable };
@@ -220,6 +236,39 @@ const installPolkadotWallet = ({
 
 type Listener = (...args: unknown[]) => void;
 
+type EthereumEvent = "accountsChanged" | "connect" | "disconnect";
+
+type EthereumError = { code?: number; message: string };
+
+export type EthereumBehavior = {
+	delivery: Delivery;
+	/** How `eth_requestAccounts` rejects when the user refuses its prompt. */
+	refusal: EthereumError;
+	/** What `eth_requestAccounts` does for a site the user revoked in the wallet. */
+	revoked: "prompt" | "answers no account" | EthereumError;
+	/** The events, in order, when the user removes the site's accounts. */
+	disconnectAllEvents: EthereumEvent[];
+	/** The events, in order, when the user gives the site its accounts back. */
+	connectAllEvents: EthereumEvent[];
+	/** The events, in order, after the user approves a connect prompt. */
+	approvalEvents: EthereumEvent[];
+	/** The provider emits `accountsChanged` itself when an accounts answer differs from the last list it saw, and drops repeats. */
+	accountsChangedFromAnswers: boolean;
+	/** The provider asks its background to authorize the site before it reads the accounts. */
+	authorizesBeforeAccounts: boolean;
+};
+
+export const ETHEREUM_BASELINE: EthereumBehavior = {
+	delivery: { latencyMs: 0 },
+	refusal: { code: 4001, message: "User rejected the request." },
+	revoked: "prompt",
+	disconnectAllEvents: ["accountsChanged"],
+	connectAllEvents: ["accountsChanged"],
+	approvalEvents: ["accountsChanged"],
+	accountsChangedFromAnswers: false,
+	authorizesBeforeAccounts: false,
+};
+
 export type FakeEthereumWallet = FakeWallet & {
 	/** The user switches the wallet to another chain. */
 	switchChain: (chainId: `0x${string}`) => void;
@@ -234,30 +283,12 @@ export type FakeEthereumWallet = FakeWallet & {
 
 let announcements = 0;
 
-const installEthereumWallet = ({
-	rdns,
-	name,
-	accounts,
-	revokedConnect,
-	disconnectAllEvents,
-	approvalEvents,
-	emitsAccountsWithAnswers = false,
-	authorizesBeforeAccounts = false,
-}: {
-	rdns: string;
-	name: string;
-	accounts: Person[];
-	revokedConnect: RevokedConnect;
-	/** The events the wallet sends when the user removes the site's accounts. */
-	disconnectAllEvents: "accountsChanged" | "accountsChanged, disconnect";
-	/** The events the wallet sends once the user approves the site. */
-	approvalEvents: "accountsChanged" | "connect, accountsChanged";
-	/** SubWallet's provider asks its background to authorize the site before it reads the accounts. */
-	authorizesBeforeAccounts?: boolean;
-	/** MetaMask's provider emits `accountsChanged` itself when an accounts answer differs from the last list it saw. */
-	emitsAccountsWithAnswers?: boolean;
-}): FakeEthereumWallet => {
-	const deliver = createChannel();
+export const installEthereumWallet = (
+	{ name, accounts = ["Alice"] }: Identity,
+	behavior: EthereumBehavior = ETHEREUM_BASELINE,
+	rdns = `test.${name.toLowerCase()}`,
+): FakeEthereumWallet => {
+	const deliver = createChannel(behavior.delivery);
 	const prompts = createPrompts();
 	let access: SiteAccess = "new";
 	let granted = accounts;
@@ -272,41 +303,50 @@ const installEthereumWallet = ({
 	const emitNow = (event: string, ...args: unknown[]) => {
 		if (event === "accountsChanged") {
 			const addresses = args[0] as string[];
-			if (emitsAccountsWithAnswers && addresses.join() === lastSeen.join())
+			if (
+				behavior.accountsChangedFromAnswers &&
+				addresses.join() === lastSeen.join()
+			)
 				return;
 			lastSeen = addresses;
 		}
 		for (const listener of listeners.get(event) ?? []) listener(...args);
 	};
-	const send = (event: string, ...args: unknown[]) =>
-		void deliver(() => emitNow(event, ...args));
+	const argsOf = (event: EthereumEvent) =>
+		event === "accountsChanged"
+			? [visible()]
+			: event === "connect"
+				? [{ chainId }]
+				: [{ code: 4901, message: "Disconnected" }];
+	const send = (events: EthereumEvent[]) => {
+		for (const event of events) {
+			const args = argsOf(event);
+			void deliver(() => emitNow(event, ...args));
+		}
+	};
 	const answerAccounts = (addresses: string[]) =>
 		deliver(() => {
-			if (emitsAccountsWithAnswers && addresses.join() !== lastSeen.join())
+			if (behavior.accountsChangedFromAnswers)
 				emitNow("accountsChanged", addresses);
 			return addresses;
 		});
+	const reject = (error: EthereumError) =>
+		deliver(() => {
+			throw error;
+		});
 	const requestAccounts = async () => {
-		if (authorizesBeforeAccounts) await deliver(() => {});
-		if (access === "revoked" && revokedConnect !== "prompt") {
-			if (revokedConnect === "answer no account") return answerAccounts([]);
-			const message = revokedConnect.reject;
-			return deliver(() => {
-				throw new Error(message);
-			});
-		}
+		if (behavior.authorizesBeforeAccounts) await deliver(() => {});
+		const { revoked } = behavior;
+		if (access === "revoked" && revoked !== "prompt")
+			return revoked === "answers no account"
+				? answerAccounts([])
+				: reject(revoked);
 		if (access === "authorized") return answerAccounts(visible());
-		const answer = await prompts.ask();
-		if (answer === "refuse")
-			return deliver(() => {
-				throw { code: 4001, message: "User rejected the request." };
-			});
+		if ((await prompts.ask()) === "refuse") return reject(behavior.refusal);
 		access = "authorized";
 		granted = accounts;
 		const answered = answerAccounts(visible());
-		if (approvalEvents === "connect, accountsChanged")
-			send("connect", { chainId });
-		send("accountsChanged", visible());
+		send(behavior.approvalEvents);
 		return answered;
 	};
 	const provider = {
@@ -345,19 +385,16 @@ const installEthereumWallet = ({
 		label: `${name}/ethereum`,
 		setAccounts: (people) => {
 			granted = people;
-			send("accountsChanged", visible());
+			send(["accountsChanged"]);
 		},
 		disconnectAll: () => {
 			access = "revoked";
-			send("accountsChanged", []);
-			if (disconnectAllEvents === "accountsChanged, disconnect")
-				send("disconnect", { code: 4901, message: "Disconnected" });
+			send(behavior.disconnectAllEvents);
 		},
 		connectAll: () => {
 			access = "authorized";
 			granted = accounts;
-			send("connect", { chainId });
-			send("accountsChanged", visible());
+			send(behavior.connectAllEvents);
 		},
 		answerPrompts: prompts.answerWith,
 		releasePrompts: prompts.release,
@@ -365,7 +402,7 @@ const installEthereumWallet = ({
 		promptsShown: prompts.shown,
 		switchChain: (next) => {
 			chainId = next;
-			send("chainChanged", chainId);
+			void deliver(() => emitNow("chainChanged", next));
 		},
 		stallChainRead: () => {
 			stalledChainRead = () => {};
@@ -379,34 +416,59 @@ const installEthereumWallet = ({
 	});
 };
 
-const installSolanaWallet = ({
-	name,
-	account: person,
-	refusal,
-}: {
-	name: string;
-	/** Talisman and the Wallet Standard reference wallet show the site one selected account. */
-	account: Person;
+type ChangeTiming = "before resolving" | "after resolving" | "never";
+
+export type SolanaBehavior = {
+	delivery: Delivery;
+	/** The message `standard:connect` rejects with when the user refuses its prompt. */
 	refusal: string;
-}): FakeWallet => {
-	const toAccount = (selected: Person) => ({
-		address: ADDRESSES.solana[selected],
+	/** Whether the site sees the account selected in the wallet only, or every account it authorized. */
+	shows: "selected account" | "authorized accounts";
+	/** When `standard:connect` emits `change` with the connected accounts. */
+	changeOnConnect: ChangeTiming;
+	/** When `standard:disconnect` emits `change` with no account. */
+	changeOnDisconnect: ChangeTiming;
+	/** Whether `standard:disconnect` revokes the site, so that the next connect prompts. */
+	disconnectRevokes: boolean;
+};
+
+export const SOLANA_BASELINE: SolanaBehavior = {
+	delivery: { latencyMs: 0 },
+	refusal: "User rejected the request.",
+	shows: "selected account",
+	changeOnConnect: "before resolving",
+	changeOnDisconnect: "before resolving",
+	disconnectRevokes: true,
+};
+
+export const installSolanaWallet = (
+	{ name, accounts = ["Alice"] }: Identity,
+	behavior: SolanaBehavior = SOLANA_BASELINE,
+): FakeWallet => {
+	const toAccount = (person: Person) => ({
+		address: ADDRESSES.solana[person],
 		publicKey: new Uint8Array(32),
 		chains: ["solana:mainnet"],
 		features: [],
-		label: selected,
+		label: person,
 	});
-	const deliver = createChannel();
+	const deliver = createChannel(behavior.delivery);
 	const prompts = createPrompts();
 	let access: SiteAccess = "new";
-	let selected = person;
-	let shown: ReturnType<typeof toAccount> | null = null;
+	let granted = accounts;
+	let shown: Person[] = [];
 	const listeners = new Set<Listener>();
-	const show = (next: ReturnType<typeof toAccount> | null) => {
-		if (shown?.address === next?.address) return;
+	const authorized = () =>
+		behavior.shows === "selected account" ? granted.slice(0, 1) : granted;
+	const show = (next: Person[]) => {
+		if (next.join() === shown.join()) return;
 		shown = next;
 		for (const listener of listeners)
-			listener({ accounts: shown ? [shown] : [] });
+			listener({ accounts: shown.map(toAccount) });
+	};
+	const showAfterResolving = (timing: ChangeTiming, next: Person[]) => {
+		if (timing === "after resolving") void deliver(() => show(next));
+		if (timing === "never") shown = next;
 	};
 	const standardWallet = {
 		version: "1.0.0",
@@ -414,31 +476,36 @@ const installSolanaWallet = ({
 		icon: "data:image/svg+xml;base64,AAAA",
 		chains: ["solana:mainnet"],
 		get accounts() {
-			return shown ? [shown] : [];
+			return shown.map(toAccount);
 		},
 		features: {
 			"standard:connect": {
 				version: "1.0.0",
 				connect: async () => {
 					if (access !== "authorized") {
-						const answer = await prompts.ask();
-						if (answer === "refuse")
+						if ((await prompts.ask()) === "refuse")
 							return deliver(() => {
-								throw new Error(refusal);
+								throw new Error(behavior.refusal);
 							});
 						access = "authorized";
-						selected = person;
+						granted = accounts;
 					}
-					await deliver(() => {});
-					show(toAccount(selected));
-					return { accounts: [toAccount(selected)] };
+					const next = authorized();
+					await deliver(() => {
+						if (behavior.changeOnConnect === "before resolving") show(next);
+					});
+					showAfterResolving(behavior.changeOnConnect, next);
+					return { accounts: next.map(toAccount) };
 				},
 			},
 			"standard:disconnect": {
 				version: "1.0.0",
 				disconnect: async () => {
-					access = "revoked";
-					await deliver(() => show(null));
+					if (behavior.disconnectRevokes) access = "revoked";
+					await deliver(() => {
+						if (behavior.changeOnDisconnect === "before resolving") show([]);
+					});
+					showAfterResolving(behavior.changeOnDisconnect, []);
 				},
 			},
 			"standard:events": {
@@ -456,20 +523,17 @@ const installSolanaWallet = ({
 	return track({
 		label: `${name}/solana`,
 		setAccounts: (people) => {
-			const [next] = people;
-			if (!next || people.length > 1)
-				throw new Error(`${name} shows the site exactly one selected account`);
-			selected = next;
-			deliver(() => show(toAccount(selected)));
+			granted = people;
+			void deliver(() => show(authorized()));
 		},
 		disconnectAll: () => {
 			access = "revoked";
-			deliver(() => show(null));
+			void deliver(() => show([]));
 		},
 		connectAll: () => {
 			access = "authorized";
-			selected = person;
-			deliver(() => show(toAccount(selected)));
+			granted = accounts;
+			void deliver(() => show(authorized()));
 		},
 		answerPrompts: prompts.answerWith,
 		releasePrompts: prompts.release,
@@ -479,78 +543,68 @@ const installSolanaWallet = ({
 	});
 };
 
-const TALISMAN_POLKADOT_REVOKED = (url: string) =>
-	`No Talisman wallet accounts are authorised to connect to ${url}`;
-
-/** Talisman on every platform, with the same person's account on each. */
+/**
+ * What each wallet did when its source was read, in November 2026. These are
+ * examples of what kheopskit meets, not a contract: a wallet may change any of
+ * them in its next release.
+ */
 export const installTalisman = (person: Person = "Alice") => ({
-	polkadot: installPolkadotWallet({
-		key: "talisman",
-		name: "Talisman",
-		accounts: [person],
-		refusal: {
-			rejectAccountsGet: `Site ${window.location.origin} has not been authorised for Talisman yet`,
+	polkadot: installPolkadotWallet(
+		{ name: "Talisman", accounts: [person] },
+		{
+			...POLKADOT_BASELINE,
+			refusal: {
+				accountsGetRejects: `Site ${window.location.origin} has not been authorised for Talisman yet`,
+			},
+			revoked: {
+				enableRejects: `No Talisman wallet accounts are authorised to connect to ${window.location.href}`,
+			},
 		},
-		revokedConnect: { reject: TALISMAN_POLKADOT_REVOKED(window.location.href) },
-	}),
-	ethereum: installEthereumWallet({
-		rdns: "xyz.talisman",
-		name: "Talisman",
-		accounts: [person],
-		revokedConnect: "answer no account",
-		disconnectAllEvents: "accountsChanged, disconnect",
-		approvalEvents: "connect, accountsChanged",
-	}),
-	solana: installSolanaWallet({
-		name: "Talisman",
-		account: person,
-		refusal: "Rejected",
-	}),
+		"talisman",
+	),
+	ethereum: installEthereumWallet(
+		{ name: "Talisman", accounts: [person] },
+		{
+			...ETHEREUM_BASELINE,
+			revoked: "answers no account",
+			disconnectAllEvents: ["accountsChanged", "disconnect"],
+			connectAllEvents: ["connect", "accountsChanged"],
+			approvalEvents: ["connect", "accountsChanged"],
+		},
+		"xyz.talisman",
+	),
+	solana: installSolanaWallet(
+		{ name: "Talisman", accounts: [person] },
+		{ ...SOLANA_BASELINE, refusal: "Rejected" },
+	),
 });
 
 export const installSubWallet = (person: Person = "Alice") => ({
-	polkadot: installPolkadotWallet({
-		key: "subwallet-js",
-		name: "SubWallet",
-		accounts: [person],
-		refusal: { reject: "Rejected" },
-		revokedConnect: "prompt",
-	}),
-	ethereum: installEthereumWallet({
-		rdns: "app.subwallet",
-		name: "SubWallet",
-		accounts: [person],
-		authorizesBeforeAccounts: true,
-		revokedConnect: "prompt",
-		disconnectAllEvents: "accountsChanged",
-		approvalEvents: "accountsChanged",
-	}),
+	polkadot: installPolkadotWallet(
+		{ name: "SubWallet", accounts: [person] },
+		POLKADOT_BASELINE,
+		"subwallet-js",
+	),
+	ethereum: installEthereumWallet(
+		{ name: "SubWallet", accounts: [person] },
+		{ ...ETHEREUM_BASELINE, authorizesBeforeAccounts: true },
+		"app.subwallet",
+	),
 });
 
 export const installMetaMask = (person: Person = "Alice") => ({
-	ethereum: installEthereumWallet({
-		rdns: "io.metamask",
-		name: "MetaMask",
-		accounts: [person],
-		revokedConnect: "prompt",
-		disconnectAllEvents: "accountsChanged",
-		approvalEvents: "accountsChanged",
-		emitsAccountsWithAnswers: true,
-	}),
+	ethereum: installEthereumWallet(
+		{ name: "MetaMask", accounts: [person] },
+		{ ...ETHEREUM_BASELINE, accountsChangedFromAnswers: true },
+		"io.metamask",
+	),
 });
 
 export const installPhantom = (person: Person = "Bob") => ({
-	ethereum: installEthereumWallet({
-		rdns: "app.phantom",
-		name: "Phantom",
-		accounts: [person],
-		revokedConnect: "prompt",
-		disconnectAllEvents: "accountsChanged",
-		approvalEvents: "accountsChanged",
-	}),
-	solana: installSolanaWallet({
-		name: "Phantom",
-		account: person,
-		refusal: "User rejected the request.",
-	}),
+	ethereum: installEthereumWallet(
+		{ name: "Phantom", accounts: [person] },
+		ETHEREUM_BASELINE,
+		"app.phantom",
+	),
+	solana: installSolanaWallet({ name: "Phantom", accounts: [person] }),
 });
