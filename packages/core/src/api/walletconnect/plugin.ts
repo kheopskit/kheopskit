@@ -244,8 +244,8 @@ const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
 				type: "walletconnect",
 				platforms,
 				appKit: appKitInstance,
-				name: walletInfo?.name ?? "WalletConnect",
-				icon: walletInfo?.icon ?? WALLET_CONNECT_ICON,
+				name: walletInfo?.name || "WalletConnect",
+				icon: walletInfo?.icon || WALLET_CONNECT_ICON,
 				// One shared session: connecting opens the modal; the wallet
 				// approves namespaces in that single pairing. Disconnect is
 				// session-wide; re-pair to change the approved set.
