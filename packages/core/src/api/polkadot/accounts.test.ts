@@ -486,5 +486,78 @@ describe("getPolkadotAccounts$", () => {
 				},
 			});
 		});
+
+		describe("signRaw chain", () => {
+			const OTHER_GENESIS = "b0a8d493285c2df73290dfb7e61f870f";
+			const THIRD_GENESIS = "68d56f15f85d3136970ec16946040bc1";
+
+			const signRawChainId = async (
+				sessionAccounts: string[],
+				configuredGeneses: string[],
+			) => {
+				const { clearAllCachedObservables } = await import(
+					"../../utils/getCachedObservable"
+				);
+				clearAllCachedObservables();
+
+				const { wallet, provider } = createMockAppKitWallet(sessionAccounts);
+				(
+					wallet.appKit.getCaipNetworks as unknown as ReturnType<typeof vi.fn>
+				).mockReturnValue(
+					configuredGeneses.map((genesis) => ({
+						caipNetworkId: `polkadot:${genesis}`,
+					})),
+				);
+				provider.client.request.mockResolvedValue({ signature: "0xabcd" });
+
+				const accounts = await firstValueFrom(
+					getPolkadotAccounts$(of([wallet]), ["sr25519"]),
+				);
+				const account = accounts.find((a) => a.address === ALICE);
+				if (!account || account.isPlaceholder) throw new Error("no account");
+
+				await account.signRaw("hello");
+				return provider.client.request.mock.calls[0]?.[0]?.chainId;
+			};
+
+			it("targets a chain the session approved when the first configured one is missing", async () => {
+				await expect(
+					signRawChainId(
+						[`polkadot:${OTHER_GENESIS}:${ALICE}`],
+						[GENESIS, OTHER_GENESIS],
+					),
+				).resolves.toBe(`polkadot:${OTHER_GENESIS}`);
+			});
+
+			it("follows the configured order among the approved chains", async () => {
+				await expect(
+					signRawChainId(
+						[
+							`polkadot:${THIRD_GENESIS}:${ALICE}`,
+							`polkadot:${OTHER_GENESIS}:${ALICE}`,
+						],
+						[GENESIS, OTHER_GENESIS, THIRD_GENESIS],
+					),
+				).resolves.toBe(`polkadot:${OTHER_GENESIS}`);
+			});
+
+			it("targets a chain approved for the signing address", async () => {
+				await expect(
+					signRawChainId(
+						[
+							`polkadot:${GENESIS}:${BOB}`,
+							`polkadot:${OTHER_GENESIS}:${ALICE}`,
+						],
+						[GENESIS, OTHER_GENESIS],
+					),
+				).resolves.toBe(`polkadot:${OTHER_GENESIS}`);
+			});
+
+			it("falls back to the approved chain when no configured network matches", async () => {
+				await expect(
+					signRawChainId([`polkadot:${OTHER_GENESIS}:${ALICE}`], [GENESIS]),
+				).resolves.toBe(`polkadot:${OTHER_GENESIS}`);
+			});
+		});
 	});
 });
