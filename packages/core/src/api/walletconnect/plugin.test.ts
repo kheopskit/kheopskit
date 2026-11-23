@@ -449,6 +449,27 @@ describe("walletConnect() provider subscription lifetime through kheopskitRun$",
 		resetAppKitCache();
 	});
 
+	it("keeps the WalletConnect name and icon when the paired wallet reports empty metadata", async () => {
+		vi.resetModules();
+		const appKit = mockAppKit();
+		const { mount, resetAppKitCache } = await observe();
+
+		const { sub, current } = mount();
+		await vi.waitFor(() => expect(current()?.status).toBe("disconnected"));
+		const walletConnectIcon = current()?.icon;
+		expect(walletConnectIcon).toMatch(/^data:image\//);
+
+		appKit.setProviders({ polkadot: {} }, { name: "", icon: "" });
+		await vi.waitFor(() => expect(current()?.status).toBe("connected"));
+		expect(current()).toMatchObject({
+			name: "WalletConnect",
+			icon: walletConnectIcon,
+		});
+
+		sub.unsubscribe();
+		resetAppKitCache();
+	});
+
 	it.each([
 		[
 			"one provider object across sessions, as AppKit 1.8.24",
