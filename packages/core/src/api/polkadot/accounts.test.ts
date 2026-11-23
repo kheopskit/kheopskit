@@ -312,7 +312,15 @@ describe("getPolkadotAccounts$", () => {
 		const createMockAppKitWallet = (accounts: string[]) => {
 			const listeners = new Map<string, Set<(props?: unknown) => void>>();
 			const provider = {
-				session: { topic: "t", namespaces: { polkadot: { accounts } } },
+				session: {
+					topic: "t",
+					namespaces: {
+						polkadot: {
+							accounts,
+							methods: ["polkadot_signTransaction", "polkadot_signMessage"],
+						},
+					},
+				},
 				client: { request: vi.fn() },
 				on: vi.fn((event: string, cb: (props?: unknown) => void) => {
 					let set = listeners.get(event);
@@ -491,7 +499,7 @@ describe("getPolkadotAccounts$", () => {
 			const OTHER_GENESIS = "b0a8d493285c2df73290dfb7e61f870f";
 			const THIRD_GENESIS = "68d56f15f85d3136970ec16946040bc1";
 
-			const signRawChainId = async (
+			const connectAlice = async (
 				sessionAccounts: string[],
 				configuredGeneses: string[],
 			) => {
@@ -515,6 +523,18 @@ describe("getPolkadotAccounts$", () => {
 				);
 				const account = accounts.find((a) => a.address === ALICE);
 				if (!account || account.isPlaceholder) throw new Error("no account");
+
+				return { account, provider };
+			};
+
+			const signRawChainId = async (
+				sessionAccounts: string[],
+				configuredGeneses: string[],
+			) => {
+				const { account, provider } = await connectAlice(
+					sessionAccounts,
+					configuredGeneses,
+				);
 
 				await account.signRaw("hello");
 				return provider.client.request.mock.calls[0]?.[0]?.chainId;
@@ -557,6 +577,62 @@ describe("getPolkadotAccounts$", () => {
 				await expect(
 					signRawChainId([`polkadot:${OTHER_GENESIS}:${ALICE}`], [GENESIS]),
 				).resolves.toBe(`polkadot:${OTHER_GENESIS}`);
+			});
+
+			it("skips an approved chain that does not grant polkadot_signMessage", async () => {
+				const { account, provider } = await connectAlice(
+					[`polkadot:${GENESIS}:${ALICE}`],
+					[GENESIS, OTHER_GENESIS],
+				);
+				provider.session.namespaces.polkadot.methods = [
+					"polkadot_signTransaction",
+				];
+				Object.assign(provider.session.namespaces, {
+					[`polkadot:${OTHER_GENESIS}`]: {
+						accounts: [`polkadot:${OTHER_GENESIS}:${ALICE}`],
+						methods: ["polkadot_signMessage"],
+					},
+				});
+
+				await account.signRaw("hello");
+
+				expect(provider.client.request.mock.calls[0]?.[0]?.chainId).toBe(
+					`polkadot:${OTHER_GENESIS}`,
+				);
+			});
+
+			it("targets the chain the session moved the account to between two signatures", async () => {
+				const { account, provider } = await connectAlice(
+					[`polkadot:${GENESIS}:${ALICE}`],
+					[GENESIS, OTHER_GENESIS],
+				);
+
+				await account.signRaw("hello");
+				provider.session.namespaces.polkadot.accounts = [
+					`polkadot:${OTHER_GENESIS}:${ALICE}`,
+				];
+				await account.signRaw("hello");
+
+				expect(
+					provider.client.request.mock.calls.map(
+						([request]) => request.chainId,
+					),
+				).toEqual([`polkadot:${GENESIS}`, `polkadot:${OTHER_GENESIS}`]);
+			});
+
+			it("rejects with NO_SESSION once the session drops the signing address", async () => {
+				const { account, provider } = await connectAlice(
+					[`polkadot:${GENESIS}:${ALICE}`],
+					[GENESIS],
+				);
+				provider.session.namespaces.polkadot.accounts = [
+					`polkadot:${GENESIS}:${BOB}`,
+				];
+
+				await expect(account.signRaw("hello")).rejects.toMatchObject({
+					code: "NO_SESSION",
+				});
+				expect(provider.client.request).not.toHaveBeenCalled();
 			});
 		});
 	});

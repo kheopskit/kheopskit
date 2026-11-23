@@ -163,7 +163,12 @@ const requestSignMessage = (
 ) => {
 	if (!provider.session)
 		throw new KheopskitError("NO_SESSION", "No session found");
-	const approvedChainIds = getSessionCaip10s(provider.session, "polkadot")
+	const method = "polkadot_signMessage";
+	const approvedChainIds = getSessionCaip10s(
+		provider.session,
+		"polkadot",
+		method,
+	)
 		.filter((caip10) => caip10.split(":")[2] === address)
 		.map((caip10) => caip10.split(":").slice(0, 2).join(":"));
 	const chainId =
@@ -175,14 +180,14 @@ const requestSignMessage = (
 	if (!chainId)
 		throw new KheopskitError(
 			"NO_SESSION",
-			`No polkadot chain approved for ${address} in the WalletConnect session`,
+			`No polkadot chain in the WalletConnect session grants ${method} to ${address}`,
 		);
 
 	return provider.client.request<{ signature: RawSignature }>({
 		topic: provider.session.topic,
 		chainId,
 		request: {
-			method: "polkadot_signMessage",
+			method,
 			params: { address, message },
 		},
 	});
