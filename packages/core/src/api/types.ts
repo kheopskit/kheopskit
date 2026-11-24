@@ -14,7 +14,7 @@ export type WalletPlatform = "polkadot" | "ethereum" | "solana";
 export type WalletConnectProvider = {
 	session?: {
 		topic: string;
-		namespaces: Record<string, { accounts?: string[] }>;
+		namespaces: Record<string, { accounts?: string[]; methods?: string[] }>;
 	};
 	client: {
 		request<T = unknown>(args: {

@@ -231,13 +231,16 @@ export const createPlatformAccounts$ = <
 
 /**
  * CAIP-10 account strings ("<namespace>:<chainRef>:<address>") the live
- * WalletConnect session carries for a namespace.
+ * WalletConnect session carries for a namespace, limited to the entries
+ * granting `method` when one is given.
  */
 export const getSessionCaip10s = (
 	session: NonNullable<WalletConnectProvider["session"]>,
 	namespace: string,
+	method?: string,
 ): string[] =>
 	Object.values(session.namespaces)
+		.filter((ns) => !method || ns.methods?.includes(method))
 		.flatMap((ns) => ns.accounts ?? [])
 		.filter((account) => account.startsWith(`${namespace}:`));
 
