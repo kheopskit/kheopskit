@@ -1,6 +1,7 @@
 import type { AppKit } from "@reown/appkit/core";
 import {
 	BehaviorSubject,
+	catchError,
 	distinctUntilChanged,
 	EMPTY,
 	from,
@@ -291,6 +292,7 @@ const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
 		// subscribeProviders reports neither.
 		const sessionSub = from(appKit.getUniversalProvider())
 			.pipe(
+				catchError(() => EMPTY),
 				switchMap((provider) =>
 					provider
 						? merge(

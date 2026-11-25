@@ -144,12 +144,15 @@ describe("walletConnect().getWallet$ single-session connect model", () => {
 	});
 
 	// Fake AppKit whose connected namespaces the test drives via `emit`.
-	const mockAppKit = (chainNamespaces: string[]) => {
+	const mockAppKit = (
+		chainNamespaces: string[],
+		getUniversalProvider = () => Promise.resolve(undefined),
+	) => {
 		let emit: (p: Record<string, unknown>) => void = () => {};
 		let providers: Record<string, unknown> = {};
 		const fakeAppKit = {
 			chainNamespaces,
-			getUniversalProvider: () => Promise.resolve(undefined),
+			getUniversalProvider,
 			getProvider: (namespace: string) => providers[namespace],
 			subscribeProviders: (cb: (p: Record<string, unknown>) => void) => {
 				emit = (next) => {
@@ -188,6 +191,29 @@ describe("walletConnect().getWallet$ single-session connect model", () => {
 		expect(wallet?.id).toBe(WALLET_CONNECT_WALLET_ID);
 		expect(wallet?.isConnected).toBe(false);
 		expect(wallet?.platforms).toEqual([]);
+
+		sub.unsubscribe();
+		resetAppKitCache();
+	});
+
+	it("still reports a connection when AppKit can't create its universal provider", async () => {
+		vi.resetModules();
+		const { emit } = mockAppKit(["eip155"], () =>
+			Promise.reject(
+				new Error("AppKit:getUniversalProvider - Cannot create provider"),
+			),
+		);
+		const { walletConnect, resetAppKitCache } = await subscribeConnector();
+
+		const emissions: (WalletConnectWallet | null)[] = [];
+		const sub = walletConnect(options)
+			.getWallet$(ctx)
+			.subscribe((w) => emissions.push(w));
+		await vi.waitFor(() => expect(emissions.length).toBeGreaterThan(0));
+
+		emit({ eip155: providerWithSession("eip155") });
+		await vi.waitFor(() => expect(emissions.at(-1)?.isConnected).toBe(true));
+		await new Promise((resolve) => setTimeout(resolve, 10));
 
 		sub.unsubscribe();
 		resetAppKitCache();
@@ -378,7 +404,7 @@ describe("walletConnect() provider subscription lifetime through kheopskitRun$",
 						accounts: [`polkadot:91b171bb158e2d3848fa23a9f1c25182:${address}`],
 					},
 				},
-				peer: { metadata: { name: walletName, icons: [] } },
+				peer: { metadata: { name: walletName, icons: [`icon:${walletName}`] } },
 			};
 		};
 		const createAppKit = vi.fn(() => ({
@@ -645,6 +671,7 @@ describe("walletConnect() provider subscription lifetime through kheopskitRun$",
 			]),
 		);
 		expect(current()?.status).toBe("connected");
+		expect(current()?.icon).toBe("icon:SubWallet");
 
 		sub.unsubscribe();
 		resetAppKitCache();
