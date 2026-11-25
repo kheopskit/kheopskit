@@ -15,6 +15,7 @@ export type WalletConnectProvider = {
 	session?: {
 		topic: string;
 		namespaces: Record<string, { accounts?: string[]; methods?: string[] }>;
+		peer?: { metadata: { name?: string; icons?: string[] } };
 	};
 	client: {
 		request<T = unknown>(args: {

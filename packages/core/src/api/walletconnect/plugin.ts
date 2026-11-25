@@ -133,11 +133,11 @@ const dropAccountsCache = (platform: WalletPlatform): void => {
 	);
 };
 
-const namespaceOf: Record<WalletPlatform, string> = {
+const namespaceOf = {
 	polkadot: "polkadot",
 	ethereum: "eip155",
 	solana: "solana",
-};
+} as const satisfies Record<WalletPlatform, string>;
 const allPlatforms: WalletPlatform[] = ["polkadot", "ethereum", "solana"];
 
 const methodsByNamespace: Record<string, string[]> = {
@@ -182,18 +182,21 @@ const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
 		error: undefined,
 	});
 
-	const hasLiveSession = (namespace: "polkadot" | "eip155" | "solana") => {
+	const liveSession = (platform: WalletPlatform) => {
+		const namespace = namespaceOf[platform];
 		const session =
 			appKit.getProvider<WalletConnectProvider>(namespace)?.session;
-		return !!session && getSessionCaip10s(session, namespace).length > 0;
+		return session && getSessionCaip10s(session, namespace).length > 0
+			? session
+			: undefined;
 	};
 
 	const syncProviders = () => {
 		status$.next({
 			...status$.value,
-			isPolkadotConnected: hasLiveSession("polkadot"),
-			isEthereumConnected: hasLiveSession("eip155"),
-			isSolanaConnected: hasLiveSession("solana"),
+			isPolkadotConnected: !!liveSession("polkadot"),
+			isEthereumConnected: !!liveSession("ethereum"),
+			isSolanaConnected: !!liveSession("solana"),
 		});
 	};
 
@@ -249,14 +252,14 @@ const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
 		map(({ opening, error, ...connected }): WalletConnectWallet => {
 			const platforms = enabledPlatforms.filter((p) => connected[p]);
 			const isConnected = platforms.length > 0;
-			const walletInfo = appKit.getWalletInfo();
+			const peer = platforms[0] && liveSession(platforms[0])?.peer?.metadata;
 			return {
 				id: WALLET_CONNECT_WALLET_ID,
 				type: "walletconnect",
 				platforms,
 				appKit: appKitInstance,
-				name: walletInfo?.name || "WalletConnect",
-				icon: walletInfo?.icon || WALLET_CONNECT_ICON,
+				name: peer?.name || "WalletConnect",
+				icon: peer?.icons?.[0] || WALLET_CONNECT_ICON,
 				// One shared session: connecting opens the modal; the wallet
 				// approves namespaces in that single pairing. Disconnect is
 				// session-wide; re-pair to change the approved set.
@@ -293,6 +296,7 @@ const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
 						? merge(
 								fromEvent(provider, "session_delete"),
 								fromEvent(provider, "connect"),
+								of(undefined),
 							)
 						: EMPTY,
 				),
