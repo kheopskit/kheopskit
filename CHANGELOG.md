@@ -1,5 +1,16 @@
 # kheopskit
 
+## 6.0.3
+
+### Patch Changes
+
+- [#210](https://github.com/kheopskit/kheopskit/pull/210) [`db1da91`](https://github.com/kheopskit/kheopskit/commit/db1da9101e3d7e6b180fde2d49882c3794950afe) Thanks [@0xKheops](https://github.com/0xKheops)! - Fixed: when a wallet paired over WalletConnect reports an empty icon or name, the WalletConnect connector shows the WalletConnect logo and name instead of a broken image and a blank name.
+
+- [#212](https://github.com/kheopskit/kheopskit/pull/212) [`6f7496a`](https://github.com/kheopskit/kheopskit/commit/6f7496abea802936ce3997e96382b2e2b3cb4b6f) Thanks [@0xKheops](https://github.com/0xKheops)! - Fixed: `signRaw` on a Polkadot account connected over WalletConnect now targets a chain the session approved for that account and for `polkadot_signMessage`, preferring the order of the configured networks. Before, it always targeted the first configured network, so wallets that did not approve that network rejected the request.
+- Updated dependencies [[`db1da91`](https://github.com/kheopskit/kheopskit/commit/db1da9101e3d7e6b180fde2d49882c3794950afe), [`6f7496a`](https://github.com/kheopskit/kheopskit/commit/6f7496abea802936ce3997e96382b2e2b3cb4b6f)]:
+  - @kheopskit/core@6.0.3
+  - @kheopskit/react@6.0.3
+
 ## 6.0.2
 
 ### Patch Changes
