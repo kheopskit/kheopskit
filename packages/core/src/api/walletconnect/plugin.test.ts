@@ -319,8 +319,20 @@ describe("walletConnect() provider subscription lifetime through kheopskitRun$",
 		const listeners = new Set<(p: Record<string, unknown>) => void>();
 		let providers: Record<string, unknown> = {};
 		let walletInfo: { name: string; icon: string } | undefined;
+		const universalProvider = sessionProvider();
+		const grantSession = (provider: SessionProvider, address: string) => {
+			provider.session = {
+				topic: address,
+				namespaces: {
+					polkadot: {
+						accounts: [`polkadot:91b171bb158e2d3848fa23a9f1c25182:${address}`],
+					},
+				},
+			};
+		};
 		const createAppKit = vi.fn(() => ({
 			chainNamespaces: ["polkadot"],
+			getUniversalProvider: () => Promise.resolve(universalProvider),
 			getProvider: (namespace: string) => providers[namespace],
 			subscribeProviders: (cb: (p: Record<string, unknown>) => void) => {
 				listeners.add(cb);
@@ -345,38 +357,58 @@ describe("walletConnect() provider subscription lifetime through kheopskitRun$",
 			createAppKit,
 			listeners,
 			setProviders,
+			universalProvider,
 			pair: (
 				provider: SessionProvider,
 				address: string,
 				walletName: string,
 			) => {
-				provider.session = {
-					topic: address,
-					namespaces: {
-						polkadot: {
-							accounts: [
-								`polkadot:91b171bb158e2d3848fa23a9f1c25182:${address}`,
-							],
-						},
-					},
-				};
+				grantSession(provider, address);
 				setProviders({ polkadot: provider }, { name: walletName, icon: "" });
 			},
 			disconnect: (provider: SessionProvider) => {
 				provider.session = undefined;
 				setProviders({});
 			},
+			// AppKit 1.8.24 keeps the provider registered when the wallet deletes
+			// the session, so its providers listeners hear nothing.
+			endSessionFromWallet: (provider: SessionProvider) => {
+				const topic = provider.session?.topic;
+				provider.session = undefined;
+				provider.emit("session_delete", { topic });
+			},
+			// Re-registering the same provider object doesn't notify AppKit's
+			// providers listeners either.
+			pairAgain: (
+				provider: SessionProvider,
+				address: string,
+				walletName: string,
+			) => {
+				grantSession(provider, address);
+				walletInfo = { name: walletName, icon: "" };
+				provider.emit("connect", { session: provider.session });
+			},
 		};
 	};
 
-	const sessionProvider = () => ({
-		session: undefined as
-			| { topic: string; namespaces: Record<string, { accounts: string[] }> }
-			| undefined,
-		on: () => {},
-		off: () => {},
-		client: { request: vi.fn() },
-	});
+	const sessionProvider = () => {
+		const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
+		return {
+			session: undefined as
+				| { topic: string; namespaces: Record<string, { accounts: string[] }> }
+				| undefined,
+			on: (event: string, listener: (...args: unknown[]) => void) => {
+				listeners.set(event, (listeners.get(event) ?? new Set()).add(listener));
+			},
+			off: (event: string, listener: (...args: unknown[]) => void) => {
+				listeners.get(event)?.delete(listener);
+			},
+			emit: (event: string, ...args: unknown[]) => {
+				for (const listener of listeners.get(event) ?? []) listener(...args);
+			},
+			client: { request: vi.fn() },
+		};
+	};
 	type SessionProvider = ReturnType<typeof sessionProvider>;
 
 	const fakePlatform: KheopskitPlatform = {
@@ -519,6 +551,46 @@ describe("walletConnect() provider subscription lifetime through kheopskitRun$",
 			resetAppKitCache();
 		},
 	);
+
+	it("shows the connector disconnected without accounts when the wallet ends the session, and connected again when it pairs again", async () => {
+		vi.resetModules();
+		const appKit = mockAppKit();
+		const { polkadot } = await import("../polkadot/plugin");
+		const { mount, resetAppKitCache } = await observe({
+			...polkadot(),
+			getWallets$: () => of([]),
+		});
+		const provider = appKit.universalProvider;
+
+		const { sub, current, accounts } = mount();
+		await vi.waitFor(() => expect(current()?.status).toBe("disconnected"));
+		appKit.pair(provider, ADDRESS_A, "Nova");
+		await vi.waitFor(() =>
+			expect(accounts()).toEqual([
+				{ address: ADDRESS_A, walletName: "Nova", name: "Nova Polkadot" },
+			]),
+		);
+
+		appKit.endSessionFromWallet(provider);
+		await vi.waitFor(() => expect(current()?.status).toBe("disconnected"));
+		expect(current()?.platforms).toEqual([]);
+		expect(accounts()).toEqual([]);
+
+		appKit.pairAgain(provider, ADDRESS_B, "SubWallet");
+		await vi.waitFor(() =>
+			expect(accounts()).toEqual([
+				{
+					address: ADDRESS_B,
+					walletName: "SubWallet",
+					name: "SubWallet Polkadot",
+				},
+			]),
+		);
+		expect(current()?.status).toBe("connected");
+
+		sub.unsubscribe();
+		resetAppKitCache();
+	});
 });
 
 describe("walletConnect() appKitOptions", () => {
