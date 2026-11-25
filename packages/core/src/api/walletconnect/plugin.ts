@@ -2,8 +2,11 @@ import type { AppKit } from "@reown/appkit/core";
 import {
 	BehaviorSubject,
 	distinctUntilChanged,
+	EMPTY,
 	from,
+	fromEvent,
 	map,
+	merge,
 	Observable,
 	of,
 	shareReplay,
@@ -13,10 +16,12 @@ import {
 import { clearCachedObservablesByPrefix } from "../../utils/getCachedObservable";
 import { WALLET_CONNECT_WALLET_ID } from "../../utils/WalletId";
 import { type KheopskitError, toConnectError } from "../errors";
+import { getSessionCaip10s } from "../platformAccounts";
 import type {
 	AppKitInstance,
 	WalletConnectMetadata,
 	WalletConnectPlugin,
+	WalletConnectProvider,
 	WalletConnectWallet,
 	WalletPlatform,
 } from "../types";
@@ -177,12 +182,18 @@ const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
 		error: undefined,
 	});
 
-	const syncProviders = (providers: Partial<Record<string, unknown>>) => {
+	const hasLiveSession = (namespace: "polkadot" | "eip155" | "solana") => {
+		const session =
+			appKit.getProvider<WalletConnectProvider>(namespace)?.session;
+		return !!session && getSessionCaip10s(session, namespace).length > 0;
+	};
+
+	const syncProviders = () => {
 		status$.next({
 			...status$.value,
-			isPolkadotConnected: !!providers.polkadot,
-			isEthereumConnected: !!providers.eip155,
-			isSolanaConnected: !!providers.solana,
+			isPolkadotConnected: hasLiveSession("polkadot"),
+			isEthereumConnected: hasLiveSession("eip155"),
+			isSolanaConnected: hasLiveSession("solana"),
 		});
 	};
 
@@ -270,15 +281,27 @@ const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
 		for (const platform of allPlatforms) dropAccountsCache(platform);
 		// AppKit's subscribeProviders only reports later changes, so read the
 		// state that may have changed while nobody observed.
-		syncProviders({
-			polkadot: appKit.getProvider("polkadot"),
-			eip155: appKit.getProvider("eip155"),
-			solana: appKit.getProvider("solana"),
-		});
+		syncProviders();
 		const unsubProviders = appKit.subscribeProviders(syncProviders);
+		// AppKit keeps a namespace's provider registered when the wallet ends the
+		// session, and registers that same object again on the next pairing, so
+		// subscribeProviders reports neither.
+		const sessionSub = from(appKit.getUniversalProvider())
+			.pipe(
+				switchMap((provider) =>
+					provider
+						? merge(
+								fromEvent(provider, "session_delete"),
+								fromEvent(provider, "connect"),
+							)
+						: EMPTY,
+				),
+			)
+			.subscribe(syncProviders);
 		const sub = wallet$.subscribe(subscriber);
 		return () => {
 			sub.unsubscribe();
+			sessionSub.unsubscribe();
 			unsubProviders();
 		};
 	});
