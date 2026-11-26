@@ -1,5 +1,11 @@
 # @kheopskit/react
 
+## 6.0.4
+
+### Patch Changes
+
+- [#213](https://github.com/kheopskit/kheopskit/pull/213) [`c6036ff`](https://github.com/kheopskit/kheopskit/commit/c6036ff141717c053c4fe070ddd29b2e5a6f998d) Thanks [@0xKheops](https://github.com/0xKheops)! - Fixed: when the paired wallet ends the WalletConnect session, the WalletConnect wallet now turns `disconnected` and its accounts leave the list, and pairing again connects it. Before, it stayed `connected` with the session's accounts until a page reload, signing with them failed with `NO_SESSION`, and `disconnect()` changed nothing.
+
 ## 6.0.3
 
 ### Patch Changes
