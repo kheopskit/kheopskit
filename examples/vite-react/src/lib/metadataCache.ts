@@ -36,7 +36,7 @@ export const metadataCache = (
 		const mostRecentByChain = Object.values(cache).reduce(
 			(acc, { chainId, timestamp }) => {
 				const mostRecent = acc[chainId] ?? 0;
-				acc[chainId] = timestamp > mostRecent ? timestamp : mostRecent;
+				acc[chainId] = Math.max(timestamp, mostRecent);
 				return acc;
 			},
 			{} as Record<string, number>,
