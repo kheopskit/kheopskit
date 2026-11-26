@@ -21,6 +21,17 @@ const ctx = { config: { debug: false } } as PlatformContext;
 const ADDRESS_A = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 const ADDRESS_B = "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty";
 
+const providerWithSession = (
+	namespace: string,
+	metadata?: { name: string; icons: string[] },
+) => ({
+	session: {
+		topic: "topic",
+		namespaces: { [namespace]: { accounts: [`${namespace}:chain:address`] } },
+		peer: metadata && { metadata },
+	},
+});
+
 describe("walletConnect().getWallet$ when @reown/appkit is unavailable", () => {
 	afterEach(() => {
 		vi.resetModules();
@@ -62,15 +73,19 @@ describe("walletConnect().getWallet$ disconnect", () => {
 		// Capture the providers callback so the test can drive connect/disconnect
 		// transitions, mirroring how AppKit reports them via subscribeProviders.
 		let emitProviders: (p: Record<string, unknown>) => void = () => {};
+		let providers: Record<string, unknown> = {};
 		const fakeAppKit = {
 			chainNamespaces: ["solana"],
-			getProvider: () => undefined,
+			getUniversalProvider: () => Promise.resolve(undefined),
+			getProvider: (namespace: string) => providers[namespace],
 			subscribeProviders: (cb: (p: Record<string, unknown>) => void) => {
-				emitProviders = cb;
-				cb({ solana: {} });
+				emitProviders = (next) => {
+					providers = next;
+					cb(next);
+				};
+				emitProviders({ solana: providerWithSession("solana") });
 				return () => {};
 			},
-			getWalletInfo: () => ({ name: "WC", icon: "icon" }),
 			open: vi.fn(() => Promise.resolve()),
 			disconnect,
 		};
@@ -129,17 +144,24 @@ describe("walletConnect().getWallet$ single-session connect model", () => {
 	});
 
 	// Fake AppKit whose connected namespaces the test drives via `emit`.
-	const mockAppKit = (chainNamespaces: string[]) => {
+	const mockAppKit = (
+		chainNamespaces: string[],
+		getUniversalProvider = () => Promise.resolve(undefined),
+	) => {
 		let emit: (p: Record<string, unknown>) => void = () => {};
+		let providers: Record<string, unknown> = {};
 		const fakeAppKit = {
 			chainNamespaces,
-			getProvider: () => undefined,
+			getUniversalProvider,
+			getProvider: (namespace: string) => providers[namespace],
 			subscribeProviders: (cb: (p: Record<string, unknown>) => void) => {
-				emit = cb;
-				cb({}); // start fully disconnected
+				emit = (next) => {
+					providers = next;
+					cb(next);
+				};
+				emit({}); // start fully disconnected
 				return () => {};
 			},
-			getWalletInfo: () => undefined,
 			open: vi.fn(() => Promise.resolve()),
 			disconnect: vi.fn(() => Promise.resolve()),
 		};
@@ -174,6 +196,29 @@ describe("walletConnect().getWallet$ single-session connect model", () => {
 		resetAppKitCache();
 	});
 
+	it("still reports a connection when AppKit can't create its universal provider", async () => {
+		vi.resetModules();
+		const { emit } = mockAppKit(["eip155"], () =>
+			Promise.reject(
+				new Error("AppKit:getUniversalProvider - Cannot create provider"),
+			),
+		);
+		const { walletConnect, resetAppKitCache } = await subscribeConnector();
+
+		const emissions: (WalletConnectWallet | null)[] = [];
+		const sub = walletConnect(options)
+			.getWallet$(ctx)
+			.subscribe((w) => emissions.push(w));
+		await vi.waitFor(() => expect(emissions.length).toBeGreaterThan(0));
+
+		emit({ eip155: providerWithSession("eip155") });
+		await vi.waitFor(() => expect(emissions.at(-1)?.isConnected).toBe(true));
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
+		sub.unsubscribe();
+		resetAppKitCache();
+	});
+
 	it("reports only the namespaces the wallet approved (no dead per-platform entries)", async () => {
 		vi.resetModules();
 		const { emit } = mockAppKit(["polkadot", "eip155", "solana"]);
@@ -186,7 +231,7 @@ describe("walletConnect().getWallet$ single-session connect model", () => {
 		await vi.waitFor(() => expect(emissions.length).toBeGreaterThan(0));
 
 		// Wallet approves only eip155 in the single pairing.
-		emit({ eip155: {} });
+		emit({ eip155: providerWithSession("eip155") });
 		await vi.waitFor(() => expect(emissions.at(-1)?.isConnected).toBe(true));
 
 		const wallet = emissions.at(-1);
@@ -207,7 +252,11 @@ describe("walletConnect().getWallet$ single-session connect model", () => {
 			.subscribe((w) => emissions.push(w));
 		await vi.waitFor(() => expect(emissions.length).toBeGreaterThan(0));
 
-		emit({ polkadot: {}, eip155: {}, solana: {} });
+		emit({
+			polkadot: providerWithSession("polkadot"),
+			eip155: providerWithSession("eip155"),
+			solana: providerWithSession("solana"),
+		});
 		await vi.waitFor(() => expect(emissions.at(-1)?.platforms).toHaveLength(3));
 
 		const wallet = emissions.at(-1);
@@ -231,11 +280,35 @@ describe("walletConnect().getWallet$ single-session connect model", () => {
 			.subscribe((w) => emissions.push(w));
 		await vi.waitFor(() => expect(emissions.length).toBeGreaterThan(0));
 
-		emit({ eip155: {}, polkadot: {} });
+		emit({
+			eip155: providerWithSession("eip155"),
+			polkadot: providerWithSession("polkadot"),
+		});
 		await vi.waitFor(() => expect(emissions.at(-1)?.isConnected).toBe(true));
 
 		const wallet = emissions.at(-1);
 		expect(wallet?.platforms).toEqual(["ethereum"]);
+
+		sub.unsubscribe();
+		resetAppKitCache();
+	});
+
+	it("leaves out a namespace whose provider is still registered when the session doesn't carry it", async () => {
+		vi.resetModules();
+		const { emit } = mockAppKit(["polkadot", "eip155"]);
+		const { walletConnect, resetAppKitCache } = await subscribeConnector();
+
+		const emissions: (WalletConnectWallet | null)[] = [];
+		const sub = walletConnect(options)
+			.getWallet$(ctx)
+			.subscribe((w) => emissions.push(w));
+		await vi.waitFor(() => expect(emissions.length).toBeGreaterThan(0));
+
+		const ethereumOnlySession = providerWithSession("eip155");
+		emit({ polkadot: ethereumOnlySession, eip155: ethereumOnlySession });
+		await vi.waitFor(() => expect(emissions.at(-1)?.isConnected).toBe(true));
+
+		expect(emissions.at(-1)?.platforms).toEqual(["ethereum"]);
 
 		sub.unsubscribe();
 		resetAppKitCache();
@@ -251,12 +324,12 @@ describe("walletConnect().getWallet$ single AppKit instance", () => {
 	const makeCreateAppKit = () =>
 		vi.fn(() => ({
 			chainNamespaces: ["eip155"],
+			getUniversalProvider: () => Promise.resolve(undefined),
 			getProvider: () => undefined,
 			subscribeProviders: (cb: (p: Record<string, unknown>) => void) => {
 				cb({});
 				return () => {};
 			},
-			getWalletInfo: () => undefined,
 			open: vi.fn(() => Promise.resolve()),
 			disconnect: vi.fn(() => Promise.resolve()),
 		}));
@@ -318,9 +391,25 @@ describe("walletConnect() provider subscription lifetime through kheopskitRun$",
 	const mockAppKit = () => {
 		const listeners = new Set<(p: Record<string, unknown>) => void>();
 		let providers: Record<string, unknown> = {};
-		let walletInfo: { name: string; icon: string } | undefined;
+		const universalProvider = sessionProvider();
+		const grantSession = (
+			provider: SessionProvider,
+			address: string,
+			walletName: string,
+		) => {
+			provider.session = {
+				topic: address,
+				namespaces: {
+					polkadot: {
+						accounts: [`polkadot:91b171bb158e2d3848fa23a9f1c25182:${address}`],
+					},
+				},
+				peer: { metadata: { name: walletName, icons: [`icon:${walletName}`] } },
+			};
+		};
 		const createAppKit = vi.fn(() => ({
 			chainNamespaces: ["polkadot"],
+			getUniversalProvider: () => Promise.resolve(universalProvider),
 			getProvider: (namespace: string) => providers[namespace],
 			subscribeProviders: (cb: (p: Record<string, unknown>) => void) => {
 				listeners.add(cb);
@@ -328,55 +417,75 @@ describe("walletConnect() provider subscription lifetime through kheopskitRun$",
 					listeners.delete(cb);
 				};
 			},
-			getWalletInfo: () => walletInfo,
 			open: vi.fn(() => Promise.resolve()),
 			disconnect: vi.fn(() => Promise.resolve()),
 		}));
 		vi.doMock("@reown/appkit/core", () => ({ createAppKit }));
-		const setProviders = (
-			next: Record<string, unknown>,
-			nextWalletInfo?: { name: string; icon: string },
-		) => {
+		const setProviders = (next: Record<string, unknown>) => {
 			providers = next;
-			walletInfo = nextWalletInfo;
 			for (const listener of listeners) listener(providers);
 		};
 		return {
 			createAppKit,
 			listeners,
 			setProviders,
+			universalProvider,
 			pair: (
 				provider: SessionProvider,
 				address: string,
 				walletName: string,
 			) => {
-				provider.session = {
-					topic: address,
-					namespaces: {
-						polkadot: {
-							accounts: [
-								`polkadot:91b171bb158e2d3848fa23a9f1c25182:${address}`,
-							],
-						},
-					},
-				};
-				setProviders({ polkadot: provider }, { name: walletName, icon: "" });
+				grantSession(provider, address, walletName);
+				setProviders({ polkadot: provider });
 			},
 			disconnect: (provider: SessionProvider) => {
 				provider.session = undefined;
 				setProviders({});
 			},
+			// AppKit 1.8.24 keeps the provider registered when the wallet deletes
+			// the session, so its providers listeners hear nothing.
+			endSessionFromWallet: (provider: SessionProvider) => {
+				const topic = provider.session?.topic;
+				provider.session = undefined;
+				provider.emit("session_delete", { topic });
+			},
+			// Re-registering the same provider object doesn't notify AppKit's
+			// providers listeners either.
+			pairAgain: (
+				provider: SessionProvider,
+				address: string,
+				walletName: string,
+			) => {
+				grantSession(provider, address, walletName);
+				provider.emit("connect", { session: provider.session });
+			},
 		};
 	};
 
-	const sessionProvider = () => ({
-		session: undefined as
-			| { topic: string; namespaces: Record<string, { accounts: string[] }> }
-			| undefined,
-		on: () => {},
-		off: () => {},
-		client: { request: vi.fn() },
-	});
+	const sessionProvider = () => {
+		const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
+		return {
+			session: undefined as
+				| {
+						topic: string;
+						namespaces: Record<string, { accounts: string[] }>;
+						peer?: { metadata: { name: string; icons: string[] } };
+				  }
+				| undefined,
+			on: (event: string, listener: (...args: unknown[]) => void) => {
+				listeners.set(event, (listeners.get(event) ?? new Set()).add(listener));
+			},
+			off: (event: string, listener: (...args: unknown[]) => void) => {
+				listeners.get(event)?.delete(listener);
+			},
+			emit: (event: string, ...args: unknown[]) => {
+				for (const listener of listeners.get(event) ?? []) listener(...args);
+			},
+			listenerCount: () =>
+				[...listeners.values()].reduce((count, set) => count + set.size, 0),
+			client: { request: vi.fn() },
+		};
+	};
 	type SessionProvider = ReturnType<typeof sessionProvider>;
 
 	const fakePlatform: KheopskitPlatform = {
@@ -419,9 +528,13 @@ describe("walletConnect() provider subscription lifetime through kheopskitRun$",
 		const { sub, current } = mount();
 		await vi.waitFor(() => expect(current()?.status).toBe("disconnected"));
 		expect(appKit.listeners.size).toBe(1);
+		await vi.waitFor(() =>
+			expect(appKit.universalProvider.listenerCount()).toBeGreaterThan(0),
+		);
 
 		sub.unsubscribe();
 		expect(appKit.listeners.size).toBe(0);
+		expect(appKit.universalProvider.listenerCount()).toBe(0);
 
 		resetAppKitCache();
 	});
@@ -437,7 +550,7 @@ describe("walletConnect() provider subscription lifetime through kheopskitRun$",
 		);
 		first.sub.unsubscribe();
 
-		appKit.setProviders({ polkadot: {} });
+		appKit.setProviders({ polkadot: providerWithSession("polkadot") });
 
 		const second = mount();
 		await vi.waitFor(() => expect(second.current()?.status).toBe("connected"));
@@ -459,7 +572,9 @@ describe("walletConnect() provider subscription lifetime through kheopskitRun$",
 		const walletConnectIcon = current()?.icon;
 		expect(walletConnectIcon).toMatch(/^data:image\//);
 
-		appKit.setProviders({ polkadot: {} }, { name: "", icon: "" });
+		appKit.setProviders({
+			polkadot: providerWithSession("polkadot", { name: "", icons: [""] }),
+		});
 		await vi.waitFor(() => expect(current()?.status).toBe("connected"));
 		expect(current()).toMatchObject({
 			name: "WalletConnect",
@@ -519,6 +634,69 @@ describe("walletConnect() provider subscription lifetime through kheopskitRun$",
 			resetAppKitCache();
 		},
 	);
+
+	it("shows the connector disconnected without accounts when the wallet ends the session, and connected again when it pairs again", async () => {
+		vi.resetModules();
+		const appKit = mockAppKit();
+		const { polkadot } = await import("../polkadot/plugin");
+		const { mount, resetAppKitCache } = await observe({
+			...polkadot(),
+			getWallets$: () => of([]),
+		});
+		const provider = appKit.universalProvider;
+
+		const { sub, current, accounts } = mount();
+		await vi.waitFor(() => expect(current()?.status).toBe("disconnected"));
+		appKit.pair(provider, ADDRESS_A, "Nova");
+		await vi.waitFor(() =>
+			expect(accounts()).toEqual([
+				{ address: ADDRESS_A, walletName: "Nova", name: "Nova Polkadot" },
+			]),
+		);
+
+		appKit.endSessionFromWallet(provider);
+		await vi.waitFor(() => expect(current()?.status).toBe("disconnected"));
+		expect(current()?.platforms).toEqual([]);
+		expect(current()?.name).toBe("WalletConnect");
+		expect(accounts()).toEqual([]);
+
+		appKit.pairAgain(provider, ADDRESS_B, "SubWallet");
+		await vi.waitFor(() =>
+			expect(accounts()).toEqual([
+				{
+					address: ADDRESS_B,
+					walletName: "SubWallet",
+					name: "SubWallet Polkadot",
+				},
+			]),
+		);
+		expect(current()?.status).toBe("connected");
+		expect(current()?.icon).toBe("icon:SubWallet");
+
+		sub.unsubscribe();
+		resetAppKitCache();
+	});
+
+	it("shows the connector disconnected when the wallet ends the session while it remounts", async () => {
+		vi.resetModules();
+		const appKit = mockAppKit();
+		const { mount, resetAppKitCache } = await observe();
+		const provider = appKit.universalProvider;
+
+		const first = mount();
+		appKit.pair(provider, ADDRESS_A, "Nova");
+		await vi.waitFor(() => expect(first.current()?.status).toBe("connected"));
+		first.sub.unsubscribe();
+
+		const second = mount();
+		appKit.endSessionFromWallet(provider);
+		await vi.waitFor(() =>
+			expect(second.current()?.status).toBe("disconnected"),
+		);
+
+		second.sub.unsubscribe();
+		resetAppKitCache();
+	});
 });
 
 describe("walletConnect() appKitOptions", () => {
@@ -533,12 +711,12 @@ describe("walletConnect() appKitOptions", () => {
 		vi.resetModules();
 		const createAppKit = vi.fn((_options: Record<string, unknown>) => ({
 			chainNamespaces: ["eip155"],
+			getUniversalProvider: () => Promise.resolve(undefined),
 			getProvider: () => undefined,
 			subscribeProviders: (cb: (p: Record<string, unknown>) => void) => {
 				cb({});
 				return () => {};
 			},
-			getWalletInfo: () => undefined,
 			open: vi.fn(() => Promise.resolve()),
 			disconnect: vi.fn(() => Promise.resolve()),
 		}));

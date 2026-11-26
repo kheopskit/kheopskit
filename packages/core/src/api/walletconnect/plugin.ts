@@ -1,9 +1,13 @@
 import type { AppKit } from "@reown/appkit/core";
 import {
 	BehaviorSubject,
+	catchError,
 	distinctUntilChanged,
+	EMPTY,
 	from,
+	fromEvent,
 	map,
+	merge,
 	Observable,
 	of,
 	shareReplay,
@@ -13,10 +17,12 @@ import {
 import { clearCachedObservablesByPrefix } from "../../utils/getCachedObservable";
 import { WALLET_CONNECT_WALLET_ID } from "../../utils/WalletId";
 import { type KheopskitError, toConnectError } from "../errors";
+import { getSessionCaip10s } from "../platformAccounts";
 import type {
 	AppKitInstance,
 	WalletConnectMetadata,
 	WalletConnectPlugin,
+	WalletConnectProvider,
 	WalletConnectWallet,
 	WalletPlatform,
 } from "../types";
@@ -128,11 +134,11 @@ const dropAccountsCache = (platform: WalletPlatform): void => {
 	);
 };
 
-const namespaceOf: Record<WalletPlatform, string> = {
+const namespaceOf = {
 	polkadot: "polkadot",
 	ethereum: "eip155",
 	solana: "solana",
-};
+} as const satisfies Record<WalletPlatform, string>;
 const allPlatforms: WalletPlatform[] = ["polkadot", "ethereum", "solana"];
 
 const methodsByNamespace: Record<string, string[]> = {
@@ -177,12 +183,21 @@ const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
 		error: undefined,
 	});
 
-	const syncProviders = (providers: Partial<Record<string, unknown>>) => {
+	const liveSession = (platform: WalletPlatform) => {
+		const namespace = namespaceOf[platform];
+		const session =
+			appKit.getProvider<WalletConnectProvider>(namespace)?.session;
+		return session && getSessionCaip10s(session, namespace).length > 0
+			? session
+			: undefined;
+	};
+
+	const syncProviders = () => {
 		status$.next({
 			...status$.value,
-			isPolkadotConnected: !!providers.polkadot,
-			isEthereumConnected: !!providers.eip155,
-			isSolanaConnected: !!providers.solana,
+			isPolkadotConnected: !!liveSession("polkadot"),
+			isEthereumConnected: !!liveSession("ethereum"),
+			isSolanaConnected: !!liveSession("solana"),
 		});
 	};
 
@@ -238,14 +253,14 @@ const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
 		map(({ opening, error, ...connected }): WalletConnectWallet => {
 			const platforms = enabledPlatforms.filter((p) => connected[p]);
 			const isConnected = platforms.length > 0;
-			const walletInfo = appKit.getWalletInfo();
+			const peer = platforms[0] && liveSession(platforms[0])?.peer?.metadata;
 			return {
 				id: WALLET_CONNECT_WALLET_ID,
 				type: "walletconnect",
 				platforms,
 				appKit: appKitInstance,
-				name: walletInfo?.name || "WalletConnect",
-				icon: walletInfo?.icon || WALLET_CONNECT_ICON,
+				name: peer?.name || "WalletConnect",
+				icon: peer?.icons?.[0] || WALLET_CONNECT_ICON,
 				// One shared session: connecting opens the modal; the wallet
 				// approves namespaces in that single pairing. Disconnect is
 				// session-wide; re-pair to change the approved set.
@@ -270,15 +285,29 @@ const createConnector$ = (appKit: AppKit): Observable<WalletConnectWallet> => {
 		for (const platform of allPlatforms) dropAccountsCache(platform);
 		// AppKit's subscribeProviders only reports later changes, so read the
 		// state that may have changed while nobody observed.
-		syncProviders({
-			polkadot: appKit.getProvider("polkadot"),
-			eip155: appKit.getProvider("eip155"),
-			solana: appKit.getProvider("solana"),
-		});
+		syncProviders();
 		const unsubProviders = appKit.subscribeProviders(syncProviders);
+		// AppKit keeps a namespace's provider registered when the wallet ends the
+		// session, and registers that same object again on the next pairing, so
+		// subscribeProviders reports neither.
+		const sessionSub = from(appKit.getUniversalProvider())
+			.pipe(
+				catchError(() => EMPTY),
+				switchMap((provider) =>
+					provider
+						? merge(
+								fromEvent(provider, "session_delete"),
+								fromEvent(provider, "connect"),
+								of(undefined),
+							)
+						: EMPTY,
+				),
+			)
+			.subscribe(syncProviders);
 		const sub = wallet$.subscribe(subscriber);
 		return () => {
 			sub.unsubscribe();
+			sessionSub.unsubscribe();
 			unsubProviders();
 		};
 	});
