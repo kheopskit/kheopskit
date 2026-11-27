@@ -6,6 +6,7 @@ import type {
 	KheopskitPlatform,
 	KheopskitState,
 	PlatformContext,
+	WalletConnectProvider,
 	WalletConnectWallet,
 } from "../types";
 import type { WalletConnectOptions } from "./plugin";
@@ -388,7 +389,10 @@ describe("walletConnect() provider subscription lifetime through kheopskitRun$",
 		clearAllCachedObservables();
 	});
 
-	const mockAppKit = () => {
+	const mockAppKit = ({
+		chainNamespaces = ["polkadot"],
+		activeChainNamespace = "polkadot",
+	} = {}) => {
 		const listeners = new Set<(p: Record<string, unknown>) => void>();
 		let providers: Record<string, unknown> = {};
 		const universalProvider = sessionProvider();
@@ -408,7 +412,14 @@ describe("walletConnect() provider subscription lifetime through kheopskitRun$",
 			};
 		};
 		const createAppKit = vi.fn(() => ({
-			chainNamespaces: ["polkadot"],
+			chainNamespaces,
+			getWalletInfo: (namespace = activeChainNamespace) => {
+				const provider = providers[namespace] as
+					| WalletConnectProvider
+					| undefined;
+				const metadata = provider?.session?.peer?.metadata;
+				return metadata && { name: metadata.name, icon: metadata.icons?.[0] };
+			},
 			getUniversalProvider: () => Promise.resolve(universalProvider),
 			getProvider: (namespace: string) => providers[namespace],
 			subscribeProviders: (cb: (p: Record<string, unknown>) => void) => {
@@ -515,7 +526,12 @@ describe("walletConnect() provider subscription lifetime through kheopskitRun$",
 					walletName,
 					name,
 				}));
-			return { sub, current: () => connector(states.at(-1)), accounts };
+			return {
+				sub,
+				current: () => connector(states.at(-1)),
+				history: () => states.map(connector),
+				accounts,
+			};
 		};
 		return { mount, resetAppKitCache };
 	};
@@ -584,6 +600,38 @@ describe("walletConnect() provider subscription lifetime through kheopskitRun$",
 		sub.unsubscribe();
 		resetAppKitCache();
 	});
+
+	it.each([
+		["polkadot", "eip155"],
+		["eip155", "polkadot"],
+	])(
+		"names the connector after the paired wallet from its first connected emission when the %s session lacks AppKit's active %s namespace",
+		async (sessionNamespace, activeChainNamespace) => {
+			vi.resetModules();
+			const appKit = mockAppKit({
+				chainNamespaces: ["polkadot", "eip155"],
+				activeChainNamespace,
+			});
+			const { mount, resetAppKitCache } = await observe();
+
+			const { sub, current, history } = mount();
+			await vi.waitFor(() => expect(current()?.status).toBe("disconnected"));
+
+			appKit.setProviders({
+				[sessionNamespace]: providerWithSession(sessionNamespace, {
+					name: "Talisman",
+					icons: ["icon:Talisman"],
+				}),
+			});
+			await vi.waitFor(() => expect(current()?.status).toBe("connected"));
+			expect(
+				history().find((wallet) => wallet?.status === "connected"),
+			).toMatchObject({ name: "Talisman", icon: "icon:Talisman" });
+
+			sub.unsubscribe();
+			resetAppKitCache();
+		},
+	);
 
 	it.each([
 		[
