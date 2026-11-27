@@ -56,6 +56,11 @@
 			"tailwindDirectives": true
 		}
 	},
+	"markdown": {
+		"formatter": {
+			"enabled": false
+		}
+	},
 	"overrides": [
 		{
 			// standalone SVG assets: alt text belongs on the consuming <img>, not the asset
@@ -64,6 +69,20 @@
 				"rules": {
 					"a11y": {
 						"noSvgWithoutTitle": "off"
+					}
+				}
+			}
+		},
+		{
+			// createKheopskit is a once-per-app factory that returns its bound Provider and hooks
+			"includes": [
+				"packages/react/src/createKheopskit.tsx",
+				"packages/react/**/*.test.tsx"
+			],
+			"linter": {
+				"rules": {
+					"correctness": {
+						"noComponentHookFactories": "off"
 					}
 				}
 			}

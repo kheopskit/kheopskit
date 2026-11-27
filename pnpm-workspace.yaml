@@ -3,44 +3,31 @@ packages:
   - packages/*
   - .
 allowBuilds:
-  "@biomejs/biome": true
   "@reown/appkit": false
-  "@tailwindcss/oxide": true
   bufferutil: false
-  esbuild: true
-  keccak: false
-  sharp: false
-  simple-git-hooks: true
+  esbuild: false
+  simple-git-hooks: false
   utf-8-validate: false
+permissions:
+  "@tanstack/react-router":
+    skills: false
+  "@tanstack/react-start":
+    skills: false
+  tsdown:
+    skills: false
 overrides:
-  "@kheopskit/core": link:packages/core
-  "@kheopskit/react": link:packages/react
-  "axios@<1.18.0": ^1.18.0
-  "postcss@<8.5.18": ^8.5.18
-  "ws@>=8.0.0 <8.21.0": ^8.21.0
-  "form-data@>=4.0.0 <4.0.6": ^4.0.6
-  "js-yaml@<3.15.2": ^3.15.2
-  "js-yaml@>=4.0.0 <4.3.2": ^4.3.2
-  "sharp@<0.35.4": ^0.35.4
-  "nanoid@<3.3.18": ^3.3.18
+  # @reown/appkit 2.0.0 network .d.ts files copy viem's Chain type from viem <2.57.17 and stop matching AppKitNetwork on newer viem (reown-com/appkit#5847)
+  viem: 2.57.16
+  # GHSA-ggr8-5vv4-36mx: write-package@7.2.0 (via @polkadot-api/cli) requires deepmerge-ts ^7.1.0
   "deepmerge-ts@<8.0.0": ^8.0.0
-  "decode-uri-component@<0.5.1": ^0.5.1
-  "esbuild@>=0.27.3 <0.28.1": ^0.28.1
-  "shell-quote@<1.11.0": ^1.11.0
-  "launch-editor@<2.14.2": ^2.14.2
-  "follow-redirects@<1.16.2": ^1.16.2
+  # GHSA-mrhx-c7xc-m3w5 floor for zod 4, since audit.ignore hides that advisory for every zod version
   "zod@>=4.0.0 <4.6.6": ^4.6.6
+  # keeps abitype's zod peer range accepting the zod 3 copies listed under audit.ignore
   "abitype>zod@>=4.0.0 <4.6.6": ^3.22.0 || ^4.6.6
-  "seroval@<1.6.11": ^1.6.11
-  "seroval-plugins@<1.6.11": ^1.6.11
 
-auditConfig:
-  ignoreGhsas:
+audit:
+  ignore:
+    # zod 3.x, no patched 3.x release: @reown/appkit-wallet pins 3.22.4, @coinbase/cdp-sdk and @x402/* require ^3
     - GHSA-mrhx-c7xc-m3w5
 
 minimumReleaseAge: 4320
-minimumReleaseAgeExclude:
-  - polkadot-api@3.3.0
-  - "@polkadot-api/*"
-  - rollup@4.64.12
-  - "@rollup/*"

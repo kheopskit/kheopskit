@@ -143,8 +143,8 @@
 		"lodash-es": "^4.18.1"
 	},
 	"devDependencies": {
-		"@reown/appkit": "^1.8.24",
-		"@solana/kit": "^8.5.0",
+		"@reown/appkit": "^2.0.0",
+		"@solana/kit": "^8.6.0",
 		"@solana/wallet-standard-features": "^1.5.0",
 		"@types/lodash-es": "^4.17.12",
 		"@wallet-standard/app": "^1.1.1",
